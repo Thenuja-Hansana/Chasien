@@ -80,3 +80,5 @@ in front of real users outside our own devices."
   rejection isn't a late surprise.
 - `roadmap.md` — the ordered, checkable task list this architecture feeds
   into. Start there for "what do I actually do next."
+- `phase/phaseNN.md` — one study-book-style doc per completed phase:
+  decisions plus a full code walkthrough, written to teach, not just log.

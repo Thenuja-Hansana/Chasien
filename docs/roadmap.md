@@ -11,9 +11,10 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phase 1 — data model. Nothing in Phase 2+ can be built
-against real data until Room membership, roles, and the moderation tables
-exist.
+**Current focus:** Phase 0 is done — `mobile/` boots (verified via
+`expo export --platform web`), `supabase/` is initialized, CI lints and
+typechecks on push, tokens are ported. Next: Phase 1 — data model, starting
+with Room membership.
 
 ---
 
@@ -21,16 +22,17 @@ exist.
 
 Goal: an empty-but-real project skeleton, not another mockup.
 
-- [ ] Create `mobile/` — React Native app via Expo, TypeScript
-- [ ] Create `supabase/` — Supabase CLI init (`migrations/`, `functions/`)
-- [ ] Decide env/secrets handling (`.env.local`, never committed — add to
-      `.gitignore` now)
-- [ ] Add `.claude/` (or whatever's untracked) to `.gitignore` — cleanup
+- [x] Create `mobile/` — React Native app via Expo, TypeScript
+- [x] Create `supabase/` — Supabase CLI init (`migrations/`, `functions/`
+      created on demand, e.g. via `supabase migration new`)
+- [x] Decide env/secrets handling (`.env.local`, never committed — added to
+      `.gitignore`)
+- [x] Add `.claude/` (or whatever's untracked) to `.gitignore` — cleanup
       from repo push
-- [ ] GitHub Actions: lint + typecheck on push (keep it cheap — no build
-      step yet, nothing to build)
-- [ ] Port design tokens from `app_reference/src/styles/tokens.css` into
-      the RN app's theme — don't redesign, translate
+- [x] GitHub Actions: lint + typecheck on push, path-filtered to `mobile/`
+- [x] Port design tokens from `app_reference/src/styles/tokens.css` into
+      the RN app's theme (`mobile/src/constants/theme.ts`) — don't
+      redesign, translate
 
 **Exit condition:** `expo start` runs an empty app, `supabase start` runs
 locally, CI is green on an empty diff.
@@ -83,7 +85,12 @@ app restart, and a stolen/expired token is rejected server-side.
 
 Goal: every screen from the mock exists as a real (data-empty) RN screen.
 
-- [ ] React Navigation structure mirroring `App.jsx`'s routes
+- [ ] Expo Router file-based routes mirroring `App.jsx`'s routes (e.g.
+      `/c/:communityId` → `app/c/[communityId].tsx`) — see decision-log,
+      2026-08-13 "Phase 0 scaffold"
+- [ ] Load `Caprasimo`/`Figtree` via `@expo-google-fonts/*` + `useFonts()`,
+      coordinated with the splash screen — `constants/theme.ts` already
+      references the expected font names
 - [ ] Shared components: Avatar, Icon, TabBar — ported, not redesigned
 - [ ] Screens wired to Phase 1 backend but can render "empty state" —
       no mock data left in the real app

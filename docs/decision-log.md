@@ -7,6 +7,44 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-13 — Phase 0 scaffold: Expo Router, single dark theme, no demo screens
+
+**Decision:** `mobile/` was created via `create-expo-app`'s default template
+(Expo Router + TypeScript, SDK 57). Kept Expo Router rather than switching
+to plain React Navigation. Ported `app_reference/src/styles/tokens.css`
+into `mobile/src/constants/theme.ts` as a single flat palette — no
+`Colors.light`/`Colors.dark` split. The template's demo screens (Welcome/
+Explore tabs, `ThemedText`, `Collapsible`, etc.) were moved to
+`mobile/example/` (reference only, excluded from lint/typecheck) rather
+than patched, since they'd be deleted in Phase 3 anyway.
+
+**Why Expo Router:** it's file-based routing, and the mock's routes
+(`/c/:communityId`, `/chats/:chatId`, `/u/:userId`, ...) already read like
+file paths — `app/c/[communityId].tsx` etc. map on almost directly. Also
+Expo's own current default, so it's the well-trodden path, not a niche
+choice a solo dev has to fight the tooling for.
+
+**Why single dark theme, not light/dark:** `tokens.css` only ever defined
+one palette (the "Organic" system) with no `prefers-color-scheme`
+alternative — the mock was never designed with a light mode. Following the
+template's default light/dark split would mean inventing a light palette
+that doesn't exist anywhere in the source of truth. `_layout.tsx`'s
+navigation chrome is tinted from these tokens directly rather than
+switching with the OS scheme.
+
+**Why move demo screens instead of updating them:** they only exist to
+show off the template, reference colors/spacing in the old light/dark
+shape, and get replaced wholesale in Phase 3 by real Chasien screens.
+Patching them to compile against tokens they'll never really use would be
+throwaway work.
+
+**Revisit when:** Phase 3 (App shell & navigation) — that's where the real
+route tree, the reusable components, and actual font loading
+(`@expo-google-fonts/caprasimo` + `@expo-google-fonts/figtree`, referenced
+but not yet installed) get built.
+
+---
+
 ## 2026-08-13 — Moderation (report/block) and account deletion promoted to day-1 requirements
 
 **Decision:** `Report`, `Block`, and a moderation action log join the core

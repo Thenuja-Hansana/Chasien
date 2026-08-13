@@ -26,8 +26,11 @@ chasien/
 │   ├── store-compliance.md  App Store / Play Store requirements that
 │   │                         feed back into the data model (report/block,
 │   │                         account deletion) — not just launch paperwork.
-│   └── roadmap.md           Ordered, checkable solo-dev task list — start
-│                             here for "what do I actually do next."
+│   ├── roadmap.md           Ordered, checkable solo-dev task list — start
+│   │                         here for "what do I actually do next."
+│   └── phase/               One study-book-style .md per completed phase —
+│                             decisions *and* a full code walkthrough, deep
+│                             enough to onboard someone from zero.
 │
 ├── mobile/          (planned, not yet created) React Native (Expo) client
 │                     — the actual shipped app.
