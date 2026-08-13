@@ -11,10 +11,10 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phase 0 is done — `mobile/` boots (verified via
-`expo export --platform web`), `supabase/` is initialized, CI lints and
-typechecks on push, tokens are ported. Next: Phase 1 — data model, starting
-with Room membership.
+**Current focus:** Phase 0 and Phase 1 are both done. Local Supabase runs
+the full schema, RLS, and seed data for real (`supabase start`), and Room
+isolation is verified against a live database, not assumed. Next: Phase 2
+— Auth.
 
 ---
 
@@ -43,24 +43,38 @@ locally, CI is green on an empty diff.
 
 Goal: the schema and permission rules that everything else depends on.
 
-- [ ] Schema: `users`, `rooms`, `room_memberships` (role: owner/mod/member,
+- [x] Schema: `profiles`, `rooms`, `room_memberships` (role: owner/mod/member,
       join_state: approved/pending/invited)
-- [ ] Schema: `posts`, `comments`, `polls`, `poll_votes`
-- [ ] Schema: `stories` (with expiry timestamp)
-- [ ] Schema: `chats`/`channels`, `messages`
-- [ ] Schema: `notifications`
-- [ ] Schema: `reports`, `blocks`, `moderation_actions` — see
+- [x] Schema: `posts`, `post_media`, `comments`, `post_likes`, `polls`,
+      `poll_options`, `poll_votes`
+- [x] Schema: `stories` (with expiry timestamp)
+- [x] Schema: `conversations` (room channels + DMs, unified),
+      `conversation_participants`, `messages`, `message_reactions`
+- [x] Schema: `notifications`
+- [x] Schema: `reports`, `blocks`, `moderation_actions` — see
       `store-compliance.md`, these are day-1, not deferred
-- [ ] Row Level Security: deny-by-default, membership-scoped reads, on
+- [x] Row Level Security: deny-by-default, membership-scoped reads, on
       every table above
-- [ ] Edge Functions for anything RLS can't safely express: join-request
-      approval, role changes, report handling
-- [ ] Local seed script (reuse `app_reference/src/data/mock.js` as the
-      source data — don't invent new fixtures)
+- [x] `room_memberships` writes closed to direct clients entirely (reads
+      only) — join/approve/invite/role-change routes through Edge
+      Functions (Phase 2/4), not RLS write policies, since a bug in a
+      write policy on the one table everything else's access derives
+      from is a worse failure mode than a bug in application code
+- [x] Local seed script (`supabase/seed.sql`, ported from
+      `app_reference/src/data/mock.js`)
+- [x] Table-level `GRANT`s to `authenticated` (`grants.sql`) — RLS
+      policies alone aren't sufficient; found this by hitting "permission
+      denied" on every query until it existed
+- [x] Verified live: a non-member sees 0 rows across posts/messages/
+      stories/memberships in a Room with real seeded content, a real
+      member sees all of it, and a direct INSERT attempt from a
+      non-member is rejected by RLS — not assumed, run against a live
+      local Postgres via `supabase start`
 
-**Exit condition:** every table has RLS on, a second test user genuinely
-cannot read a Room they're not a member of — verify this by hand, don't
-assume the policy is correct because it compiles.
+**Exit condition — met:** every table has RLS on, a second test user
+genuinely cannot read a Room they're not a member of. Verified by hand
+(see `docs/phase/phase01.md`), which caught two real bugs (missing
+grants, an RLS recursion bug) that "it compiles" would have missed.
 
 ---
 
