@@ -23,9 +23,11 @@ chasien/
 │   ├── architecture.md      Current-state stack and layer choices.
 │   ├── decision-log.md      Dated log of *why* each choice was made,
 │   │                         append-only, newest entry on top.
-│   └── store-compliance.md  App Store / Play Store requirements that
-│                             feed back into the data model (report/block,
-│                             account deletion) — not just launch paperwork.
+│   ├── store-compliance.md  App Store / Play Store requirements that
+│   │                         feed back into the data model (report/block,
+│   │                         account deletion) — not just launch paperwork.
+│   └── roadmap.md           Ordered, checkable solo-dev task list — start
+│                             here for "what do I actually do next."
 │
 ├── mobile/          (planned, not yet created) React Native (Expo) client
 │                     — the actual shipped app.
@@ -53,7 +55,9 @@ it's the line between "working app" and a cross-Room data leak.
 
 ## Where to start reading
 
-1. `docs/architecture.md` — what the system is made of right now.
-2. `docs/decision-log.md` — why, in order, with alternatives considered.
-3. `docs/store-compliance.md` — the app-store constraints shaping the data
+1. `docs/roadmap.md` — the task list, in order, with the current phase
+   marked.
+2. `docs/architecture.md` — what the system is made of right now.
+3. `docs/decision-log.md` — why, in order, with alternatives considered.
+4. `docs/store-compliance.md` — the app-store constraints shaping the data
    model (report/block/account deletion).

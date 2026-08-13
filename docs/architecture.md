@@ -78,3 +78,5 @@ in front of real users outside our own devices."
 - `store-compliance.md` — App Store / Play Store requirements that feed
   back into the data model (report/block/account-deletion), so review
   rejection isn't a late surprise.
+- `roadmap.md` — the ordered, checkable task list this architecture feeds
+  into. Start there for "what do I actually do next."
