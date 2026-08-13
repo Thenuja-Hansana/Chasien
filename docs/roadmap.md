@@ -11,10 +11,11 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phase 0 and Phase 1 are both done. Local Supabase runs
-the full schema, RLS, and seed data for real (`supabase start`), and Room
-isolation is verified against a live database, not assumed. Next: Phase 2
-— Auth.
+**Current focus:** Phases 0, 1, and 2 are done. Real accounts exist —
+signup, email confirmation, login, encrypted session storage, refresh,
+logout, and token rejection all verified against the live local stack.
+Next: Phase 3 — App shell & navigation, replacing today's single
+placeholder screen with real screens mirroring `app_reference`'s routes.
 
 ---
 
@@ -82,16 +83,29 @@ grants, an RLS recursion bug) that "it compiles" would have missed.
 
 Goal: real accounts, sessions that don't leak, matching the mock's flow.
 
-- [ ] Supabase Auth: email/password
-- [ ] Session storage in RN app (secure storage, not AsyncStorage in
-      plaintext)
-- [ ] Login / Sign up screens — port flow from `Login.jsx` / `SignUp.jsx`
+- [x] Supabase Auth: email/password, `enable_confirmations = true`
+- [x] Session storage in RN app — `LargeSecureStore` (AES-256 blob in
+      AsyncStorage, key in `expo-secure-store`), Supabase's own documented
+      Expo pattern, not AsyncStorage in plaintext
+- [x] Login / Sign up screens — single-screen signup covering the mock's
+      fields (email, handle, display name, password, agree-to-guidelines);
+      Apple/Google buttons and password reset deliberately left out, no
+      backend for either yet — see decision-log
 - [ ] Plan (don't build yet) Sign in with Apple — required before iOS
       submission if any social login is added later, cheaper to design the
-      auth screen for 3 providers now than retrofit
+      auth screen for 3 providers now than retrofit — still just a plan,
+      unchanged this phase. **Actual build deferred to Phase 11**, see
+      decision-log 2026-08-13 — OAuth needs a registered provider app,
+      which needs the paid Apple Developer Program membership that Phase
+      11 is the first point we spend money on.
 
-**Exit condition:** can sign up, log out, log back in, session survives
-app restart, and a stolen/expired token is rejected server-side.
+**Exit condition — met:** can sign up, get gated on email confirmation,
+confirm, log in, session round-trips through encrypted storage, refresh
+token works, log out revokes it server-side, and a tampered or malformed
+token is rejected (401) by PostgREST. Verified against the live local
+stack via a 14-check script, not assumed — see `docs/phase/phase02.md`,
+which also documents two false failures the verification script itself
+produced before being fixed.
 
 ---
 
@@ -243,6 +257,11 @@ Goal: ready to actually submit.
 - [ ] App icon, screenshots, store listing copy
 - [ ] Apple Developer Program ($99/yr) — the first real money spent, and
       not before this point
+- [ ] Build OAuth (Sign in with Apple, mandatory once any social login
+      exists; Google, optional) and the password-reset flow — both cut
+      from Phase 2 for exactly this reason (see decision-log 2026-08-13),
+      now unblocked by the Apple Developer Program membership above; update
+      the login/signup screens to match once built
 - [ ] Google Play Console ($25 one-time)
 - [ ] TestFlight / Internal testing track with a small real beta group
 

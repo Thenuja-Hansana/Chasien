@@ -7,6 +7,111 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-13 — Three real bugs found verifying Phase 2, none of them where expected
+
+**Decision:** switched `mobile/app.json`'s `web.output` from `static` to
+`single`; fixed two assertions in the auth verification script itself
+(not the app) that were producing false failures.
+
+**Context:** `expo export --platform web` failed outright —
+`ReferenceError: window is not defined` — inside the new auth code.
+Separately, a first pass at verifying auth server-side produced 5 "FAIL"
+results out of 14 checks.
+
+**Bug 1 — real, in app config:** Expo Router's default web output
+(`static`) pre-renders every route to HTML using Node.js at build time,
+which has no `window`/DOM. `LargeSecureStore` (and `AsyncStorage`'s web
+implementation under it) assumes a browser. Chasien is a mobile app
+first — there's nothing behind a login gate worth statically
+pre-rendering for SEO anyway — so `single` (plain SPA, everything
+rendered client-side, no Node-side pass) is the correct mode, not a
+workaround.
+
+**Bug 2 — not a bug, a wrong assertion:** the verification script
+asserted a freshly created account's profile query returned exactly one
+row. It returned eight — every profile in the seed data, because
+`profiles` is readable by any authenticated user by design (Phase 1,
+deliberately: handles need to be visible for Discover/Search/authorship
+to work at all). The trigger had, in fact, worked correctly; the test
+asked the wrong question. Fixed by filtering the query to the specific
+handle under test instead of counting all rows.
+
+**Bug 3 — not a bug, a flawed tampering method:** a "tampered token"
+test flipped the last character of a JWT signature's base64url encoding
+and got back a 200 (looked, briefly, like signature verification wasn't
+being checked at all — which would be a severe, well-known-by-now
+Supabase vulnerability, and so an extremely unlikely explanation on its
+own). The actual cause: the last character of a base64url segment can
+encode partly-unused padding bits depending on the encoded length modulo
+3, so flipping it doesn't always change the decoded bytes. Fixed by
+flipping a character in the *middle* of the payload and, separately, the
+middle of the signature — both correctly rejected with 401 once the test
+was actually testing what it claimed to.
+
+**Why this is worth recording, not just fixing quietly:** two of these
+three "bugs" were in the verification code, not the system — worth
+naming precisely which, since silently patching a test until it passes
+is how false confidence happens. The instinct that mattered here wasn't
+"trust the first result," it was "an alarming result needs a more
+alarming explanation to actually be believed" — a 200 where a 401 was
+expected demands checking the test before writing up a vulnerability
+that, on reflection, was implausible.
+
+---
+
+## 2026-08-13 — Phase 2: session storage, email confirmation, and scope cuts
+
+**Decision:** sessions are stored via a `LargeSecureStore` (AES-256-CTR
+encrypted blob in AsyncStorage, key in `expo-secure-store`/Keychain-
+Keystore) — Supabase's own documented pattern for Expo, reproduced from
+their docs rather than improvised. Email confirmation is required before
+login (`enable_confirmations = true`, was `false` by default). Apple/
+Google sign-in buttons and the "Forgot password?" link from the mock are
+left out of the real screens — neither has a backend yet, and a button
+that does nothing on tap is worse than not showing it.
+
+**Context:** Phase 2's stated goal is "real accounts, sessions that don't
+leak" — explicitly named by the user as the most security-sensitive
+phase so far, since it's the first one handling real user credentials
+rather than just data shape.
+
+**Why `LargeSecureStore` specifically:** plain `expo-secure-store` caps
+individual values around 2048 bytes, which a full Supabase session
+(access token + refresh token + user object, one JSON blob) can exceed.
+Plain `AsyncStorage` has no such cap but stores plaintext — exactly what
+"not AsyncStorage in plaintext" (docs/roadmap.md Phase 2) rules out. The
+hybrid — a fresh AES key per write, held in SecureStore; the ciphertext,
+unreadable without that key, held in AsyncStorage — gets both: no size
+ceiling, and nothing sensitive sitting in plaintext even if the device's
+storage were read directly. Verified this actually round-trips (and that
+tampering/wrong-key attempts don't recover the original) with a
+standalone Node script exercising the exact same AES logic — see
+docs/phase/phase02.md §4.
+
+**Why email confirmation on:** prevents signing up with an email address
+you don't control — a real account-security property, not just UX
+polish, and directly in scope given the "involves user data" framing.
+Locally, confirmation links land in Mailpit
+(`http://127.0.0.1:54324`), not a real inbox — reachable without SMTP.
+
+**Scope deliberately cut, not silently dropped:** the mock's Login
+screen shows Apple/Google buttons and a password-reset link; SignUp
+shows a "2 of 3" step indicator implying a 3-step wizard whose other two
+steps don't exist anywhere in the mock. None of this is built yet:
+OAuth needs a registered provider app (real cost/setup, out of scope for
+zero-budget Phase 2); password reset needs a deep-link-handling screen;
+the exact 3-step wizard has nothing to port for two of its three steps.
+A single functional screen (email, handle, display name, password,
+agree-to-guidelines) covers the same fields the mock actually specifies,
+without shipping UI that does nothing when tapped.
+
+**Revisit when:** Phase 3 (App shell), if the multi-step wizard specifically
+is wanted for polish; whenever OAuth or password reset actually get
+planned, matching the roadmap's own "plan Sign in with Apple, don't build
+yet" note.
+
+---
+
 ## 2026-08-13 — Two real bugs found by actually running Phase 1's migrations
 
 **Decision:** added `supabase/migrations/20260813073524_grants.sql`

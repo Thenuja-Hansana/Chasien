@@ -1,15 +1,22 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Fonts } from '@/constants/theme';
+import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { useAuth } from '@/lib/auth-context';
 
-// Phase 0 placeholder — real navigation/screens land in Phase 3, mirroring
-// app_reference's routes (Rooms, Discover, Chats, ...). This screen only
-// exists to prove the ported design tokens render correctly end to end.
+// Phase 2 placeholder — this screen only exists to prove the auth loop
+// (sign up, restart, still logged in, log out) works end to end. Real
+// navigation/screens land in Phase 3, mirroring app_reference's routes
+// (Rooms, Discover, Chats, ...).
 export default function Index() {
+  const { session, signOut } = useAuth();
+
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Chasien</Text>
-      <Text style={styles.body}>Phase 0 skeleton — see docs/roadmap.md</Text>
+      <Text style={styles.body}>Signed in as {session?.user.email}</Text>
+      <Pressable style={styles.signOutButton} onPress={() => signOut()}>
+        <Text style={styles.signOutText}>Log out</Text>
+      </Pressable>
     </View>
   );
 }
@@ -19,7 +26,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: Spacing[3],
     backgroundColor: Colors.bg,
   },
   heading: {
@@ -31,5 +38,21 @@ const styles = StyleSheet.create({
     fontFamily: Fonts?.body,
     fontSize: 14,
     color: Colors.neutral[400],
+  },
+  signOutButton: {
+    marginTop: Spacing[4],
+    height: 44,
+    paddingHorizontal: Spacing[6],
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signOutText: {
+    fontFamily: Fonts?.body,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
   },
 });
