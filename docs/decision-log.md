@@ -7,6 +7,32 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-13 — Moderation (report/block) and account deletion promoted to day-1 requirements
+
+**Decision:** `Report`, `Block`, and a moderation action log join the core
+data model backlog alongside Room membership, not as later polish. In-app
+account deletion and Sign in with Apple parity (if Google/Facebook login is
+offered on iOS) are treated as required flows, not launch-week paperwork.
+
+**Context:** Repo was pushed to GitHub
+(`https://github.com/Thenuja-Hansana/Chasien`); prompted a question about
+whether app structure/flow could get the app rejected from the App Store /
+Play Store.
+
+**Why:** Store review doesn't see repo/folder structure at all — that part
+of the concern doesn't apply. But Chasien is a UGC app (posts, comments,
+chat, Rooms), and both Apple (Guideline 1.2, 5.1.1(v), 4.8) and Google
+(Play UGC policy, User Data policy) have hard requirements for report/block
+mechanisms and in-app account deletion. These touch the data model
+directly, so designing them alongside Room membership is far cheaper than
+retrofitting after the schema is settled. Full detail in
+`store-compliance.md`.
+
+**Revisit when:** close to actual store submission — re-verify against
+current guidelines, since store policies do change.
+
+---
+
 ## 2026-08-13 — Zero-budget stack finalized
 
 **Decision:** Supabase (Auth + Postgres + Realtime) + Supabase Edge Functions

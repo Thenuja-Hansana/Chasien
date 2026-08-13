@@ -65,6 +65,16 @@ in front of real users outside our own devices."
 ## Not yet decided
 
 - Full data model / schema (users, rooms, memberships, posts, comments,
-  polls, stories, chats, messages, notifications) — next up.
+  polls, stories, chats, messages, notifications) — next up. Now includes
+  `Report`, `Block`, and a moderation action log — see
+  `store-compliance.md`, these are day-1 requirements for a UGC app, not
+  optional polish.
 - Client-side state management & offline/sync strategy for the RN app.
 - Exact Row Level Security policy set vs. what moves into Edge Functions.
+
+## See also
+
+- `decision-log.md` — dated log of why each choice above was made.
+- `store-compliance.md` — App Store / Play Store requirements that feed
+  back into the data model (report/block/account-deletion), so review
+  rejection isn't a late surprise.
