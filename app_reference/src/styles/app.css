@@ -1,0 +1,132 @@
+html, body, #root {
+  height: 100%;
+}
+body {
+  background: #100d0b;
+}
+
+.app-bg {
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 0;
+}
+@media (max-width: 480px) {
+  .app-bg {
+    padding: 0;
+    display: block;
+  }
+}
+
+.phone-frame {
+  width: 390px;
+  height: 844px;
+  background: var(--color-bg);
+  border-radius: 34px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--color-divider);
+}
+@media (max-width: 480px) {
+  .phone-frame {
+    width: 100%;
+    height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+  }
+}
+
+.screen-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.screen-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-text);
+}
+.icon-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 999px; }
+
+.plain-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.toggle {
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  transition: background .15s ease;
+}
+.toggle-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #f6e7d2;
+  transition: margin .15s ease;
+}
+
+.chip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.chip-active {
+  background: var(--color-accent);
+  color: #241305;
+  font-weight: 700;
+  border-color: transparent;
+}
+.chip-outline {
+  background: transparent;
+  border: 1px solid var(--color-divider);
+}
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-family: var(--font-heading);
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.link-reset {
+  text-decoration: none;
+  color: inherit;
+}
+
+::placeholder { color: rgba(242, 230, 212, .42); }
