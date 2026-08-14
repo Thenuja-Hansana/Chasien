@@ -11,7 +11,17 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phases 0-4 are done. Rooms are real: Discover browses
+**Current focus:** Phases 0-5 are done. The feed is real end to end —
+posts with text, images, and polls; likes; one-level threaded comments —
+all verified with two real accounts against the live local stack, with
+post images held in a private, membership-gated bucket behind
+short-lived signed URLs. Media currently runs on Supabase Storage rather
+than Cloudflare R2, behind a one-file seam, because R2 can't be
+provisioned or verified locally; the swap is scheduled in Phase 11 where
+the bucket was already listed. See `docs/phase/phase05.md`. Next:
+Phase 6 — Chat & realtime.
+
+Previously: Rooms are real — Discover browses
 actual public/request Rooms, Create Room writes a real row, and all three
 join flows (public/request/invite) work end to end through a new
 `room-membership` Edge Function, verified with two real accounts —
@@ -23,8 +33,7 @@ owner-only role management. See `docs/phase/phase04.md` for the full
 write-up, including three real bugs live verification caught that
 typecheck/lint didn't. (Phase 3's app shell — see `docs/phase/phase03.md`
 — is still verified on web and a real Android emulator only, not iOS or a
-physical device.) Next: Phase 5 — Posts & engagement (real post creation,
-image upload to Cloudflare R2, comments, likes, polls).
+physical device.)
 
 ---
 
@@ -199,16 +208,36 @@ verification caught that typecheck/lint didn't: `docs/phase/phase04.md`.
 
 Goal: the feed actually does something.
 
-- [ ] Create post: text + image
-- [ ] Media upload → Cloudflare R2 via signed URL, client-side
-      compress/resize before upload (protects the free tier — see
-      `architecture.md`)
-- [ ] Post detail + threaded comments
-- [ ] Likes
-- [ ] Polls: create, vote, live results
+- [x] Create post: text + image — one atomic `create_post()` RPC, since
+      post + media + poll is four dependent inserts and authors have no
+      DELETE policy to roll a half-built post back with
+- [x] Media upload via signed URL, client-side compress/resize before
+      upload (protects the free tier — see `architecture.md`).
+      **Running on Supabase Storage, not R2 yet** — R2 has no local
+      emulator and needs real credentials, which would have made this
+      the first phase unverifiable against the live local stack. Written
+      behind a one-file seam (`lib/media.ts`); the swap is Phase 11's,
+      where the bucket was already listed. Private bucket + signed URLs,
+      not public — a public bucket would quietly undo the Room-isolation
+      guarantee Phases 1 and 4 established
+- [x] Post detail + threaded comments (one level deep, per feed.sql's
+      trigger — the reply itself offers no further Reply)
+- [x] Likes
+- [x] Polls: create, vote, live results — a vote can also be *changed*,
+      which the mock disallowed; the schema always permitted retracting,
+      and permanently stranding a mis-tap isn't acceptable in a real app
 
-**Exit condition:** a post with an image and a poll round-trips through
-the real backend and renders identically to the mock's version.
+**Exit condition — met:** verified across three independent layers, not
+just the UI. 8/8 SQL checks on the `create_post` RPC (guards, atomicity,
+one-vote-per-poll), 9/9 storage-policy checks with real user sessions
+(including that a non-member can neither sign, download, nor publicly
+fetch a Room's images), and 11/11 end-to-end UI scenarios with two real
+accounts acting simultaneously — a post carrying both an image and a
+poll round-trips through the real backend, the image rendering from a
+genuine signed URL in both feed and detail. Zero console errors, and
+every count in the UI cross-checked against direct SQL. Full write-up,
+including four bugs that neither TypeScript nor a browser could have
+caught: `docs/phase/phase05.md`.
 
 ---
 

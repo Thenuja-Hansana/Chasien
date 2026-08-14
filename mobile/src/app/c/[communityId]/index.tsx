@@ -1,13 +1,15 @@
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import PostCard from '@/components/PostCard';
 import TabBar from '@/components/TabBar';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
+import { FEED_PAGE_SIZE, fetchPost, fetchRoomFeed, setLiked, votePoll, type FeedPost } from '@/lib/posts';
 
 type LoadState = { room: Room | null; membership: Membership | null } | 'loading';
 
@@ -18,20 +20,44 @@ export default function RoomHome() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [posts, setPosts] = useState<FeedPost[] | null>(null);
+  const [page, setPage] = useState(0);
+  const [reachedEnd, setReachedEnd] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
   const userId = session?.user.id;
 
-  const load = useCallback(() => {
-    if (!userId) return;
-    setState('loading');
-    fetchRoomBySlug(communityId)
-      .then(async (room) => {
-        const membership = room ? await fetchMyMembership(room.id, userId) : null;
-        setState({ room, membership });
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load this Room.'));
-  }, [communityId, userId]);
+  const loadFeed = useCallback(
+    async (roomId: string) => {
+      if (!userId) return;
+      const first = await fetchRoomFeed(roomId, userId, 0);
+      setPosts(first);
+      setPage(0);
+      setReachedEnd(first.length < FEED_PAGE_SIZE);
+    },
+    [userId],
+  );
 
-  useFocusEffect(useCallback(() => load(), [load]));
+  const load = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const room = await fetchRoomBySlug(communityId);
+      const membership = room ? await fetchMyMembership(room.id, userId) : null;
+      setState({ room, membership });
+      if (room && membership?.join_state === 'approved') {
+        await loadFeed(room.id);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load this Room.');
+    }
+  }, [communityId, userId, loadFeed]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   if (!session) return null;
 
@@ -40,7 +66,7 @@ export default function RoomHome() {
     setError(null);
     try {
       await joinRoom(room.id);
-      load();
+      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not join.');
     } finally {
@@ -53,12 +79,74 @@ export default function RoomHome() {
     setError(null);
     try {
       await respondToInvite(room.id, accept);
-      if (accept) load();
+      if (accept) await load();
       else router.replace('/discover');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not respond to the invite.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Optimistic: the count moves on tap and reverts if the write is
+  // rejected, rather than making every like wait on a round trip.
+  async function handleToggleLike(post: FeedPost) {
+    if (!userId) return;
+    const nextLiked = !post.likedByMe;
+    setPosts(
+      (prev) =>
+        prev?.map((p) =>
+          p.id === post.id ? { ...p, likedByMe: nextLiked, likeCount: p.likeCount + (nextLiked ? 1 : -1) } : p,
+        ) ?? prev,
+    );
+    try {
+      await setLiked(post.id, userId, nextLiked);
+    } catch (e) {
+      setPosts(
+        (prev) =>
+          prev?.map((p) =>
+            p.id === post.id ? { ...p, likedByMe: post.likedByMe, likeCount: post.likeCount } : p,
+          ) ?? prev,
+      );
+      setError(e instanceof Error ? e.message : 'Could not update that like.');
+    }
+  }
+
+  // PollCard shows its own optimistic bar; this refetches just the one
+  // post afterwards so the displayed tallies are the server's, not a
+  // client-side guess that could drift from other people's votes.
+  async function handleVote(post: FeedPost, optionId: string) {
+    if (!userId || !post.poll) return;
+    try {
+      await votePoll(post.poll.id, optionId, userId, post.poll.myOptionId);
+      const fresh = await fetchPost(post.id, userId);
+      if (fresh) setPosts((prev) => prev?.map((p) => (p.id === post.id ? fresh : p)) ?? prev);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not record that vote.');
+    }
+  }
+
+  async function handleLoadMore(roomId: string) {
+    if (loadingMore || reachedEnd || !posts || !userId) return;
+    setLoadingMore(true);
+    try {
+      const next = await fetchRoomFeed(roomId, userId, page + 1);
+      setPosts([...posts, ...next]);
+      setPage(page + 1);
+      if (next.length < FEED_PAGE_SIZE) setReachedEnd(true);
+    } catch {
+      setReachedEnd(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function handleRefresh(roomId: string) {
+    setRefreshing(true);
+    try {
+      await loadFeed(roomId);
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -84,7 +172,6 @@ export default function RoomHome() {
     );
   }
 
-  // Not a member yet — a preview + the same join/request action Discover offers.
   if (!membership) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
@@ -92,7 +179,11 @@ export default function RoomHome() {
         {room.description ? <Text style={styles.body}>{room.description}</Text> : null}
         {error && <Text style={styles.error}>{error}</Text>}
         <Pressable style={styles.cta} onPress={() => handleJoin(room)} disabled={busy}>
-          {busy ? <ActivityIndicator color={Colors.bg} /> : <Text style={styles.ctaText}>{room.visibility === 'public' ? 'Join' : 'Request to join'}</Text>}
+          {busy ? (
+            <ActivityIndicator color={Colors.bg} />
+          ) : (
+            <Text style={styles.ctaText}>{room.visibility === 'public' ? 'Join' : 'Request to join'}</Text>
+          )}
         </Pressable>
       </SafeAreaView>
     );
@@ -117,13 +208,19 @@ export default function RoomHome() {
           <Pressable style={[styles.cta, styles.inviteCta]} onPress={() => handleInviteResponse(room, true)} disabled={busy}>
             <Text style={styles.ctaText}>Accept</Text>
           </Pressable>
-          <Pressable style={[styles.declineCta, styles.inviteCta]} onPress={() => handleInviteResponse(room, false)} disabled={busy}>
+          <Pressable
+            style={[styles.declineCta, styles.inviteCta]}
+            onPress={() => handleInviteResponse(room, false)}
+            disabled={busy}
+          >
             <Text style={styles.declineCtaText}>Decline</Text>
           </Pressable>
         </View>
       </SafeAreaView>
     );
   }
+
+  const canPost = room.members_can_post || membership.role === 'owner' || membership.role === 'mod';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -150,13 +247,67 @@ export default function RoomHome() {
         </View>
       </View>
 
-      <View style={styles.empty}>
-        <Text style={styles.emptyHeading}>No posts yet</Text>
-        <Text style={styles.body}>Be the first to post in this Room.</Text>
-        <Link href={{ pathname: '/c/[communityId]/create-post', params: { communityId } }} style={styles.cta}>
-          New post
+      {error && <Text style={styles.error}>{error}</Text>}
+
+      {posts === null ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={Colors.accent.DEFAULT} />
+        </View>
+      ) : (
+        <FlatList
+          data={posts}
+          keyExtractor={(post) => post.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => handleRefresh(room.id)}
+              tintColor={Colors.accent.DEFAULT}
+            />
+          }
+          ListHeaderComponent={
+            posts.length > 0 ? (
+              <View style={styles.newestRow}>
+                <Text style={styles.newestLabel}>Newest first</Text>
+                <View style={styles.newestRule} />
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyFeed}>
+              <Text style={styles.emptyHeading}>No posts yet</Text>
+              <Text style={styles.body}>
+                {canPost ? 'Be the first to post in this Room.' : 'Only mods can post in this Room.'}
+              </Text>
+            </View>
+          }
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator style={styles.footerSpinner} color={Colors.accent.DEFAULT} /> : null
+          }
+          onEndReached={() => handleLoadMore(room.id)}
+          onEndReachedThreshold={0.4}
+          renderItem={({ item }) => (
+            <PostCard
+              post={item}
+              onPress={() =>
+                router.push({
+                  pathname: '/c/[communityId]/post/[postId]',
+                  params: { communityId, postId: item.id },
+                })
+              }
+              onToggleLike={() => handleToggleLike(item)}
+              onVote={(optionId) => handleVote(item, optionId)}
+            />
+          )}
+        />
+      )}
+
+      {canPost && (
+        <Link href={{ pathname: '/c/[communityId]/create-post', params: { communityId } }} asChild>
+          <Pressable style={styles.fab}>
+            <Icon name="plus" size={24} color={Colors.bg} />
+          </Pressable>
         </Link>
-      </View>
+      )}
 
       <TabBar active="Home" communityId={communityId} userId={session.user.id} />
     </SafeAreaView>
@@ -169,6 +320,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg,
   },
   centered: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing[2],
@@ -193,11 +345,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing[4],
   },
-  empty: {
+  newestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[2],
+    paddingHorizontal: Spacing[4],
+    paddingBottom: Spacing[2],
+  },
+  newestLabel: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 10,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: Colors.accent[300],
+  },
+  newestRule: {
     flex: 1,
+    height: 1,
+    backgroundColor: Colors.divider,
+  },
+  emptyFeed: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing[2],
+    paddingTop: Spacing[8],
     paddingHorizontal: Spacing[6],
   },
   emptyHeading: {
@@ -217,6 +388,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.accent.DEFAULT,
     textAlign: 'center',
+    paddingHorizontal: Spacing[6],
+    paddingBottom: Spacing[2],
+  },
+  footerSpinner: {
+    paddingVertical: Spacing[4],
   },
   cta: {
     marginTop: Spacing[4],
@@ -224,12 +400,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing[6],
     borderRadius: Radius.pill,
     backgroundColor: Colors.accent.DEFAULT,
-    color: Colors.bg,
-    fontFamily: Fonts.heading,
-    fontSize: 15,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -260,5 +430,22 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.heading,
     fontSize: 15,
     color: Colors.text,
+  },
+  fab: {
+    position: 'absolute',
+    right: Spacing[4],
+    bottom: 96,
+    width: 54,
+    height: 54,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.accent.DEFAULT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // `boxShadow` rather than the shadow* family: RN Web logs a
+    // deprecation warning for shadowColor/Offset/Opacity/Radius on every
+    // render (32 of them in one verification run). `elevation` stays for
+    // Android, which doesn't read boxShadow.
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3)',
+    elevation: 6,
   },
 });

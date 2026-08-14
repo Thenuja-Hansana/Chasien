@@ -7,6 +7,77 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-14 — Media runs on Supabase Storage until Phase 11, behind a one-file seam
+
+**Decision:** Phase 5's post images upload to a private **Supabase
+Storage** bucket, not Cloudflare R2. All of it sits behind
+`mobile/src/lib/media.ts`, whose only exported surface is
+`uploadPostImage()` / `signMediaUrls()`, so the eventual R2 swap is a
+change to that file rather than to every screen.
+
+**Context:** `architecture.md` picks R2 for media and the reasoning
+holds — zero egress fees are the biggest cost lever as image volume
+grows. But R2 has no local emulator and requires real credentials on a
+real Cloudflare account. Adopting it now would have made Phase 5 the
+first phase that could not be verified against the live local stack,
+which is the standard every phase since Phase 1 has been held to.
+
+**Why not just defer images entirely:** the phase's exit condition is
+"a post with an image and a poll round-trips," so cutting images would
+have gutted it. Supabase Storage already ships in the local stack, so
+the whole path — pick, compress, upload, sign, render — is genuinely
+verifiable today.
+
+**What we considered instead:** provisioning R2 immediately (rejected:
+needs credentials from the user, and the upload path could not be
+verified locally) and text-only posts (rejected: doesn't meet the exit
+condition). Phase 11's checklist already read "Cloudflare R2 bucket
+provisioned for real, if Phase 5 hadn't already needed one," so
+deferring was anticipated rather than improvised.
+
+**Revisit when:** Phase 11 stands up the hosted backend. The seam keeps
+that work confined to `lib/media.ts` plus a signed-upload endpoint.
+
+**One thing deliberately not deferred:** the bucket is **private**, read
+through short-lived signed URLs, rather than public. Public would have
+been simpler but would quietly undo the guarantee Phases 1 and 4 spent
+real effort proving — that a non-member cannot see a Room's content —
+for exactly the content most likely to get forwarded around. Verified as
+a negative test: a non-member can neither sign, download, nor publicly
+fetch another Room's image.
+
+---
+
+## 2026-08-14 — Approved Room members can now see each other; the MOD badge was dead UI
+
+**Decision:** added a third SELECT policy on `room_memberships`
+(`20260814073649_members_can_see_each_other.sql`): an approved member of
+a Room can read the other **approved** membership rows in that Room.
+
+**Context:** the mock puts a MOD badge on posts, and Phase 5 ported it.
+Doing so exposed that Phase 1 made `room_memberships` readable exactly
+two ways — your own row, or every row if you're a moderator. So the only
+people who could see who the moderators were *were* the moderators. The
+badge rendered for practically nobody.
+
+**Why widen it rather than drop the badge:** knowing who runs a Room
+you're already in is ordinary, expected behaviour for a community app,
+and the same visibility is needed for member lists and for Phase 6's
+chat participant display. Dropping the badge would have fixed the
+symptom and left the gap for the next phase to rediscover.
+
+**Scope, deliberately narrow.** `pending` rows stay mod-only, so who
+asked to join and was declined is not Room-wide gossip; `invited` rows
+stay hidden, so an unaccepted invite isn't advertised; and non-members
+gain nothing, since `is_room_member()` is false for them — Phase 4's
+isolation guarantee is untouched. All of those were checked as explicit
+negative tests, not inferred from reading the policy.
+
+**Revisit when:** a Room ever needs a genuinely anonymous membership
+mode, which nothing in the product currently calls for.
+
+---
+
 ## 2026-08-14 — Three real bugs found verifying Phase 4, all in the parts static analysis can't see
 
 **Decision:** three fixes, all shipped together after live verification with two
