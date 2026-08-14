@@ -7,6 +7,37 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-14 — Added an explicit "Production backend & real email" phase
+
+**Decision:** inserted a new Phase 11 in `docs/roadmap.md` — create a
+hosted (free-tier) Supabase project, run every migration against it,
+wire up a real SMTP provider for Auth emails, and re-verify the full
+auth flow against that hosted project specifically. The former Phase
+11 (Store submission prep) and Phase 12 (Beta & post-launch) shifted to
+12 and 13.
+
+**Context:** asked directly what phase real accounts with real email
+delivery and Room creation would actually work by. Room creation has a
+clear answer (Phase 4). Real email didn't: every phase through 10 only
+ever gets verified against `supabase start` — a local Docker stack on
+one machine, with confirmation emails intercepted by a local fake inbox
+(Mailpit) instead of delivered anywhere. Nothing in the roadmap said
+when that changes, even though later phases quietly assume it already
+has — Phase 12 (old 11)'s "TestFlight / Internal testing track with a
+small real beta group" cannot work against a backend only this laptop
+can reach.
+
+**Why its own phase instead of folding into Store submission prep:**
+the two are genuinely different kinds of work — this one is "the
+backend works for a stranger" (free, no store involvement), the other
+is "the packaging and store accounts are ready" (the first phase that
+spends real money). Keeping them separate means a hosted backend with
+real email doesn't have to wait on a $99 developer account decision to
+get started, and store prep doesn't silently inherit an unverified
+backend as a hidden dependency.
+
+---
+
 ## 2026-08-13 — Dropped the web-specific `Fonts` CSS-var indirection; it never matched the loaded font names
 
 **Decision:** `constants/theme.ts`'s `Fonts` export is no longer

@@ -299,7 +299,7 @@ at verification time (a known, temporary lag after any new SDK ships —
 Apple's review isn't instant even though Expo's own site already lists
 the new SDK as current), and Google Play's build hit the same lag.
 Rather than wait or spend on Apple's paid Developer Program just to get
-an early TestFlight build (explicitly deferred to Phase 11 — see
+an early TestFlight build (explicitly deferred to Phase 12 — see
 `docs/decision-log.md`), verification moved to a local Android
 emulator (Pixel 9 Pro AVD, already provisioned in this environment):
 `expo start --android` downloads and sideloads the exact SDK-57-matching

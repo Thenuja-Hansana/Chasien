@@ -101,10 +101,10 @@ Goal: real accounts, sessions that don't leak, matching the mock's flow.
 - [ ] Plan (don't build yet) Sign in with Apple — required before iOS
       submission if any social login is added later, cheaper to design the
       auth screen for 3 providers now than retrofit — still just a plan,
-      unchanged this phase. **Actual build deferred to Phase 11**, see
+      unchanged this phase. **Actual build deferred to Phase 12**, see
       decision-log 2026-08-13 — OAuth needs a registered provider app,
       which needs the paid Apple Developer Program membership that Phase
-      11 is the first point we spend money on.
+      12 is the first point we spend money on.
 
 **Exit condition — met:** can sign up, get gated on email confirmation,
 confirm, log in, session round-trips through encrypted storage, refresh
@@ -277,7 +277,43 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
 
 ---
 
-## Phase 11 — Store submission prep
+## Phase 11 — Production backend & real email
+
+Goal: the backend is real for anyone, not just reachable from this
+machine. Everything through Phase 10 has been verified against
+`supabase start` — a local Docker stack, local-only network, and a
+fake Mailpit inbox instead of real email delivery. None of that is
+usable by an actual other person yet, which the rest of this roadmap
+(TestFlight/Internal testing in the next phase, a real beta group in
+the one after that) quietly assumes has already changed by the time it
+starts.
+
+- [ ] Create a hosted Supabase project (supabase.com, free tier —
+      still $0, this isn't the money-spending phase)
+- [ ] Run every migration (and `grants.sql`, `seed.sql` if wanted for a
+      staging project) against the hosted project, exactly as they ran
+      locally — a hosted Postgres/Auth instance isn't guaranteed to
+      behave identically to `supabase start` just because it passed
+      locally
+- [ ] Wire up a real SMTP provider for Auth emails (e.g. SendGrid free
+      tier) via `supabase/config.toml`'s `[auth.email.smtp]` block —
+      already sketched in a comment there since Phase 2, unused until now
+- [ ] A real `mobile/.env` (not `.env.local`) pointing at the hosted
+      project's URL + anon key, kept out of git the same way
+      `.env.local` is
+- [ ] Re-run Phase 2's full auth verification (signup → confirm → login
+      → refresh → logout → tampered-token rejection) against the
+      *hosted* project specifically, not assumed from the local result
+- [ ] Cloudflare R2 bucket provisioned for real, if Phase 5 hadn't
+      already needed one
+
+**Exit condition:** someone not on your network — a real phone, a real
+email address you don't control, no `127.0.0.1` or LAN IP anywhere —
+can sign up, receive an actual confirmation email, and log in.
+
+---
+
+## Phase 12 — Store submission prep
 
 Goal: ready to actually submit.
 
@@ -300,7 +336,7 @@ Goal: ready to actually submit.
 
 ---
 
-## Phase 12 — Beta & post-launch
+## Phase 13 — Beta & post-launch
 
 - [ ] Recruit a small real beta group (a couple of actual Rooms, not just
       test accounts)
