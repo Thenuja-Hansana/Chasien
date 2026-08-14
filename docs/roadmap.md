@@ -11,18 +11,20 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phases 0, 1, 2, and 3 are done. All 13 of
-`app_reference`'s routes exist as real Expo Router screens (empty-state,
-no mock data), sharing ported Avatar/Icon/TabBar components and real
-Caprasimo/Figtree fonts. Verified end to end against the live local
-stack — signup, email confirmation, login, navigating every screen, a
-page reload while logged in, and logout — in a browser and, separately,
-on a real Android emulator (a sideloaded SDK-57 Expo Go build, since
-both app stores' public builds were still lagging behind the new SDK).
-Not yet verified on iOS or a physical device. See `docs/phase/phase03.md`
-for the full write-up, including three real bugs caught by actually
-running the app that typecheck/lint missed. Next: Phase 4 — Rooms core
-(Discover, join flows, Create Room, Community Settings, real Room feed).
+**Current focus:** Phases 0-4 are done. Rooms are real: Discover browses
+actual public/request Rooms, Create Room writes a real row, and all three
+join flows (public/request/invite) work end to end through a new
+`room-membership` Edge Function, verified with two real accounts —
+including the core privacy guarantee, that an invite-only Room is
+completely invisible (empty Discover, "Room not found", zero rows from a
+raw REST query) to someone who isn't a member or invitee. Community
+Settings has a real visibility picker, members-can-post toggle, and
+owner-only role management. See `docs/phase/phase04.md` for the full
+write-up, including three real bugs live verification caught that
+typecheck/lint didn't. (Phase 3's app shell — see `docs/phase/phase03.md`
+— is still verified on web and a real Android emulator only, not iOS or a
+physical device.) Next: Phase 5 — Posts & engagement (real post creation,
+image upload to Cloudflare R2, comments, likes, polls).
 
 ---
 
@@ -163,16 +165,33 @@ write-up: `docs/phase/phase03.md`.
 
 Goal: Discover, join, and own a Room for real.
 
-- [ ] Discover screen: browse public Rooms
-- [ ] Join flows: public (instant), request-to-join (pending → approved),
-      invite-only
-- [ ] Create Room flow, creator becomes `owner`
-- [ ] Community Settings: visibility toggle, members-can-post toggle, role
-      management (owner/mod)
-- [ ] Room feed: reverse-chron, paginated, empty state
+- [x] Discover screen: browse public Rooms — real query against `rooms`,
+      RLS-filtered (public/request listed to everyone, invite hidden
+      unless already a member)
+- [x] Join flows: public (instant), request-to-join (pending → approved),
+      invite-only — all three via the `room-membership` Edge Function
+      (`supabase/functions/room-membership`), since `room_memberships` has
+      zero client write policies by design (Phase 1)
+- [x] Create Room flow, creator becomes `owner` — direct client insert
+      into `rooms` (RLS + an existing Phase-1 trigger handle owner
+      assignment atomically), not an Edge Function
+- [x] Community Settings: visibility picker, members-can-post toggle, role
+      management (owner/mod) — promote/demote between member/mod;
+      ownership transfer exists in the Edge Function but isn't exposed in
+      this phase's UI (not asked for in this checklist)
+- [x] Room feed: membership-gated empty state (pending/invited/member
+      states all real) — reverse-chron/pagination is moot until Phase 5
+      puts actual posts in a Room to order
 
-**Exit condition:** two real accounts, one creates a private Room, the
-other cannot see it until invited/approved.
+**Exit condition — met:** verified with two real accounts against the
+live local stack (signup, email confirmation, real login for both) — A
+creates a public, a request, and an invite-only Room; B can instantly
+join the public one, has to wait on A's approval for the request one, and
+cannot see the invite-only one exists at all (empty Discover result, "Room
+not found" on direct navigation, zero rows back from a raw REST query)
+until A invites B by handle and B accepts. Role management (promote B to
+mod) verified too. Full write-up, including three real bugs live
+verification caught that typecheck/lint didn't: `docs/phase/phase04.md`.
 
 ---
 

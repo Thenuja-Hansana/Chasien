@@ -7,6 +7,78 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-14 — Three real bugs found verifying Phase 4, all in the parts static analysis can't see
+
+**Decision:** three fixes, all shipped together after live verification with two
+real accounts found them:
+
+1. `service_role` had zero table grants (new migration
+   `20260814044514_service_role_grants.sql`, mirroring the `authenticated`
+   grant already in `20260813073524_grants.sql`).
+2. `rooms`' SELECT policy now also admits a room's own creator
+   unconditionally (new migration
+   `20260814044612_room_creator_can_always_see_own_room.sql`), not just
+   public/request visibility or an existing `room_memberships` row.
+3. `fetchRoomMembers()` (`mobile/src/lib/rooms.ts`) now embeds
+   `profiles!room_memberships_user_id_fkey(handle, name)` instead of a bare
+   `profiles(handle, name)`.
+
+**Context:** the `room-membership` Edge Function (join/approve/invite/
+role-change) and the Room Settings member list both typechecked and linted
+clean, then failed on nearly every live action when actually exercised
+end to end with two accounts — 5 of 7 test scenarios failed on the first
+verification pass.
+
+**Bug 1 — service_role has BYPASSRLS, not automatic table grants.** Every
+`room-membership` action uses a service-role client specifically because
+`room_memberships` has zero client write policies by design (Phase 1) —
+but BYPASSRLS only skips *row-level security policy* checks, a completely
+separate Postgres layer from ordinary table-level GRANTs, which are still
+enforced regardless. `service_role` was never granted anything on
+`public` — the same exact bug `20260813073524_grants.sql` fixed for
+`authenticated` during Phase 1, just undiscovered for a different role
+until an Edge Function actually ran against a live database. Surfaced as
+misleading 404s ("Room not found") on join/approve/invite/role-change,
+since the handlers treat any query failure as "not found" rather than
+distinguishing a privilege error.
+
+**Bug 2 — INSERT...RETURNING re-checks the SELECT policy in the same
+statement a trigger populates.** Creating an invite-only Room failed with
+`42501` every time, only for `invite` visibility. The owner's
+`room_memberships` row (which the original SELECT policy needed to admit
+the room to its own creator) is created by an AFTER INSERT trigger
+(`add_owner_membership_on_room_created`, Phase 1) — but
+`.insert(...).select().single()` (`createRoom()`,
+`mobile/src/lib/rooms.ts`) asks Postgres to also evaluate the SELECT
+policy on the newly-inserted row as part of the same statement, and that
+recheck didn't see the trigger's own insert. Public/request rooms never
+hit this, since their SELECT policy already admits any authenticated
+user unconditionally. Fixed at the policy level, not by restructuring the
+client into two round trips — a room's creator being unable to see their
+own room even transiently was the actual bug, and "always visible to your
+own creator" is a correct policy on its own merits, independent of this
+specific timing quirk.
+
+**Bug 3 — `room_memberships` has two foreign keys to `profiles`.**
+`user_id` and `invited_by` both reference `profiles(id)`, so PostgREST's
+implicit embedding (`profiles(handle, name)`) can't tell which
+relationship to follow and rejects the query outright (`PGRST201`) for
+every room, regardless of data — this made Room Settings' "Requests to
+join" and "Roles" sections permanently unable to load. Naming the
+specific foreign key constraint in the embed
+(`profiles!room_memberships_user_id_fkey(...)`) resolves the ambiguity.
+
+**Why this is worth restating precisely:** none of the three would have
+been caught by `tsc --noEmit` or `expo lint`, both of which passed clean
+immediately before and after. All three are the same category of thing —
+correct-looking code whose failure mode only exists at the boundary
+between two systems (Postgres privileges vs. RLS; a trigger vs. the
+statement that fired it; a foreign key vs. PostgREST's embedding
+inference) — which is exactly what this project's phase-by-phase
+verification standard (docs/roadmap.md) exists to catch.
+
+---
+
 ## 2026-08-14 — Added an explicit "Production backend & real email" phase
 
 **Decision:** inserted a new Phase 11 in `docs/roadmap.md` — create a
