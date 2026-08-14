@@ -14,12 +14,15 @@ phase freely; don't reorder phases without a reason, they're dependency
 **Current focus:** Phases 0, 1, 2, and 3 are done. All 13 of
 `app_reference`'s routes exist as real Expo Router screens (empty-state,
 no mock data), sharing ported Avatar/Icon/TabBar components and real
-Caprasimo/Figtree fonts. Verified end to end — signup, email confirmation,
-login, navigating every screen, a page reload while logged in, and logout
-— against the live local stack, in a browser (`expo start --web`); not yet
-verified on an iOS/Android simulator or physical device, since none was
-available in this environment. Next: Phase 4 — Rooms core (Discover, join
-flows, Create Room, Community Settings, real Room feed).
+Caprasimo/Figtree fonts. Verified end to end against the live local
+stack — signup, email confirmation, login, navigating every screen, a
+page reload while logged in, and logout — in a browser and, separately,
+on a real Android emulator (a sideloaded SDK-57 Expo Go build, since
+both app stores' public builds were still lagging behind the new SDK).
+Not yet verified on iOS or a physical device. See `docs/phase/phase03.md`
+for the full write-up, including three real bugs caught by actually
+running the app that typecheck/lint missed. Next: Phase 4 — Rooms core
+(Discover, join flows, Create Room, Community Settings, real Room feed).
 
 ---
 
@@ -137,18 +140,22 @@ Goal: every screen from the mock exists as a real (data-empty) RN screen.
       mutations (join, post, message) stay deferred to Phases 4-6 per
       those phases' own goals
 
-**Exit condition — met, on web only:** navigated the entire app end to end
-in a browser against the live local stack — sign up, confirm by email,
-log in, every screen reachable from the UI, a page reload while logged
-in, direct navigation to every dynamic route, log out — zero console
-errors. Not yet run on an iOS/Android simulator or physical device (none
-available in this environment); do that before treating the "real
-device/simulator" half of this exit condition as fully met. Caught and
-fixed three real bugs this way that typecheck/lint didn't: `LargeSecureStore`
-crashed outright on web (`expo-secure-store` has no web implementation),
-that fix's own web fallback collided with AsyncStorage's storage key and
-corrupted the encryption key on every login, and the font mismatch above
-— see decision-log for all three.
+**Exit condition — met:** navigated the entire app end to end, twice
+over. First in a browser (three rounds) against the live local stack —
+sign up, confirm by email, log in, every screen reachable from the UI,
+a page reload while logged in, direct navigation to every dynamic
+route, log out — zero console errors. Then for real on a local Android
+emulator (SDK 57's Expo Go build sideloaded directly, since both app
+stores were still lagging behind the new SDK) — real signup, real
+email confirmation, real login, screens rendering with the correct
+fonts and theme. Not yet run on iOS or a physical device (neither
+available in this environment) — do that before treating this exit
+condition as fully closed. Caught and fixed three real bugs this way
+that typecheck/lint didn't: `LargeSecureStore` crashed outright on web
+(`expo-secure-store` has no web implementation), that fix's own web
+fallback collided with AsyncStorage's storage key and corrupted the
+encryption key on every login, and the font mismatch above. Full
+write-up: `docs/phase/phase03.md`.
 
 ---
 
