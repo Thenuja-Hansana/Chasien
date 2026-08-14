@@ -1,9 +1,17 @@
+import { Caprasimo_400Regular } from '@expo-google-fonts/caprasimo';
+import { Figtree_400Regular, Figtree_600SemiBold, Figtree_700Bold } from '@expo-google-fonts/figtree';
+import { useFonts } from 'expo-font';
 import { DarkTheme, router, Stack, ThemeProvider, usePathname } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, type ReactNode } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
+
+// Held open until fonts resolve so screens never flash with the platform
+// default font before Caprasimo/Figtree are ready — see constants/theme.ts.
+SplashScreen.preventAutoHideAsync();
 
 // Chasien is single-themed (see constants/theme.ts) — React Navigation's
 // chrome (headers, tab bars) is tinted to match rather than switching
@@ -53,6 +61,23 @@ function AuthGate({ children }: { children: ReactNode }) {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Caprasimo_400Regular,
+    Figtree_400Regular,
+    Figtree_600SemiBold,
+    Figtree_700Bold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   return (
     <ThemeProvider value={ChasienNavigationTheme}>
       <AuthProvider>

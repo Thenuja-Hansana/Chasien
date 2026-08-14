@@ -8,8 +8,6 @@
  * tokens in tokens.css first; don't improvise one here.
  */
 
-import '@/global.css';
-
 import { Platform } from 'react-native';
 
 export const Colors = {
@@ -58,25 +56,19 @@ export const Colors = {
 } as const;
 
 /**
- * Family names Chasien's screens should render with once loaded. Native
- * (iOS/Android) needs these fonts loaded via `useFonts()` — from
- * `@expo-google-fonts/caprasimo` and `@expo-google-fonts/figtree` — before
- * these names resolve to anything but the platform default. That wiring
- * (plus coordinating with the splash screen already set up in
- * `app/_layout.tsx`) belongs to Phase 3 (App shell), not here.
+ * Family names Chasien's screens render with — the exact keys `useFonts()`
+ * in `app/_layout.tsx` registers them under (from
+ * `@expo-google-fonts/caprasimo` and `@expo-google-fonts/figtree`),
+ * coordinated with the splash screen there so nothing flashes the
+ * platform default font first. `expo-font` registers under these same
+ * names on every platform including web, so there's no per-platform split.
  */
-export const Fonts = Platform.select({
-  web: {
-    heading: 'var(--font-heading)',
-    body: 'var(--font-body)',
-  },
-  default: {
-    heading: 'Caprasimo_400Regular',
-    body: 'Figtree_400Regular',
-    bodySemibold: 'Figtree_600SemiBold',
-    bodyBold: 'Figtree_700Bold',
-  },
-});
+export const Fonts = {
+  heading: 'Caprasimo_400Regular',
+  body: 'Figtree_400Regular',
+  bodySemibold: 'Figtree_600SemiBold',
+  bodyBold: 'Figtree_700Bold',
+} as const;
 
 /** --space-* custom properties in tokens.css, kept as the same numbers for 1:1 traceability. */
 export const Spacing = {

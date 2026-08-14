@@ -11,11 +11,15 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phases 0, 1, and 2 are done. Real accounts exist —
-signup, email confirmation, login, encrypted session storage, refresh,
-logout, and token rejection all verified against the live local stack.
-Next: Phase 3 — App shell & navigation, replacing today's single
-placeholder screen with real screens mirroring `app_reference`'s routes.
+**Current focus:** Phases 0, 1, 2, and 3 are done. All 13 of
+`app_reference`'s routes exist as real Expo Router screens (empty-state,
+no mock data), sharing ported Avatar/Icon/TabBar components and real
+Caprasimo/Figtree fonts. Verified end to end — signup, email confirmation,
+login, navigating every screen, a page reload while logged in, and logout
+— against the live local stack, in a browser (`expo start --web`); not yet
+verified on an iOS/Android simulator or physical device, since none was
+available in this environment. Next: Phase 4 — Rooms core (Discover, join
+flows, Create Room, Community Settings, real Room feed).
 
 ---
 
@@ -113,18 +117,38 @@ produced before being fixed.
 
 Goal: every screen from the mock exists as a real (data-empty) RN screen.
 
-- [ ] Expo Router file-based routes mirroring `App.jsx`'s routes (e.g.
-      `/c/:communityId` → `app/c/[communityId].tsx`) — see decision-log,
-      2026-08-13 "Phase 0 scaffold"
-- [ ] Load `Caprasimo`/`Figtree` via `@expo-google-fonts/*` + `useFonts()`,
+- [x] Expo Router file-based routes mirroring `App.jsx`'s routes (e.g.
+      `/c/:communityId` → `app/c/[communityId]/index.tsx`) — see
+      decision-log, 2026-08-13 "Phase 0 scaffold". `TabBar` stayed a plain
+      shared component rendered per-screen (like the mock), not an Expo
+      Router `Tabs` layout — its destinations (current Room, current user)
+      aren't a fixed route set
+- [x] Load `Caprasimo`/`Figtree` via `@expo-google-fonts/*` + `useFonts()`,
       coordinated with the splash screen — `constants/theme.ts` already
-      references the expected font names
-- [ ] Shared components: Avatar, Icon, TabBar — ported, not redesigned
-- [ ] Screens wired to Phase 1 backend but can render "empty state" —
-      no mock data left in the real app
+      references the expected font names. Found and fixed a pre-existing
+      web font-name mismatch along the way (`Fonts` had dropped a
+      web-specific CSS-var indirection left over from before real fonts
+      existed) — see decision-log
+- [x] Shared components: Avatar, Icon, TabBar — ported, not redesigned
+      (`react-native-svg` for Icon, `expo-linear-gradient` for Avatar)
+- [x] Screens wired to Phase 1 backend but can render "empty state" —
+      no mock data left in the real app. Scoped as shells: navigation,
+      chrome, and empty states are real; Room/post/chat data-fetching and
+      mutations (join, post, message) stay deferred to Phases 4-6 per
+      those phases' own goals
 
-**Exit condition:** you can navigate the entire app end to end on a real
-device/simulator with a real (empty) account — no dead-end screens.
+**Exit condition — met, on web only:** navigated the entire app end to end
+in a browser against the live local stack — sign up, confirm by email,
+log in, every screen reachable from the UI, a page reload while logged
+in, direct navigation to every dynamic route, log out — zero console
+errors. Not yet run on an iOS/Android simulator or physical device (none
+available in this environment); do that before treating the "real
+device/simulator" half of this exit condition as fully met. Caught and
+fixed three real bugs this way that typecheck/lint didn't: `LargeSecureStore`
+crashed outright on web (`expo-secure-store` has no web implementation),
+that fix's own web fallback collided with AsyncStorage's storage key and
+corrupted the encryption key on every login, and the font mismatch above
+— see decision-log for all three.
 
 ---
 

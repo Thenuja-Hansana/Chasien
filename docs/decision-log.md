@@ -7,6 +7,80 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-13 — Dropped the web-specific `Fonts` CSS-var indirection; it never matched the loaded font names
+
+**Decision:** `constants/theme.ts`'s `Fonts` export is no longer
+`Platform.select`-split. It's one plain object (`Caprasimo_400Regular`,
+`Figtree_400Regular`, etc.) used on every platform, and
+`global.css`/`--font-heading`/`--font-body` are deleted.
+
+**Context:** found in the same live-verification pass as the entries
+above — on web, the brand heading rendered in the fallback serif, not
+Caprasimo. `Fonts.heading` on web resolved to `var(--font-heading)`,
+defined in `global.css` (written in Phase 0, before any real font-loading
+existed) as `'Caprasimo', ui-serif, Georgia, serif`. But `useFonts()` in
+`app/_layout.tsx` (added this phase) registers the loaded webfont under
+the exact object key passed to it — `'Caprasimo_400Regular'` — on every
+platform, web included. `'Caprasimo'` was never a font that existed
+anywhere, so the CSS var fell through its own fallback chain every time.
+`global.css`'s vars had no other consumer, so there was nothing to
+preserve by keeping the indirection instead of just removing it.
+
+---
+
+## 2026-08-13 — Correction: the web SecureStore fallback collided with AsyncStorage's own key
+
+**Decision:** the web branch of `LargeSecureStore` now stores its AES key
+under `` `${key}-secure-store-key` `` in `localStorage`, not `key` itself.
+
+**Context:** re-verifying the entry below (same session) by actually
+logging in on web again surfaced a second, self-inflicted bug: writing the
+encryption key to `localStorage.setItem(key, ...)` used the *same* key
+`AsyncStorage.setItem(key, encrypted)` writes to two lines later —
+`@react-native-async-storage/async-storage`'s web backend is a thin
+wrapper directly over `localStorage` with no prefix of its own. The second
+write silently clobbered the first, destroying the encryption key the
+instant it was used. Any later reload tried to decrypt the session using
+the leftover ciphertext as if it were the key, throwing `invalid key size`
+from `aes-js` and blanking the whole app behind Expo's uncaught-error
+overlay — worse than the original crash, since it now happened on almost
+every reload instead of only on web login.
+
+**Why this is left in this file rather than just fixed silently:** this
+phase's own standard is "verify by hand, don't assume it compiles" — the
+first fix passed typecheck and lint clean and still shipped a crash: a
+useful reminder that a same-tick key collision like this needs an actual
+runtime run to catch, not static analysis.
+
+---
+
+## 2026-08-13 — LargeSecureStore crashed on web; given a web fallback rather than left broken
+
+**Decision:** `LargeSecureStore` (mobile/src/lib/supabase.ts) now branches on
+`Platform.OS === 'web'`, storing its AES encryption key in `localStorage`
+instead of calling `expo-secure-store` there. Everything else — the
+AsyncStorage-held ciphertext, the encryption itself — is unchanged.
+
+**Context:** found while verifying Phase 3's new navigation by actually
+driving the app in a browser (`expo start --web`) — the same "run it, don't
+assume it compiles" standard every phase so far has used. Login crashed
+immediately with `ExpoSecureStore.default.setValueWithKeyAsync is not a
+function`: `expo-secure-store` has no web implementation at all (there's no
+Keychain/Keystore equivalent in a browser), and `LargeSecureStore` had no
+web branch, so every call there threw. This blocked verifying every
+authenticated screen — not just the ones Phase 3 added.
+
+**Why fix it here instead of just noting it as a known gap:** Chasien ships
+mobile-only (see "Zero-budget stack finalized" below), so this was never a
+production security concern — but `web.output` is deliberately kept
+buildable for local dev (see the "Phase 2 web output" entry below), and a
+dev target that can't even log in isn't useful. `localStorage` is no more
+or less secure than the plaintext AsyncStorage-on-web this pattern was
+built to avoid on *native* — web was never the protected target, so this
+doesn't weaken anything the original design was actually defending.
+
+---
+
 ## 2026-08-13 — Three real bugs found verifying Phase 2, none of them where expected
 
 **Decision:** switched `mobile/app.json`'s `web.output` from `static` to
