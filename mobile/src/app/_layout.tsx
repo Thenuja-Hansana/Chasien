@@ -8,10 +8,15 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
+import { configureForegroundNotificationHandler, registerForPushNotifications, subscribeToNotificationTaps } from '@/lib/push';
 
 // Held open until fonts resolve so screens never flash with the platform
 // default font before Caprasimo/Figtree are ready — see constants/theme.ts.
 SplashScreen.preventAutoHideAsync();
+
+// Registering a push token needs no session-specific timing beyond "the
+// module has loaded" — call once, not per render.
+configureForegroundNotificationHandler();
 
 // Chasien is single-themed (see constants/theme.ts) — React Navigation's
 // chrome (headers, tab bars) is tinted to match rather than switching
@@ -48,6 +53,21 @@ function AuthGate({ children }: { children: ReactNode }) {
       router.replace('/');
     }
   }, [session, loading, pathname]);
+
+  // Registration is a silent no-op without a configured EAS project id
+  // (see lib/push.ts) — safe to call unconditionally on every login
+  // rather than gating this on some "push is set up" flag the app would
+  // otherwise need to track.
+  useEffect(() => {
+    if (!session) return;
+    registerForPushNotifications(session.user.id).catch(() => {});
+  }, [session]);
+
+  useEffect(() => {
+    return subscribeToNotificationTaps((conversationId) => {
+      router.push({ pathname: '/chats/[chatId]', params: { chatId: conversationId } });
+    });
+  }, []);
 
   if (loading) {
     return (

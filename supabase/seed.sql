@@ -58,6 +58,21 @@ insert into room_memberships (room_id, user_id, role, join_state) values
 -- seed_participants_on_conversation_created (chat.sql) — nothing to
 -- insert there directly.
 
+-- add_owner_membership_on_room_created (identity_and_rooms.sql, extended
+-- in Phase 6) already auto-created a 'general' channel for every room
+-- above the moment it was inserted. grit-club's explicit row below
+-- would collide with that (room_channel_name_unique) with a random,
+-- non-deterministic id; ilford-nights doesn't collide on name but would
+-- end up with an unwanted extra empty 'general' alongside the seeded
+-- 'darkroom'. Clearing both first lets the fixed, deterministic ids this
+-- file actually references (in the messages/reactions below) win.
+-- sourdough-sunday has no explicit row here, so its auto-created
+-- 'general' is left alone — that's the intended real behavior, not a
+-- gap seed.sql needs to work around.
+delete from conversations
+where kind = 'room_channel'
+  and room_id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002');
+
 insert into conversations (id, kind, room_id, name) values
   ('b0000000-0000-0000-0000-000000000001', 'room_channel', 'a0000000-0000-0000-0000-000000000001', 'general'),
   ('b0000000-0000-0000-0000-000000000002', 'room_channel', 'a0000000-0000-0000-0000-000000000002', 'darkroom');

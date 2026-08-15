@@ -80,6 +80,14 @@ const ICONS: Record<string, Shape[]> = {
   google: [{ t: 'path', d: 'M21 12.2H12v3.4h5.2A5.2 5.2 0 1 1 12 6.8c1.3 0 2.5.5 3.4 1.3' }],
   chevronRight: [{ t: 'path', d: 'm9 6 6 6-6 6' }],
   chevronDown: [{ t: 'path', d: 'm6 9 6 6 6-6' }],
+  // Not part of app_reference/src/components/Icon.jsx's set — the mock's
+  // voice messages were decorative, with no real playback to control.
+  // Added for Phase 6's actual voice-note player (MessageBubble.tsx).
+  play: [{ t: 'path', fill: true, d: 'M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z' }],
+  pause: [
+    { t: 'rect', x: 6, y: 4, width: 4, height: 16, rx: 1 },
+    { t: 'rect', x: 14, y: 4, width: 4, height: 16, rx: 1 },
+  ],
   homeTab: [{ t: 'path', d: 'M3 10.6 12 3.2l9 7.4V20a1 1 0 0 1-1 1h-4.6v-6H8.6v6H4a1 1 0 0 1-1-1z' }],
   exploreTab: [{ t: 'path', d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m4 5-2.2 6.2L7.6 16l2.2-6.2z' }],
   postTab: [{ t: 'path', d: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1M12 8.4v7.2M8.4 12h7.2' }],

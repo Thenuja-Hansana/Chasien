@@ -7,6 +7,117 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-15 — Push notifications need an EAS project id; that's a separate question from Firebase/FCM
+
+**Decision:** built and verified the send side of push (Database Webhook
+→ `notify-new-message` Edge Function → Expo Push API) against Expo Go
+now, deferring Firebase/FCM setup to whenever a production Android build
+happens. `registerForPushNotifications()` (`mobile/src/lib/push.ts`)
+returns `null` and does nothing further if no EAS project id is
+configured, rather than throwing.
+
+**Context:** two genuinely separate setup questions came up while wiring
+Phase 6's push notifications, and conflating them would have blocked or
+over-scoped the work. Both were put to the user directly rather than
+assumed.
+
+**Why they're separate:** `Notifications.getExpoPushTokenAsync()`
+requires a real EAS project id to mint a token at all — there is no way
+around this, even just to test in Expo Go, since Expo's push service
+needs a project to route through. Firebase/FCM, by contrast, only
+matters once there's a *standalone/production* Android build; Expo's own
+infrastructure handles delivery to Expo Go and dev builds without it.
+So the EAS project id is required immediately; FCM is not.
+
+**Where this stands:** the user chose to set up an EAS project
+(`eas login`/`eas init`, free, tied to their own Expo account) but hadn't
+completed that step as of this phase's write-up — `app.json` has no
+`extra.eas.projectId` and no `eas.json` exists yet. Everything up to
+that point (the webhook, the Edge Function, the push_tokens table and its
+RLS, the client registration code) is built and verified independently;
+actual device delivery is the one piece of Phase 6 still pending on the
+user completing that one-time step.
+
+**Revisit when:** the EAS project is set up, to verify actual push
+delivery end to end on a real device; separately, whenever a production
+Android build is first needed, to add Firebase/FCM.
+
+---
+
+## 2026-08-15 — The RETURNING/RLS-timing bug, recurring a third time, now in `start_dm()`
+
+**Decision:** widened `conversations`' SELECT policy so a DM's own two
+participants (`dm_user_a`/`dm_user_b`) can always see it, independent of
+whether their `conversation_participants` rows exist yet
+(`20260815021051_dm_participants_can_always_see_own_dm.sql`).
+
+**Context:** every call to the new `start_dm()` RPC failed with `new row
+violates row-level security policy for table conversations`. This is the
+identical failure shape documented in the 2026-08-14 entry below ("Three
+real bugs found verifying Phase 4," bug 2): `.insert(...).select()`
+re-checks the SELECT policy on the just-inserted row within the same
+statement, and the only path to seeing a DM was via
+`conversation_participants` — populated by an `AFTER INSERT` trigger
+whose own insert that same-statement recheck doesn't see yet.
+Reproduced with the table's other INSERT policy temporarily dropped, to
+rule out a multi-policy interaction, before concluding it was this alone.
+
+**Why this is worth its own entry rather than just citing the old one:**
+the fix from Phase 4 was already written down, in this exact file, with
+the general shape of the bug spelled out — and it still cost real
+debugging time to re-recognize three phases later, in a different table,
+under a different symptom. The actionable lesson isn't "widen the
+policy" (that was already known); it's to recognize `new row violates
+row-level security policy` immediately following an
+`INSERT ... RETURNING`-shaped call behind an `AFTER INSERT` trigger as
+this specific, nameable failure the moment it appears, not after
+re-deriving it from scratch. Fixed the same way both times: widen the
+policy so the row's obvious rightful viewer can always see it, not
+restructure the client into extra round trips to dodge the timing.
+
+**Revisit when:** never, ideally — but if a future RPC creates a row
+whose visibility depends on an `AFTER INSERT` trigger's own side effects
+and then immediately `.select()`s it back, check this exact failure mode
+first.
+
+---
+
+## 2026-08-15 — Chat runs on the same Supabase-Storage-now pattern as Phase 5, sharing its upload code
+
+**Decision:** Phase 6's chat image/voice attachments use a new private
+`message-media` bucket, scoped by `conversation_id` (via
+`conversation_participants`) rather than by Room, since a DM has no
+`room_id`. The compress/upload/sign logic itself moved out of Phase 5's
+`lib/media.ts` into a new shared `lib/mediaUtils.ts`; `lib/media.ts`
+(post images) and the new `lib/messageMedia.ts` (chat attachments) are
+now both thin wrappers over the same internals.
+
+**Context:** the Phase 5 entry below already decided media stays on
+Supabase Storage, not R2, until Phase 11, behind a one-file seam. Phase 6
+needed the identical shape — private bucket, signed reads, no `::uuid`
+cast on attacker-controlled storage path segments, ownership checked
+from the path — for chat attachments. Writing that RLS from scratch
+surfaced that exact casting mistake again in a first draft (caught in
+self-review before applying the migration, not by a failed test): a
+malformed path segment cast to `uuid` raises a hard error instead of
+cleanly denying, so the *known* column must be the one cast to text, not
+the attacker-controlled segment cast the other way.
+
+**Why extract shared code now instead of copy-pasting Phase 5's
+`media.ts`:** the random-filename scheme, resize/JPEG-compress step, and
+batched signed-URL minting are genuinely identical regardless of which
+bucket a caller writes to — only the bucket name and the calling
+convention differ. Copy-pasting them would have meant the next bug found
+in that logic needing the same fix applied twice, correctly, in two
+files that look almost but not quite alike. `lib/mediaUtils.ts` exists so
+there's one place for that logic to be correct in.
+
+**Revisit when:** Phase 11's R2 swap — both `lib/media.ts` and
+`lib/messageMedia.ts` still only need their own thin wrapper updated,
+same as the original one-file-seam decision anticipated.
+
+---
+
 ## 2026-08-14 — Media runs on Supabase Storage until Phase 11, behind a one-file seam
 
 **Decision:** Phase 5's post images upload to a private **Supabase

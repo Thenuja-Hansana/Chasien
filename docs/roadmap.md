@@ -11,17 +11,29 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phases 0-5 are done. The feed is real end to end —
-posts with text, images, and polls; likes; one-level threaded comments —
-all verified with two real accounts against the live local stack, with
-post images held in a private, membership-gated bucket behind
-short-lived signed URLs. Media currently runs on Supabase Storage rather
-than Cloudflare R2, behind a one-file seam, because R2 can't be
-provisioned or verified locally; the swap is scheduled in Phase 11 where
-the bucket was already listed. See `docs/phase/phase05.md`. Next:
-Phase 6 — Chat & realtime.
+**Current focus:** Phases 0-6 are done. Chat is real end to end — a
+unified inbox mixing Room group channels and DMs, realtime message
+delivery, typing indicators, read receipts, reactions, and image/voice
+attachments, all verified with two (and, for the isolation guarantee,
+three) real accounts against the live local stack. Chat media follows
+Phase 5's media pattern exactly (private bucket, signed URLs), scoped by
+conversation instead of Room, sharing its compress/upload/sign code via
+a new `lib/mediaUtils.ts`. Push notifications are wired server-side
+(Database Webhook → Edge Function → Expo Push) and verified on the send
+side; actual device delivery is still blocked on the user completing a
+one-time, free `eas login`/`eas init` step. See `docs/phase/phase06.md`.
+Next: Phase 7 — Stories.
 
-Previously: Rooms are real — Discover browses
+Previously: the feed is real end to end — posts with text, images, and
+polls; likes; one-level threaded comments — all verified with two real
+accounts against the live local stack, with post images held in a
+private, membership-gated bucket behind short-lived signed URLs. Media
+currently runs on Supabase Storage rather than Cloudflare R2, behind a
+one-file seam, because R2 can't be provisioned or verified locally; the
+swap is scheduled in Phase 11 where the bucket was already listed. See
+`docs/phase/phase05.md`.
+
+Earlier still: Rooms are real — Discover browses
 actual public/request Rooms, Create Room writes a real row, and all three
 join flows (public/request/invite) work end to end through a new
 `room-membership` Edge Function, verified with two real accounts —
@@ -245,17 +257,34 @@ caught: `docs/phase/phase05.md`.
 
 Goal: the messaging half of "Telegram-like."
 
-- [ ] Unified inbox: Room group chat + DMs in one list
-- [ ] Realtime delivery via Supabase Realtime, gated by the same
-      membership check as everything else
-- [ ] Typing indicators, read receipts, reactions
-- [ ] Image + voice message attachments (through R2, same pipeline as
-      Phase 5)
-- [ ] Push notifications for new messages (Expo Push)
+- [x] Unified inbox: Room group chat + DMs in one list — one
+      `security_invoker` view (`my_inbox`), not a client-side merge of
+      two queries
+- [x] Realtime delivery via Supabase Realtime, gated by the same
+      membership check as everything else — `postgres_changes` for
+      messages/reactions/read-receipts (RLS-gated); Broadcast, not a
+      table, for typing indicators (nothing there is worth persisting)
+- [x] Typing indicators, read receipts, reactions
+- [x] Image + voice message attachments. **Running on Supabase Storage,
+      not R2 yet** — same reasoning and same one-file-seam pattern as
+      Phase 5's post images (`lib/media.ts`/`lib/messageMedia.ts` now
+      share their compress/upload/sign internals via
+      `lib/mediaUtils.ts`); the R2 swap is still Phase 11's
+- [x] Push notifications for new messages (Expo Push) — send side wired
+      and verified (a Database Webhook → Edge Function → Expo Push API
+      on every new message); actual device delivery still blocked on a
+      one-time, free EAS project setup step the user hasn't completed
+      yet (see `docs/phase/phase06.md` §2.7)
 
-**Exit condition:** two devices, real-time message delivery, and a
-non-member cannot subscribe to a Room's chat channel even by guessing the
-channel id.
+**Exit condition — met:** verified with two real accounts (and a third,
+for the isolation check) against the live local stack — realtime message
+delivery confirmed in both a Room channel and a DM without a reload, and
+a non-member's inbox never lists the Room's channel and a raw REST query
+against `my_inbox` for that channel's id returns zero rows even for a
+known conversation id. 8/8 SQL-level checks and 10/10 end-to-end UI
+scenarios; full write-up, including the same RETURNING/RLS-timing bug
+class recurring a third time and a reply-to Pressable-nesting bug:
+`docs/phase/phase06.md`.
 
 ---
 
