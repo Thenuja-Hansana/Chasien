@@ -7,6 +7,47 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-08-31 — Expo Go can't do push at all since SDK 53; switched to dev-client builds
+
+**Decision:** `mobile/src/lib/push.ts` no longer imports `expo-notifications`
+statically anywhere — every use is a dynamic `import('expo-notifications')`,
+guarded by a new `isExpoGo` check (`Constants.appOwnership ===
+AppOwnership.Expo`) that short-circuits to a silent no-op (`null` /
+`() => {}`) before that import ever runs. `mobile/app.json` gained the EAS
+project id (`extra.eas.projectId`, `owner: "thenujacode"`) the 2026-08-15
+entry below left pending, plus a real Android `package` name and the
+`RECORD_AUDIO`/`MODIFY_AUDIO_SETTINGS`/`FOREGROUND_SERVICE*` permissions
+Phase 6's voice messages need. `expo-dev-client` was added, and
+`package.json`'s `android`/`ios` scripts switched from `expo start
+--android/--ios` (Expo Go) to `expo run:android`/`expo run:ios`
+(development build).
+
+**Context:** the user completed the EAS project setup this entry's
+2026-08-15 predecessor was waiting on. Re-testing push in Expo Go on a real
+Android emulator surfaced a harder failure than expected: as of Expo SDK
+53, the shared Expo Go client can no longer load `expo-notifications` at
+all — not just refuse to mint a push token, but throw on the bare `import`
+itself, before any of this file's own guards had a chance to run,
+crashing the whole app at launch rather than just push registration.
+
+**Why a dev-client build instead of working around it in Expo Go:** there
+is no workaround — the restriction is in the shared Expo Go client binary
+itself, not anything this app's code controls, and it does not apply to a
+development build (`expo-dev-client`), which bundles the app's own native
+modules instead of relying on Expo Go's fixed set. Since Phase 6 already
+needs real push delivery verified, and that now requires a dev-client
+build regardless, switching the `android`/`ios` scripts to `expo
+run:android`/`expo run:ios` was the natural point to make that change,
+rather than keeping Expo Go as the default and special-casing dev builds
+only for push testing.
+
+**Revisit when:** never, ideally — Expo Go's capabilities are Expo's to
+change again without warning, so if a future SDK bump reintroduces a
+crash-on-import somewhere else, check whether it's the same
+shared-client restriction before assuming it's a regression in this code.
+
+---
+
 ## 2026-08-15 — Push notifications need an EAS project id; that's a separate question from Firebase/FCM
 
 **Decision:** built and verified the send side of push (Database Webhook

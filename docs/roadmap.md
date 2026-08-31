@@ -20,9 +20,14 @@ Phase 5's media pattern exactly (private bucket, signed URLs), scoped by
 conversation instead of Room, sharing its compress/upload/sign code via
 a new `lib/mediaUtils.ts`. Push notifications are wired server-side
 (Database Webhook → Edge Function → Expo Push) and verified on the send
-side; actual device delivery is still blocked on the user completing a
-one-time, free `eas login`/`eas init` step. See `docs/phase/phase06.md`.
-Next: Phase 7 — Stories.
+side. The EAS project is now set up (`eas.projectId` in `app.json`), and
+a hard blocker discovered along the way — `expo-notifications` can't even
+be imported in Expo Go as of SDK 53, not just used — is fixed by moving
+every import in `lib/push.ts` to dynamic imports and switching to
+`expo-dev-client` builds (`expo run:android`/`expo run:ios`) instead of
+Expo Go; see decision-log, 2026-08-31. Actual device delivery through a
+real dev-client build still needs to be verified end to end. See
+`docs/phase/phase06.md`. Next: Phase 7 — Stories.
 
 Previously: the feed is real end to end — posts with text, images, and
 polls; likes; one-level threaded comments — all verified with two real
