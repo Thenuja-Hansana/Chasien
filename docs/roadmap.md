@@ -36,11 +36,14 @@ a Room-list duplicate-key/wrong-membership-data bug, and the Chats list
 never having had a live subscription — both fixed; see decision-log,
 2026-09-01. That entry also corrects an assumption from 2026-08-15:
 Android push needs Firebase/FCM configured (`google-services.json`) even
-for a dev-client build, not just standalone — now set up, and a real
-`ExponentPushToken` registers on login. Actual push *delivery* to a
-backgrounded/locked device, and the native image picker specifically,
-are the two pieces still pending direct confirmation. See
-`docs/phase/phase06.md`. Next: Phase 7 — Stories.
+for a dev-client build, not just standalone. Push notifications are now
+**confirmed fully working end to end** — token registration, an FCM V1
+service account key uploaded to the correct EAS credentials slot (not
+the visually similar but unrelated "EAS Submit" one — see decision-log),
+and a real notification banner arriving on a backgrounded/locked phone.
+The native image picker specifically is the one piece still pending
+direct confirmation on Android; iOS remains entirely untested on real
+hardware. See `docs/phase/phase06.md`. Next: Phase 7 — Stories.
 
 Previously: the feed is real end to end — posts with text, images, and
 polls; likes; one-level threaded comments — all verified with two real

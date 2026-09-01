@@ -490,9 +490,12 @@ fixed, with a real `ExponentPushToken` confirmed registering in
 `push_tokens` on login. Two bugs invisible to every prior web-only pass
 also surfaced this way: a Room-list duplicate-key bug and the Chats
 list's missing live subscription, both fixed (decision-log, 2026-09-01).
-Still open: push *delivery* specifically to a backgrounded/locked device,
-and the native image picker. iOS remains entirely unexercised on real
-hardware.
+Push *delivery* to a backgrounded/locked device is now confirmed too —
+needed an FCM V1 service account key uploaded to the correct EAS
+credentials slot, not just the client-side `google-services.json` (full
+story, including a wrong-slot dead end, in decision-log, 2026-09-01).
+Still open: the native image picker specifically. iOS remains entirely
+unexercised on real hardware.
 
 ## 7. Concepts worth knowing before Phase 7
 

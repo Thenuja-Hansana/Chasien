@@ -64,3 +64,6 @@ it's the line between "working app" and a cross-Room data leak.
 3. `docs/decision-log.md` — why, in order, with alternatives considered.
 4. `docs/store-compliance.md` — the app-store constraints shaping the data
    model (report/block/account deletion).
+5. `docs/running-locally.md` — step-by-step instructions to get the
+   backend and mobile app running on your own machine, plus a
+   troubleshooting list of every environment gotcha hit so far.

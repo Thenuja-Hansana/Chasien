@@ -91,13 +91,59 @@ hadn't actually crossed yet (RLS's widened-but-still-implicit scoping;
 Expo Go/dev-client vs. standalone build assumptions about Android's push
 plumbing).
 
-**Revisit when:** never, ideally, for bugs 1 and 2. For bug 3: actual
-push *delivery* (not just token registration) still needs to be
-confirmed end-to-end with the phone backgrounded/locked; if delivery
-still doesn't arrive with a real `google-services.json` in place, the
-next thing to check is an FCM V1 service account key uploaded to the EAS
-project via `eas credentials` — Expo's push relay needs that separately
-from the client-side `google-services.json`.
+**Revisit when:** never, ideally, for bugs 1 and 2.
+
+**Update, same day — bug 3's actual full fix.** Confirmed the prediction
+above: token registration alone wasn't enough. The webhook's own response
+(readable from `net._http_response`, the same pg_net table Phase 6's
+verification used to check the send side without a device) showed every
+attempt failing identically even after `google-services.json` was in
+place: `"Unable to retrieve the FCM server key for the recipient's app."
+"error":"InvalidCredentials"`. Expo's push relay needs a Firebase
+**service account key** uploaded to the EAS project, separately from the
+client-side `google-services.json` — generated from the same Firebase
+project (Project Settings → Service Accounts → Generate new private
+key), a real secret, gitignored (`*.jks` already covered keystores;
+service-account JSON was never added to the repo at all).
+
+Uploading it wasn't the whole fix either. The Expo dashboard's Android
+credentials setup has **two visually similar but functionally different
+slots**: "FCM V1 service account key" (what push delivery actually
+reads) and "Google service account key for EAS Submit" (Play Console API
+access, for uploading builds — unrelated to push). The same downloaded
+key was accepted without complaint in the wrong slot, so the credential
+existed, looked configured, and did nothing — the error message stayed
+character-for-character identical before and after, which is what made
+this worth spelling out rather than assuming "uploaded" meant "in the
+right place." Moving it to the correct slot fixed it immediately —
+verified by inserting a message directly and watching the same
+`net._http_response` row flip from `InvalidCredentials` to
+`{"status":"ok","id":"..."}`, then confirming a real notification banner
+on the backgrounded/locked phone.
+
+One more real hazard surfaced along the way, worth naming since it looks
+identical to a credentials problem: pg_net's webhook call has its own
+5-second timeout, independent of whatever the Edge Function or Expo's
+API do. Under this session's heavy memory pressure (see
+`docs/running-locally.md` gotcha #8), one attempt timed out
+(`net._http_response.timed_out = true`) purely from system load, with a
+`content`/`status_code` of null — easy to misread as "still pending"
+rather than "already failed," and easy to misdiagnose as a credentials
+regression if retried without checking `timed_out` specifically.
+
+**Also needed, not part of push at all:** the Expo dashboard's Android
+credentials wizard requires an upload keystore before it will accept
+anything else, even though a keystore has nothing to do with push
+notifications — generated one (`mobile/chasien-upload-keystore.jks`,
+gitignored) with `keytool` to get past that screen. It's a real signing
+key, not a throwaway, so it can legitimately become the actual Play
+Store upload key whenever Phase 12 (store submission) needs one, rather
+than being regenerated later.
+
+**Revisit when:** never, ideally — but if a future push-delivery error
+looks identical before and after a fix that should have worked, check
+which of the dashboard's two similarly-named credential slots it
+actually landed in before assuming the credential itself is wrong.
 
 ---
 
