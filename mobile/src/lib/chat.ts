@@ -192,6 +192,30 @@ export function subscribeToReadReceipt(conversationId: string, otherUserId: stri
   };
 }
 
+/**
+ * Keeps the inbox list's previews, ordering, and unread badges live —
+ * without this, fetchInbox() only reflects reality when the screen
+ * re-focuses (a plain useFocusEffect re-fetch), which is why a new
+ * message showed up instantly inside a conversation but not in the list
+ * of conversations until navigating away and back.
+ *
+ * One unfiltered `messages` INSERT subscription, RLS-gated the same way
+ * subscribeToMessages() below is — a conversation the caller isn't in
+ * never fires this. Triggers a full inbox re-fetch rather than patching
+ * one row in place, since a single new message can change both the
+ * preview text and the sort order (most-recent-first) at once.
+ */
+export function subscribeToInbox(userId: string, onChange: () => void) {
+  const channel = supabase
+    .channel(`inbox:${userId}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => onChange())
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export async function addReaction(messageId: string, userId: string, emoji: string) {
   const { error } = await supabase.from('message_reactions').insert({ message_id: messageId, user_id: userId, emoji });
   if (error) throw error;

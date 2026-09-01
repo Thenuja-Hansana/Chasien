@@ -18,10 +18,11 @@ export default function Index() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchMyRooms()
+      if (!session) return;
+      fetchMyRooms(session.user.id)
         .then(setRooms)
         .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load your Rooms.'));
-    }, []),
+    }, [session]),
   );
 
   // AuthGate redirects away from here once it notices there's no session,

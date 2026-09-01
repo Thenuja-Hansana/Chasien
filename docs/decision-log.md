@@ -7,6 +7,100 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-01 — First real Android device verification: two real bugs, plus a corrected assumption about Android push
+
+**Decision:** three fixes, all found by running the app on a real physical
+Android phone (a Galaxy A14, via USB + `adb reverse`) for the first time —
+every phase through 6 had only ever been verified on web or in the
+emulator, and Phase 6's own "what was not covered" section flagged native
+device testing as the remaining gap. Fixed together:
+
+1. `fetchMyRooms()` and `fetchMyMembershipMap()` (`mobile/src/lib/rooms.ts`)
+   now explicitly filter `.eq('user_id', userId)` instead of relying on
+   RLS alone to scope results to the caller's own memberships.
+2. The Chats list screen now also holds a live `messages` INSERT
+   subscription (`subscribeToInbox()`, new in `mobile/src/lib/chat.ts`),
+   not just a `useFocusEffect` re-fetch.
+3. `mobile/app.json` gained `android.googleServicesFile`, pointing at a
+   new `mobile/google-services.json` (a real Firebase project, package
+   name `com.thenujacode.chasien`) — see below.
+
+**Bug 1 — a Room with more than one approved member broke its own list
+UI.** The 2026-08-14 "members can see each other" RLS widening (see that
+entry below) means an approved member's `room_memberships` SELECT now
+also returns *other* approved members' rows for any shared Room, not just
+their own — a correct, deliberate change for the member-list/MOD-badge
+feature it was built for. But `fetchMyRooms()` and
+`fetchMyMembershipMap()` were both written under the older, narrower RLS
+shape and never scoped by `user_id` themselves, so on a real seeded Room
+with multiple members they silently returned one row per member, not one
+row per Room — a live React "two children with the same key" error on
+the home screen's Room list, and, more seriously, silently wrong
+role/join_state data in `fetchMyMembershipMap()`'s map (whichever
+member's row happened to load last would overwrite the caller's own).
+Neither of the other two `room_memberships` queries in the codebase
+(`fetchRoomMembers()`, and the MOD-badge lookup in `posts.ts`) share this
+bug — both are intentionally fetching *every* member of a Room, not just
+the caller's own memberships, so they were never relying on RLS to do
+that narrowing in the first place. Verified by grepping every
+`room_memberships` call site rather than assuming these were the only
+two.
+
+**Bug 2 — the Chats list never had a realtime subscription, only the
+individual conversation view did.** Sending a message showed up live
+inside an open conversation (Phase 6's own subscription, unchanged), but
+the Chats list's preview text, ordering, and unread badge only updated
+when the screen re-focused — surfaced by the user testing on a real
+device while switching between the list and a conversation, something
+web-based two-account testing hadn't specifically exercised. Not a
+regression; `chats/index.tsx` never had a live subscription to begin
+with. Fixed by adding one unfiltered `messages` INSERT subscription
+(`subscribeToInbox()`), RLS-gated the same way `subscribeToMessages()`
+already documents itself as being, triggering a full inbox re-fetch
+rather than patching one row — a single new message can change both the
+preview text and the sort order at once, so a full re-fetch was simpler
+and no more expensive than reasoning about a correct partial update.
+
+**Bug 3 (a correction) — Android push notifications need Firebase/FCM
+configured even for a dev-client build, not just a standalone/production
+one.** The 2026-08-15 entry below states "Expo's own infrastructure
+handles delivery to Expo Go and dev builds without it [FCM]" — that
+turns out to be wrong, at least for the current SDK/EAS/Google Play
+Services generation. `push_tokens` had zero rows after logging in on the
+real device; logcat showed `FirebaseApp: Default FirebaseApp failed to
+initialize because no default options were found` at every app launch,
+because there was no `google-services.json` in the native project at
+all. Android push fundamentally routes through FCM regardless of build
+type — a dev-client build still needs its own Firebase project. Fixed by
+creating one (free tier), adding its `google-services.json` to
+`app.json`'s `android.googleServicesFile`, and re-running
+`npx expo prebuild --clean` so the Google Services Gradle plugin actually
+gets applied to the regenerated `android/` project. Confirmed working:
+`FirebaseApp initialization successful` in logcat, and a real
+`ExponentPushToken[...]` row appeared in `push_tokens` on next login —
+neither happened before this fix, both did immediately after.
+
+**Why bundle three unrelated-looking things in one entry:** all three
+were found in the same single session of doing the thing this project's
+own standard has called for since Phase 1 — running the real app, on
+real hardware, and not assuming a feature works because its code looks
+right. None would have been caught by `tsc`/lint, and two of the three
+are the same category already named in this file more than once: correct
+-looking code whose failure mode only exists at a boundary this project
+hadn't actually crossed yet (RLS's widened-but-still-implicit scoping;
+Expo Go/dev-client vs. standalone build assumptions about Android's push
+plumbing).
+
+**Revisit when:** never, ideally, for bugs 1 and 2. For bug 3: actual
+push *delivery* (not just token registration) still needs to be
+confirmed end-to-end with the phone backgrounded/locked; if delivery
+still doesn't arrive with a real `google-services.json` in place, the
+next thing to check is an FCM V1 service account key uploaded to the EAS
+project via `eas credentials` — Expo's push relay needs that separately
+from the client-side `google-services.json`.
+
+---
+
 ## 2026-08-31 — Expo Go can't do push at all since SDK 53; switched to dev-client builds
 
 **Decision:** `mobile/src/lib/push.ts` no longer imports `expo-notifications`

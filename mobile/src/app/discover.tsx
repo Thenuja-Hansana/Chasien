@@ -23,13 +23,14 @@ export default function Discover() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    Promise.all([fetchDiscoverRooms(), fetchMyMembershipMap()])
+    if (!session) return;
+    Promise.all([fetchDiscoverRooms(), fetchMyMembershipMap(session.user.id)])
       .then(([roomList, membershipMap]) => {
         setRooms(roomList);
         setMemberships(membershipMap);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load Rooms.'));
-  }, []);
+  }, [session]);
 
   useFocusEffect(useCallback(() => load(), [load]));
 

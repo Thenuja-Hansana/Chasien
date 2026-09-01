@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,7 +8,7 @@ import Icon from '@/components/Icon';
 import TabBar from '@/components/TabBar';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
-import { fetchInbox, type InboxItem } from '@/lib/chat';
+import { fetchInbox, subscribeToInbox, type InboxItem } from '@/lib/chat';
 
 const FILTERS = ['All', 'Unread', 'Rooms', 'DMs'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -39,14 +39,20 @@ export default function Chats() {
 
   const userId = session?.user.id;
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!userId) return;
-      fetchInbox(userId)
-        .then(setItems)
-        .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load chats.'));
-    }, [userId]),
-  );
+  const load = useCallback(() => {
+    if (!userId) return;
+    fetchInbox(userId)
+      .then(setItems)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load chats.'));
+  }, [userId]);
+
+  useFocusEffect(useCallback(() => load(), [load]));
+
+  useEffect(() => {
+    if (!userId) return;
+    const unsubscribe = subscribeToInbox(userId, load);
+    return unsubscribe;
+  }, [userId, load]);
 
   const visible = useMemo(() => {
     if (!items) return [];

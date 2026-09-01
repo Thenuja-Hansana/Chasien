@@ -479,6 +479,21 @@ verification pass was web-only, so `expo-audio`'s recording path and the
 native image picker are reasoned-and-typechecked against the versioned
 docs but not yet exercised on a device.
 
+**Update, 2026-09-01:** the native gap above is closed for Android. First
+real-device run, on a physical Galaxy A14 via USB + `adb reverse` — see
+decision-log, 2026-09-01. `expo-audio` voice recording confirmed working
+end to end (record → stop → send → playback). The EAS project id step is
+done, and a real device surfaced that Android push also needs
+Firebase/FCM configured (`google-services.json`) — not covered by the
+2026-08-15 entry's assumption that dev-client builds don't need it — now
+fixed, with a real `ExponentPushToken` confirmed registering in
+`push_tokens` on login. Two bugs invisible to every prior web-only pass
+also surfaced this way: a Room-list duplicate-key bug and the Chats
+list's missing live subscription, both fixed (decision-log, 2026-09-01).
+Still open: push *delivery* specifically to a backgrounded/locked device,
+and the native image picker. iOS remains entirely unexercised on real
+hardware.
+
 ## 7. Concepts worth knowing before Phase 7
 
 - **The RETURNING/RLS-timing bug is a *class*, not a one-off** — this is

@@ -25,8 +25,21 @@ a hard blocker discovered along the way — `expo-notifications` can't even
 be imported in Expo Go as of SDK 53, not just used — is fixed by moving
 every import in `lib/push.ts` to dynamic imports and switching to
 `expo-dev-client` builds (`expo run:android`/`expo run:ios`) instead of
-Expo Go; see decision-log, 2026-08-31. Actual device delivery through a
-real dev-client build still needs to be verified end to end. See
+Expo Go; see decision-log, 2026-08-31.
+
+**2026-09-01: first real Android device verification**, on a physical
+Galaxy A14 via USB + `adb reverse` (not the emulator — this machine's
+8GB RAM can't comfortably run Docker, an emulator, and a Gradle build at
+once; see `docs/running-locally.md`). Voice message recording confirmed
+working end to end. Two real bugs surfaced only under real-device use —
+a Room-list duplicate-key/wrong-membership-data bug, and the Chats list
+never having had a live subscription — both fixed; see decision-log,
+2026-09-01. That entry also corrects an assumption from 2026-08-15:
+Android push needs Firebase/FCM configured (`google-services.json`) even
+for a dev-client build, not just standalone — now set up, and a real
+`ExponentPushToken` registers on login. Actual push *delivery* to a
+backgrounded/locked device, and the native image picker specifically,
+are the two pieces still pending direct confirmation. See
 `docs/phase/phase06.md`. Next: Phase 7 — Stories.
 
 Previously: the feed is real end to end — posts with text, images, and

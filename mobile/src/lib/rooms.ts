@@ -68,9 +68,18 @@ export async function fetchMyMembership(roomId: string, userId: string) {
 
 /** Keyed by room_id — one query for every room the caller has any membership
  * row in (approved, pending, or invited), so a room list can look up each
- * room's state without an N+1 query per row. */
-export async function fetchMyMembershipMap() {
-  const { data, error } = await supabase.from('room_memberships').select('room_id, role, join_state');
+ * room's state without an N+1 query per row.
+ *
+ * Explicitly filtered by userId rather than left to RLS alone: the "members
+ * can see each other" policy (Phase 4) means RLS now also admits *other*
+ * approved members' rows in any Room the caller is in, not just the
+ * caller's own — an unfiltered query here would silently mix in another
+ * member's role/join_state for a shared Room. */
+export async function fetchMyMembershipMap(userId: string) {
+  const { data, error } = await supabase
+    .from('room_memberships')
+    .select('room_id, role, join_state')
+    .eq('user_id', userId);
   if (error) throw error;
   const map = new Map<string, Membership>();
   for (const row of data ?? []) {
@@ -79,10 +88,15 @@ export async function fetchMyMembershipMap() {
   return map;
 }
 
-export async function fetchMyRooms() {
+// Same reasoning as fetchMyMembershipMap above for the explicit user_id
+// filter — without it, a Room with other approved members comes back with
+// one row per member (all embedding the same room), not one row per Room,
+// producing duplicate-keyed entries in any list keyed by room.id.
+export async function fetchMyRooms(userId: string) {
   const { data, error } = await supabase
     .from('room_memberships')
     .select('role, join_state, rooms(id, slug, name, description, visibility, accent_color, members_can_post, created_by)')
+    .eq('user_id', userId)
     .eq('join_state', 'approved');
   if (error) throw error;
   return (data ?? [])
