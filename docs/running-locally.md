@@ -10,6 +10,18 @@ The dev-client APK only needs to be **rebuilt** when native code changes
 (new native module, `app.json` native config changes, `android/` edits).
 Otherwise, use "Every day" below — it's much faster.
 
+## One-time setup
+
+`adb` is **not on this machine's PATH** by default — every `adb` command
+below will fail with `CommandNotFoundException` unless you either use its
+full path each time (`& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"`)
+or add it to PATH once, permanently:
+```powershell
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:LOCALAPPDATA\Android\Sdk\platform-tools", "User")
+```
+Close and reopen PowerShell afterward for it to take effect. The rest of
+this doc assumes plain `adb` works — do this first.
+
 ## Every day (dev-client already installed on your phone)
 
 1. **Start Docker Desktop** (if not already running) and wait for it to
@@ -38,7 +50,7 @@ Otherwise, use "Every day" below — it's much faster.
    internal log shipper for Studio, not required for the app.)
 
 4. **Plug in your phone via USB**, confirm it's detected. Directory:
-   **anywhere** (`adb` is a global command):
+   **anywhere** (assumes the one-time PATH setup above is done):
    ```powershell
    adb devices -l
    ```
