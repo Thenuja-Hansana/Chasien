@@ -24,7 +24,8 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
-      "package": "com.thenujacode.chasien"
+      "package": "com.thenujacode.chasien",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "single",

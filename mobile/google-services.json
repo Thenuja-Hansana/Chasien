@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "46101649857",
+    "project_id": "chasien",
+    "storage_bucket": "chasien.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:46101649857:android:8768ba1b6d8bd1da9ab740",
+        "android_client_info": {
+          "package_name": "com.thenujacode.chasien"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDHOcsiLkH9f7_1C53lfHEjqqJML6FyXnQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
