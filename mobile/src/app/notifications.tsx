@@ -55,6 +55,10 @@ function textFor(n: AppNotification): { line: string; highlight?: string } {
       return { line: `${n.actorName} wants to join`, highlight: n.roomName ?? undefined };
     case 'pinned_post':
       return { line: 'New pinned post in', highlight: n.roomName ?? undefined };
+    case 'new_post':
+      return { line: `${n.actorName} posted in`, highlight: n.roomName ?? undefined };
+    case 'new_story':
+      return { line: `${n.actorName} added a story in`, highlight: n.roomName ?? undefined };
     default:
       return { line: 'New activity' };
   }
@@ -93,7 +97,9 @@ export default function Notifications() {
   function openNotification(n: AppNotification) {
     if (!n.read_at) markNotificationRead(n.id).catch(() => {});
     const postId = typeof n.data.postId === 'string' ? n.data.postId : undefined;
-    if (n.roomSlug && postId) {
+    if (n.type === 'new_story' && n.roomSlug && n.actor_id) {
+      router.push({ pathname: '/c/[communityId]/story', params: { communityId: n.roomSlug, authorId: n.actor_id } });
+    } else if (n.roomSlug && postId) {
       router.push({ pathname: '/c/[communityId]/post/[postId]', params: { communityId: n.roomSlug, postId } });
     } else if (n.roomSlug) {
       router.push({ pathname: '/c/[communityId]', params: { communityId: n.roomSlug } });

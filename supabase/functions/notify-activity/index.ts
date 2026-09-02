@@ -15,7 +15,7 @@ type WebhookPayload = {
   record: {
     id: string;
     user_id: string;
-    type: 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'message';
+    type: 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'new_post' | 'new_story' | 'message';
     actor_id: string | null;
     room_id: string | null;
     data: Record<string, unknown>;
@@ -40,6 +40,10 @@ function titleFor(type: string, actorName: string, roomName: string, likerCount:
       return `${actorName} wants to join ${roomName}`;
     case 'pinned_post':
       return `New pinned post in ${roomName}`;
+    case 'new_post':
+      return `${actorName} posted in ${roomName}`;
+    case 'new_story':
+      return `${actorName} added a story in ${roomName}`;
     default:
       return 'New activity';
   }

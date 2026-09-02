@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
  * real RLS policies from Phase 1).
  */
 
-export type NotificationType = 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'message';
+export type NotificationType = 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'new_post' | 'new_story' | 'message';
 
 export type AppNotification = {
   id: string;

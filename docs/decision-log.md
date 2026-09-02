@@ -7,6 +7,41 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-02 — Phase 8 follow-up: a Room's own members weren't notified of new posts/stories at all
+
+**What happened:** real-device testing surfaced a gap the mock's
+`NOTIFICATIONS` array never exercised — tobi posted in Grit Club, and
+eve (an approved member of the same Room) got nothing. The original
+five triggers only ever notified the person a comment/like/mention/pin
+was *about*; there was no trigger for "someone posted in a Room you're
+in" at all, which reads as a bug the instant a Room has more than one
+active, unmuted member.
+
+**Fix:** two more triggers, `notify_on_new_post` (after insert on
+`posts`) and `notify_on_new_story` (after insert on `stories`), fanning
+out to every approved member except the author — same shape as
+`notify_on_join_request`/`notify_on_post_pinned`. Two new
+`notification_type` enum values (`new_post`, `new_story`) had to land in
+their own migration ahead of the triggers that use them — Postgres
+rejects a statement that uses an enum value added earlier in the *same*
+transaction, and each migration file is its own transaction, so
+splitting them was required, not stylistic. Verified live: tobi posting
+in Grit Club now produces a real `new_post` notification for every other
+approved member.
+
+**Also confirmed, and worth remembering:** running `supabase db reset`
+wipes anything a live test session added through the app itself (a Room
+someone joined, a post someone made) back to whatever's in `seed.sql` —
+it isn't just a schema-migration tool, it's a full data reset. Eve's
+Grit Club membership (joined live during earlier testing, never in
+`seed.sql`) disappeared the moment this migration needed a reset to
+apply, which is exactly why she stopped getting the mention/like
+notifications she'd been getting minutes earlier. Not a bug — but a
+reset run mid-session silently discards whatever state the phone had
+built up, so it needs calling out to whoever's mid-test when it happens.
+
+---
+
 ## 2026-09-02 — Real-device bug: ambiguous `profiles` embed broke the Activity feed
 
 **What happened:** the Activity feed screen showed "Failed to load
