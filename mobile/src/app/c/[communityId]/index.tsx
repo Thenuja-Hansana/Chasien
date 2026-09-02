@@ -1,5 +1,5 @@
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import PostCard from '@/components/PostCard';
 import TabBar from '@/components/TabBar';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
+import { fetchUnreadCount, subscribeToNotifications } from '@/lib/notifications';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
 import { FEED_PAGE_SIZE, fetchPost, fetchRoomFeed, setLiked, votePoll, type FeedPost } from '@/lib/posts';
 import { fetchActiveStories, type Story } from '@/lib/stories';
@@ -49,6 +50,7 @@ export default function RoomHome() {
   // profile info, never the story media itself. The viewer screen signs
   // media on its own when it's actually opened.
   const [activeStories, setActiveStories] = useState<Story[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const userId = session?.user.id;
 
@@ -83,6 +85,18 @@ export default function RoomHome() {
       load();
     }, [load]),
   );
+
+  const loadUnreadCount = useCallback(() => {
+    if (!userId) return;
+    fetchUnreadCount(userId).then(setUnreadCount).catch(() => {});
+  }, [userId]);
+
+  useFocusEffect(useCallback(() => loadUnreadCount(), [loadUnreadCount]));
+
+  useEffect(() => {
+    if (!userId) return;
+    return subscribeToNotifications(userId, loadUnreadCount);
+  }, [userId, loadUnreadCount]);
 
   if (!session) return null;
 
@@ -255,8 +269,9 @@ export default function RoomHome() {
         </Text>
         <View style={styles.headerActions}>
           <Link href="/notifications" asChild>
-            <Pressable hitSlop={8}>
+            <Pressable hitSlop={8} style={styles.bellWrap}>
               <Icon name="bell" size={20} color={Colors.text} />
+              {unreadCount > 0 && <View style={styles.unreadDot} />}
             </Pressable>
           </Link>
           <Link href="/search" asChild>
@@ -397,6 +412,20 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     gap: Spacing[4],
+  },
+  bellWrap: {
+    position: 'relative',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: Colors.accent.DEFAULT,
+    borderWidth: 1.5,
+    borderColor: Colors.bg,
   },
   storyRow: {
     flexDirection: 'row',

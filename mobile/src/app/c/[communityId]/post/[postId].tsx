@@ -19,6 +19,7 @@ import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
+import { togglePostPin } from '@/lib/notifications';
 import {
   addComment,
   fetchComments,
@@ -29,6 +30,7 @@ import {
   type Comment,
   type FeedPost,
 } from '@/lib/posts';
+import { fetchMyMembership } from '@/lib/rooms';
 
 export default function PostDetail() {
   const { session } = useAuth();
@@ -41,6 +43,8 @@ export default function PostDetail() {
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isModerator, setIsModerator] = useState(false);
+  const [pinning, setPinning] = useState(false);
 
   const userId = session?.user.id;
 
@@ -50,6 +54,10 @@ export default function PostDetail() {
       const [fresh, freshComments] = await Promise.all([fetchPost(postId, userId), fetchComments(postId)]);
       setPost(fresh);
       setComments(freshComments);
+      if (fresh) {
+        const membership = await fetchMyMembership(fresh.roomId, userId);
+        setIsModerator(membership?.join_state === 'approved' && (membership.role === 'owner' || membership.role === 'mod'));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load this post.');
       setPost(null);
@@ -85,6 +93,21 @@ export default function PostDetail() {
       if (fresh) setPost(fresh);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not record that vote.');
+    }
+  }
+
+  async function handleTogglePin() {
+    if (post === 'loading' || !post || pinning) return;
+    const nextPinned = !post.pinned;
+    setPinning(true);
+    setError(null);
+    try {
+      await togglePostPin(post.id, nextPinned);
+      setPost({ ...post, pinned: nextPinned });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update the pin.');
+    } finally {
+      setPinning(false);
     }
   }
 
@@ -148,7 +171,17 @@ export default function PostDetail() {
               {communityId}
             </Text>
           </View>
-          <View style={{ width: 22 }} />
+          {isModerator ? (
+            <Pressable onPress={handleTogglePin} hitSlop={12} disabled={pinning}>
+              {pinning ? (
+                <ActivityIndicator size="small" color={Colors.accent.DEFAULT} />
+              ) : (
+                <Icon name="pin" size={20} filled={post.pinned} color={post.pinned ? Colors.accent.DEFAULT : Colors.text} />
+              )}
+            </Pressable>
+          ) : (
+            <View style={{ width: 22 }} />
+          )}
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

@@ -19,6 +19,8 @@ export type Poll = {
 
 export type FeedPost = {
   id: string;
+  roomId: string;
+  pinned: boolean;
   authorId: string | null;
   authorHandle: string;
   authorName: string;
@@ -54,7 +56,7 @@ export type Comment = {
  * docs/phase/phase04.md §4). Always name the constraint.
  */
 const POST_SELECT = `
-  id, author_id, text, tag, created_at,
+  id, room_id, pinned, author_id, text, tag, created_at,
   profiles!posts_author_id_fkey(handle, name),
   post_media(url, position),
   post_likes(count),
@@ -74,6 +76,8 @@ const LIVE_COMMENTS_ONLY = 'comments.deleted_at' as const;
 
 type RawPost = {
   id: string;
+  room_id: string;
+  pinned: boolean;
   author_id: string | null;
   text: string | null;
   tag: string | null;
@@ -134,6 +138,8 @@ async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<str
 
     return {
       id: p.id,
+      roomId: p.room_id,
+      pinned: p.pinned,
       authorId: p.author_id,
       authorHandle: p.profiles?.handle ?? 'unknown',
       authorName: p.profiles?.name ?? 'Deleted user',

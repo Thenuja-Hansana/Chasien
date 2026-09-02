@@ -94,14 +94,19 @@ export function configureForegroundNotificationHandler() {
 }
 
 /**
- * Tapping a delivered notification opens the conversation it was about
- * — the payload's `data.conversationId` comes from notify-new-message.
- * Kept synchronous (returns a cleanup function immediately, as the
- * useEffect calling this expects) even though the underlying listener
- * is attached after a dynamic import resolves — `cancelled` covers the
- * case where the component unmounts before that import settles.
+ * Tapping a delivered notification hands back its raw `data` payload —
+ * generic rather than chat-specific, since notify-new-message's payload
+ * shape (`{ conversationId }`) and notify-activity's (Phase 8;
+ * `{ notificationType, postId?, commentId?, targetUserId?, roomId? }`)
+ * differ, and this module has no business knowing either shape or which
+ * screen either one routes to — that's the caller's job (see
+ * app/_layout.tsx). Kept synchronous (returns a cleanup function
+ * immediately, as the useEffect calling this expects) even though the
+ * underlying listener is attached after a dynamic import resolves —
+ * `cancelled` covers the case where the component unmounts before that
+ * import settles.
  */
-export function subscribeToNotificationTaps(onTap: (conversationId: string) => void) {
+export function subscribeToNotificationTaps(onTap: (data: Record<string, unknown>) => void) {
   if (isExpoGo) return () => {};
 
   let cancelled = false;
@@ -109,8 +114,8 @@ export function subscribeToNotificationTaps(onTap: (conversationId: string) => v
   import('expo-notifications').then((Notifications) => {
     if (cancelled) return;
     subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const conversationId = response.notification.request.content.data?.conversationId;
-      if (typeof conversationId === 'string') onTap(conversationId);
+      const data = response.notification.request.content.data;
+      if (data) onTap(data);
     });
   });
 

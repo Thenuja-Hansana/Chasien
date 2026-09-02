@@ -48,10 +48,18 @@ insert into room_memberships (room_id, user_id, role, join_state) values
   ('a0000000-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222', 'member', 'approved'), -- tobi in grit-club
   ('a0000000-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'member', 'approved'), -- nadia in grit-club
   ('a0000000-0000-0000-0000-000000000001', '44444444-4444-4444-4444-444444444444', 'member', 'approved'), -- kwame in grit-club
-  ('a0000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'member', 'approved'); -- mara in ilford-nights
--- sourdough-sunday intentionally has only its owner, eve — nobody else,
--- including `outsider`, belongs here. This is the room the isolation
--- check (docs/phase/phase01.md) targets.
+  ('a0000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'member', 'approved'), -- mara in ilford-nights
+  -- Rui requesting to join sourdough-sunday (visibility 'request', so
+  -- this is a genuine pending row, not just a hand-written notification
+  -- — notify_on_join_request (Phase 8) picks it up on its own and
+  -- generates eve a real, actionable notification from it. grit-club
+  -- couldn't host this instead: it's 'public', which auto-approves
+  -- instantly, so a real pending request there is impossible by design.
+  ('a0000000-0000-0000-0000-000000000003', '55555555-5555-5555-5555-555555555555', 'member', 'pending');
+-- sourdough-sunday otherwise has only its owner, eve, and now rui's
+-- pending request above — nobody else, including `outsider`, belongs
+-- here. This is the room the isolation check (docs/phase/phase01.md)
+-- targets.
 
 -- ── chat ────────────────────────────────────────────────────────────────
 -- conversation_participants for these are populated automatically by
@@ -129,10 +137,17 @@ insert into stories (room_id, author_id, media_url, caption) values
   ('a0000000-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'https://placehold.co/720x1280', 'Chalk everywhere, no regrets.');
 
 -- ── notifications ──────────────────────────────────────────────────────
-
-insert into notifications (user_id, type, actor_id, room_id, data) values
-  ('22222222-2222-2222-2222-222222222222', 'like', '33333333-3333-3333-3333-333333333333', 'a0000000-0000-0000-0000-000000000001', jsonb_build_object('post_id', 'c0000000-0000-0000-0000-000000000001')),
-  ('11111111-1111-1111-1111-111111111111', 'join_request', '44444444-4444-4444-4444-444444444444', 'a0000000-0000-0000-0000-000000000001', '{}'::jsonb);
+-- No hand-written rows here (Phase 1 originally had two, pre-dating
+-- Phase 8's real triggers) — every notification now comes from an
+-- actual trigger reacting to real seed data above: the post_likes
+-- inserts already produce a real aggregated 'like' notification, the
+-- comment reply above produces a real 'reply' one, and rui's pending
+-- membership just above produces a real 'join_request' one. Keeping a
+-- hand-written row alongside those would mean two different data
+-- shapes for the same notification type — one the triggers actually
+-- produce, one that doesn't match and would render incorrectly (or,
+-- for a hand-written join_request with no real pending row behind it,
+-- fail outright when Accept/Skip tries to act on it).
 
 -- ── trust & safety smoke test ──────────────────────────────────────────
 -- Proves validate_polymorphic_content_target and content_snapshot both

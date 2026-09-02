@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@/components/Icon';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
+import { fetchRoomNotificationsMuted, setRoomNotificationsMuted } from '@/lib/notifications';
 import {
   changeRole,
   fetchMyMembership,
@@ -36,6 +37,7 @@ export default function CommunitySettings() {
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState<RoomVisibility>('public');
   const [membersCanPost, setMembersCanPost] = useState(true);
+  const [notificationsMuted, setNotificationsMuted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
@@ -54,6 +56,7 @@ export default function CommunitySettings() {
         setDescription(r.description ?? '');
         setVisibility(r.visibility);
         setMembersCanPost(r.members_can_post);
+        setNotificationsMuted(await fetchRoomNotificationsMuted(r.id, userId));
         if (moderator) {
           setMembers(await fetchRoomMembers(r.id));
         }
@@ -73,10 +76,10 @@ export default function CommunitySettings() {
     );
   }
 
-  if (!room || !isModerator) {
+  if (!room) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <Text style={styles.body}>{room ? "You don't have access to this Room's settings." : 'Room not found.'}</Text>
+        <Text style={styles.body}>Room not found.</Text>
       </SafeAreaView>
     );
   }
@@ -85,6 +88,46 @@ export default function CommunitySettings() {
   // `Room | 'loading'` union as far as TS is concerned inside a closure,
   // even though the guards above already ruled out anything but `Room`.
   const currentRoom: Room = room;
+  const currentUserId = session.user.id;
+
+  async function handleToggleMute() {
+    const next = !notificationsMuted;
+    setNotificationsMuted(next);
+    try {
+      await setRoomNotificationsMuted(currentRoom.id, currentUserId, next);
+    } catch (e) {
+      setNotificationsMuted(!next);
+      setError(e instanceof Error ? e.message : 'Could not update notification settings.');
+    }
+  }
+
+  if (!isModerator) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={12}>
+            <Icon name="back" size={22} color={Colors.text} />
+          </Pressable>
+          <Text style={styles.headingText} numberOfLines={1}>
+            {room.name}
+          </Text>
+          <View style={{ width: 22 }} />
+        </View>
+        <ScrollView contentContainerStyle={styles.content}>
+          <Pressable style={styles.toggleRow} onPress={handleToggleMute}>
+            <View style={styles.toggleText}>
+              <Text style={styles.toggleTitle}>Mute notifications</Text>
+              <Text style={styles.toggleDesc}>Stop activity from this Room notifying you</Text>
+            </View>
+            <View style={[styles.toggle, notificationsMuted && styles.toggleOn]}>
+              <View style={[styles.toggleThumb, notificationsMuted && styles.toggleThumbOn]} />
+            </View>
+          </Pressable>
+          {error && <Text style={styles.error}>{error}</Text>}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -180,6 +223,16 @@ export default function CommunitySettings() {
           </View>
           <View style={[styles.toggle, membersCanPost && styles.toggleOn]}>
             <View style={[styles.toggleThumb, membersCanPost && styles.toggleThumbOn]} />
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.toggleRow} onPress={handleToggleMute}>
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleTitle}>Mute notifications</Text>
+            <Text style={styles.toggleDesc}>Stop activity from this Room notifying you</Text>
+          </View>
+          <View style={[styles.toggle, notificationsMuted && styles.toggleOn]}>
+            <View style={[styles.toggleThumb, notificationsMuted && styles.toggleThumbOn]} />
           </View>
         </Pressable>
 

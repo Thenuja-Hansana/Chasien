@@ -64,8 +64,17 @@ function AuthGate({ children }: { children: ReactNode }) {
   }, [session]);
 
   useEffect(() => {
-    return subscribeToNotificationTaps((conversationId) => {
-      router.push({ pathname: '/chats/[chatId]', params: { chatId: conversationId } });
+    return subscribeToNotificationTaps((data) => {
+      if (typeof data.conversationId === 'string') {
+        router.push({ pathname: '/chats/[chatId]', params: { chatId: data.conversationId } });
+      } else if (typeof data.notificationType === 'string') {
+        // Activity notifications (Phase 8) land on the feed itself —
+        // resolving a postId/roomId straight to its Room's own screen
+        // needs the Room's slug, which the push payload doesn't carry
+        // (only its id), so tapping through to the specific post from
+        // there is the notification row's own job, not this listener's.
+        router.push('/notifications');
+      }
     });
   }, []);
 

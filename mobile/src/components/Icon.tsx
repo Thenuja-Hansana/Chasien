@@ -93,6 +93,9 @@ const ICONS: Record<string, Shape[]> = {
   postTab: [{ t: 'path', d: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1M12 8.4v7.2M8.4 12h7.2' }],
   chatsTab: [{ t: 'path', d: 'M21 12a8 8 0 0 1-11.7 7.1L3.2 21l1.9-6.2A8 8 0 1 1 21 12z' }],
   youTab: [{ t: 'path', d: 'M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2M4.9 20a7.1 7.1 0 0 1 14.2 0' }],
+  // Not part of app_reference/src/components/Icon.jsx's set — added for
+  // Phase 8's mod-only pin-a-post action (post/[postId].tsx).
+  pin: [{ t: 'path', d: 'M14 4 20 10 15.5 12.5 13 18l-2-2-4 4-1.5-1.5 4-4-2-2 5.5-2.5z' }],
   settings: [
     { t: 'circle', cx: 12, cy: 12, r: 3.2 },
     {

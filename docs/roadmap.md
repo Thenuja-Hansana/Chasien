@@ -11,7 +11,7 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phases 0-7 are done. Chat is real end to end — a
+**Current focus:** Phases 0-8 are done. Chat is real end to end — a
 unified inbox mixing Room group channels and DMs, realtime message
 delivery, typing indicators, read receipts, reactions, and image/voice
 attachments, all verified with two (and, for the isolation guarantee,
@@ -57,8 +57,20 @@ viewer paged through every Room member's stories as one interleaved
 sequence at first (fixed to group per-author, real-Instagram-style), and
 its progress bars were purely decorative until an auto-advance timer was
 added (image: fixed duration; video: tracks actual playback and advances
-on end, not a fixed timer). See decision-log, 2026-09-02. Next: Phase 8
-— Notifications.
+on end, not a fixed timer). See decision-log, 2026-09-02.
+
+**2026-09-02: Phase 8 — Notifications, done.** Every event type in the
+mock's `NOTIFICATIONS` array now has a real trigger and a real push
+notification: replies, @mentions (posts and comments), aggregated post
+likes ("nadia and 4 others liked your post"), join requests, and pinned
+posts — five `security definer` trigger functions feeding a Database
+Webhook → Edge Function → Expo Push pipeline that mirrors Phase 6's chat
+push exactly. The `notifications` table itself dates back to Phase 1;
+this phase is entirely the fan-out. A grouped Activity feed
+(`app/notifications.tsx`, Today/This week/Older), a per-Room mute
+toggle, an unread badge on the feed's bell icon, and a mods-only pin
+action in post detail round out the client side. See decision-log,
+2026-09-02. Next: Phase 9 — Trust & Safety.
 
 Previously: the feed is real end to end — posts with text, images, and
 polls; likes; one-level threaded comments — all verified with two real
@@ -350,17 +362,21 @@ decision-log, 2026-09-02.
 
 ---
 
-## Phase 8 — Notifications
+## Phase 8 — Notifications ✅ done (2026-09-02)
 
 Goal: users know when something happened without polling.
 
-- [ ] In-app notifications feed, grouped (Today / This week — port
-      `Notifications.jsx`)
-- [ ] Push notifications: likes, replies, mentions, join requests
-- [ ] Notification preferences (mute a Room's notifications)
+- [x] In-app notifications feed, grouped (Today / This week — port
+      `Notifications.jsx`) — added a third "Older" bucket, since a real
+      feed accumulates indefinitely unlike the mock's static seed data
+- [x] Push notifications: likes, replies, mentions, join requests — plus
+      pinned posts, which the mock's static array didn't model but the
+      real pin action (below) needed
+- [x] Notification preferences (mute a Room's notifications)
 
 **Exit condition:** every event type in the mock's `NOTIFICATIONS` array
-has a real trigger and a real push notification.
+has a real trigger and a real push notification. ✅ See decision-log,
+2026-09-02.
 
 ---
 

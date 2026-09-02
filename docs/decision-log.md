@@ -7,6 +7,64 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-02 — Phase 8: Notifications, built on a schema Phase 1 already had
+
+**Decision:** Every event type in the mock's `NOTIFICATIONS` array now has
+a real trigger and a real push notification: comment replies, @mentions
+(in both posts and comments), post likes (aggregated — "nadia and 4
+others liked your post," not one row per like), join requests, and
+pinned posts. The `notifications` table, its RLS, and the
+`notification_type` enum already existed since Phase 1
+(`20260813051224_notifications.sql`) — nothing had ever populated them.
+This phase is entirely the fan-out: five `security definer` trigger
+functions (`20260902100100_notification_triggers.sql`), a
+`notify_activity` Database Webhook mirroring the Phase 6 chat-push
+pattern exactly (`supabase_functions.http_request` →
+`notify-activity` Edge Function → Expo Push API), a grouped Activity
+feed screen (`app/notifications.tsx`, ported from
+`Notifications.jsx` with a third "Older" bucket added since a real feed
+accumulates indefinitely, unlike the mock's static seed data), a
+mute-this-Room toggle (`room_memberships.notifications_muted`, checked
+once per trigger rather than trusted to every future notification type
+independently), and a mods-only pin action (`toggle_post_pin()` RPC).
+
+**Every trigger is `security definer`, the same pattern
+`add_owner_membership_on_room_created()` established in Phase 1, for the
+same reason: `notifications` has no client INSERT policy at all, by
+design — a client-writable notifications table would let anyone spoof a
+notification into someone else's feed. `toggle_post_pin()` is a narrow
+`security definer` RPC rather than a widened `posts` UPDATE RLS policy
+for mods, deliberately: a blanket mod-UPDATE policy would incidentally
+also grant mods write access to the soft-delete columns
+(`deleted_at`/`removed_by`/`removal_reason`) before Phase 9 (Trust &
+Safety) has built any process around using them — unwanted scope creep
+smuggled in through a policy meant only for pinning.**
+
+**The mention trigger only ever notifies an actual, currently-approved
+member of the Room the mention happened in** — verified live with a fake
+handle (correctly skipped) and a real user who exists but isn't a member
+of that Room (correctly skipped). Anything looser would leak a Room's
+existence and content to someone who was `@`-mentioned but never joined,
+which is exactly the cross-Room isolation Phase 1/4 already spent real
+effort proving can't happen elsewhere.
+
+**Found and fixed before it could confuse anyone:** `seed.sql` had two
+hand-written dummy notification rows left over from Phase 1, with shapes
+that didn't match what the real triggers now produce (`post_id`
+snake_case instead of the triggers' `postId`, and a `join_request` with
+no backing pending membership). Removed both; added one genuine pending
+`room_memberships` row instead (rui requesting to join
+`sourdough-sunday`, which is `request`-visibility — the seed's other
+Rooms are `public`, where a pending row is structurally impossible
+since membership there auto-approves instantly).
+
+**What would make us revisit this:** unliking a post doesn't decrement
+or remove the aggregated like notification — no such interaction exists
+in the mock and it isn't required by the exit condition, but if "unlike"
+ever becomes a real gesture, this trigger needs a companion.
+
+---
+
 ## 2026-09-02 — Phase 7: Stories, and pg_net turns out to have never actually been a tracked dependency
 
 **Decision:** Stories are real end to end — creation (image or video,
