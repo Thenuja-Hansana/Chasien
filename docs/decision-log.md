@@ -7,6 +7,49 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-01 — A third channel-collision bug, fixed for the whole class at once
+
+**Decision:** every `postgres_changes` channel `subscribeToInbox()`,
+`subscribeToMessages()`, and `subscribeToReadReceipt()` open
+(`mobile/src/lib/chat.ts`) now has a unique numeric suffix appended to its
+channel name (`channelSeq`, a module-level counter). `subscribeToTyping()`
+deliberately keeps its deterministic `typing:{conversationId}` name — it's
+a Broadcast channel, and sender and receiver have to land on the *same*
+channel name to rendezvous at all; a postgres_changes channel's name, by
+contrast, is just a local handle nothing else needs to match.
+
+**Context:** the same "cannot add `postgres_changes` callbacks... after
+`subscribe()`" error from §4.4-adjacent territory in Phase 6 (a duplicate
+typing channel, fixed differently) recurred — first for `messages:`
+(written off at the time as a Fast-Refresh artifact from an edit landing
+mid-session, since a full reload cleared it), then for the new `inbox:`
+channel, on a genuine cold start with no edit in flight. That second
+occurrence is what proved it wasn't just a Fast-Refresh fluke: React
+double-invoking an effect once on mount is normal and expected in dev
+builds, and `removeChannel()` is async — so the first invocation's
+cleanup can still be tearing a channel down when the second invocation's
+`channel()` call asks for one with the *same name*, gets the same
+not-yet-removed object back, and its `.on()` call lands on a channel
+that's already had `.subscribe()` called on it once.
+
+**Why fix the whole class instead of just `subscribeToInbox`:** the
+other two hadn't visibly failed yet, but shared the identical shape —
+nothing about the race is specific to which table or filter a channel
+listens to. Waiting for each one to fail on its own schedule (chat's read
+receipts, or a screen that mounts twice in quick succession some other
+way) would mean re-deriving the same diagnosis three separate times.
+Making collision structurally impossible — a unique name every call —
+is simpler than getting the async cleanup timing provably right, and
+costs nothing: the name is never read back by anything, only used once
+to register the channel with the client.
+
+**Revisit when:** never, ideally — but if a *new* one-shot
+`.channel(name).on(...).subscribe()` postgres_changes helper gets added
+anywhere in this codebase later, give it the same unique-suffix pattern
+from the start rather than waiting to rediscover this.
+
+---
+
 ## 2026-09-01 — First real Android device verification: two real bugs, plus a corrected assumption about Android push
 
 **Decision:** three fixes, all found by running the app on a real physical

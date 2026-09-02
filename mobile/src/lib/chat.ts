@@ -1,5 +1,20 @@
 import { supabase } from '@/lib/supabase';
 
+// Appended to every postgres_changes channel's name below (never to
+// subscribeToTyping's — that one's a Broadcast channel and its name has
+// to stay deterministic so sender and receiver rendezvous on it). React
+// double-invoking an effect on mount is normal in dev builds; the
+// cleanup's removeChannel() call is async, so a same-named channel can
+// otherwise get reused by the second invocation's channel() call before
+// the first one finishes tearing down, and Supabase rejects a second
+// .on() after that channel already called .subscribe(). A unique name
+// per call makes that collision impossible rather than racing it.
+let channelSeq = 0;
+function uniqueSuffix() {
+  channelSeq += 1;
+  return channelSeq;
+}
+
 export type ConversationKind = 'room_channel' | 'dm';
 
 export type InboxRow = {
@@ -174,7 +189,7 @@ export async function fetchOtherParticipantLastRead(conversationId: string, othe
 
 export function subscribeToReadReceipt(conversationId: string, otherUserId: string, onChange: (lastReadAt: string | null) => void) {
   const channel = supabase
-    .channel(`read-receipt:${conversationId}:${otherUserId}`)
+    .channel(`read-receipt:${conversationId}:${otherUserId}:${uniqueSuffix()}`)
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'conversation_participants', filter: `conversation_id=eq.${conversationId}` },
@@ -207,7 +222,7 @@ export function subscribeToReadReceipt(conversationId: string, otherUserId: stri
  */
 export function subscribeToInbox(userId: string, onChange: () => void) {
   const channel = supabase
-    .channel(`inbox:${userId}`)
+    .channel(`inbox:${userId}:${uniqueSuffix()}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => onChange())
     .subscribe();
 
@@ -263,7 +278,7 @@ export function subscribeToMessages(
   },
 ) {
   const channel = supabase
-    .channel(`messages:${conversationId}`)
+    .channel(`messages:${conversationId}:${uniqueSuffix()}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
