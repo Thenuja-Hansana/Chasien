@@ -7,6 +7,28 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-02 — Real-device bug: ambiguous `profiles` embed broke the Activity feed
+
+**What happened:** the Activity feed screen showed "Failed to load
+activity" the first time it was opened on a real device. `notifications`
+has two foreign keys to `profiles` — `user_id` (the recipient) and
+`actor_id` (who triggered it) — so `NOTIFICATION_SELECT`'s bare
+`profiles(handle, name)` embed was ambiguous and PostgREST rejected the
+whole query with `PGRST201`. This is the exact same class of bug
+`posts`/`comments` already hit and got documented for back in Phase 4
+(two FKs to `profiles`, via `author_id` and `removed_by`) — missed here
+because it wasn't caught by typecheck or lint, only by actually opening
+the screen. **Fixed** by naming the constraint explicitly
+(`profiles!notifications_actor_id_fkey`), verified directly against
+PostgREST with the service-role key before trusting the client fix.
+
+**Takeaway, restated because it clearly needs restating:** any new
+`select()` embedding `profiles` (or any table reachable via more than
+one FK from the same row) needs its constraint named up front, not
+discovered the first time a real client hits it.
+
+---
+
 ## 2026-09-02 — Phase 8: Notifications, built on a schema Phase 1 already had
 
 **Decision:** Every event type in the mock's `NOTIFICATIONS` array now has
