@@ -7,6 +7,108 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-02 — Phase 7: Stories, and pg_net turns out to have never actually been a tracked dependency
+
+**Decision:** Stories are real end to end — creation (image or video,
+picked from the gallery, never an in-app camera), a per-Room story-ring
+row, a full-screen viewer ported from `StoryViewer.jsx`, 24h expiry
+enforced by RLS itself (not just client filtering), and an hourly
+`pg_cron` job that actually deletes expired media from storage, not just
+the row. Two scope cuts from the mock, deliberate and recorded here
+rather than silently dropped: no reply-to-story and no like button —
+neither is in Phase 7's roadmap checklist, and (same standard as
+`PostCard`'s cut controls, Phase 5) a control that doesn't persist
+anything is worse than none at all. Both are easy follow-ups later:
+replies could become real DMs via the existing `startDm()`, likes could
+reuse the posts pattern.
+
+**Two things only surfaced by actually using the feature on a real
+device, both fixed the same day.** First: the viewer initially paged
+through every active story in the Room as one flat sequence — a faithful
+port of the mock's own `STORIES[index]` behavior, which only ever had to
+handle one story at a time and never modeled per-author grouping at all.
+The instant a second account had an active story during testing, this
+was visibly wrong — Tobi's story and Mara's story interleaved into one
+sequence instead of "all of Tobi's, then all of Mara's," which is what
+every real Stories UI actually does. Reworked to group by author
+(`groupByAuthor()` in `story.tsx`), ordered the same way the ring row
+itself is (`dedupeStoryAuthors()`, `index.tsx` — same source query,
+oldest-first, so the two can't disagree), with `next()`/`prev()` walking
+within an author's stories before moving to the next/previous author.
+
+Second: the mock's progress bars were purely decorative — static
+widths, nothing moved on its own, tap-to-advance only. Real Stories UIs
+auto-advance once a segment fills. Added a fixed `IMAGE_DURATION_MS`
+(5s) timer for images, but *not* the same fixed timer for video — a
+video's segment now tracks actual playback position via expo-video's
+`timeUpdate` event and advances on `playToEnd` instead, so a 3-second
+clip and a 30-second one each get their own real length rather than
+both being force-fit into 5 seconds or both stuck at a wrong fixed
+duration.
+
+**Context worth naming: the `stories` table and its RLS already existed,
+untouched, since Phase 1** — that first schema pass explicitly scoped
+stories in alongside Rooms/posts and anticipated exactly this phase's
+needs (`created_at`/`expires_at` columns, a SELECT policy that already
+refuses a row past `expires_at`, INSERT/DELETE policies scoped to the
+author). Phase 7's actual net-new work was the `story-media` bucket
+(mirrors `post-media`'s design exactly, plus video mime types — the
+first feature in this app to accept video at all), the client screens,
+and the cleanup mechanism.
+
+**Media type isn't a column.** The existing `media_url text` schema
+stores one path, no separate image/video flag; kind is inferred from the
+stored file's extension (`.mp4` vs anything else) at read time instead
+of adding a column, since the upload path in `lib/stories.ts` already
+fully controls what that extension is. Altering an already-applied
+Phase 1 migration wasn't considered — this project's convention throughout
+has been additive-only migrations, never editing one already run.
+
+**The cleanup mechanism, and a real environment gap it surfaced.**
+`pg_cron` + `pg_net` calling the new `cleanup-expired-stories` Edge
+Function hourly, same internal-URL/local-anon-key pattern as the
+`notify-new-message` webhook (`edge_runtime:8081`, not Kong's external
+port — a Postgres-container trigger can't reach the host's port
+mapping). Deliberately deletes storage objects *before* the row, not
+after: if `storage.remove()` fails, the row is left in place so the next
+hourly run retries it, rather than deleting the row first and stranding
+a file nothing points at anymore. Verified for real, not just read —
+inserted a story backdated 25 hours, invoked the function directly, and
+confirmed via a raw `GET` against the storage API that the object came
+back `404 NoSuchKey` afterward, not just that the DB row was gone.
+
+While writing this, a fresh `supabase db reset` failed seeding with
+`schema "net" does not exist` — turns out `pg_net` was never actually
+declared in any tracked migration; it only ever worked because Supabase
+CLI's own bootstrap enabled it outside version control, invisibly, since
+Phase 6. This migration now explicitly `create extension if not exists
+pg_net` itself rather than continuing to depend on that. Also learned
+(and worth remembering precisely, since Supabase's own docs describe
+`pg_cron` as hosted-platform-only): that description is about the
+dashboard's cron *UI*, not the extension — `pg_cron` is present in the
+same Postgres image the local CLI stack runs, confirmed directly via
+`select * from pg_available_extensions` before writing a single line of
+SQL that assumed otherwise.
+
+**One more environment lesson, costly enough to name on its own:** a new
+Edge Function isn't picked up by restarting its container. `edge_runtime`
+reads its function registry from an environment variable
+(`SUPABASE_INTERNAL_FUNCTIONS_CONFIG`) generated once by the CLI at
+`supabase start` time, not by scanning the mounted functions directory
+live — `docker restart supabase_edge_runtime_chasien` (twice) left the
+new function completely unserved despite the directory being correctly
+bind-mounted and visible inside the container. Only a full `supabase
+stop` + `supabase start` regenerates that registry.
+
+**Revisit when:** never, ideally, for the two environment gaps above —
+but if a future local `supabase db reset` fails on a schema that "should"
+exist, check whether it was ever actually declared in a tracked
+migration before assuming something broke; and if a newly-added Edge
+Function doesn't show up in `docker logs`' "Serving functions on..."
+list, restart the whole stack, not just the one container.
+
+---
+
 ## 2026-09-01 — A third channel-collision bug, fixed for the whole class at once
 
 **Decision:** every `postgres_changes` channel `subscribeToInbox()`,

@@ -1,8 +1,9 @@
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import PostCard from '@/components/PostCard';
 import TabBar from '@/components/TabBar';
@@ -10,8 +11,25 @@ import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
 import { FEED_PAGE_SIZE, fetchPost, fetchRoomFeed, setLiked, votePoll, type FeedPost } from '@/lib/posts';
+import { fetchActiveStories, type Story } from '@/lib/stories';
 
 type LoadState = { room: Room | null; membership: Membership | null } | 'loading';
+
+// One ring per author, not one per story — fetchActiveStories() returns
+// every active story, so an author with two up would otherwise get two
+// rings. The viewer itself still walks every story in order regardless
+// of which ring was tapped (matches the mock's StoryViewer flow).
+function dedupeStoryAuthors(stories: Story[]): Story[] {
+  const seen = new Set<string>();
+  const result: Story[] = [];
+  for (const s of stories) {
+    const key = s.author_id ?? s.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(s);
+  }
+  return result;
+}
 
 export default function RoomHome() {
   const { session } = useAuth();
@@ -25,6 +43,12 @@ export default function RoomHome() {
   const [reachedEnd, setReachedEnd] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Deliberately not paired with mediaUrls/signing the way posts and
+  // messages are — the ring row only ever needs each author's own
+  // profile info, never the story media itself. The viewer screen signs
+  // media on its own when it's actually opened.
+  const [activeStories, setActiveStories] = useState<Story[]>([]);
 
   const userId = session?.user.id;
 
@@ -47,6 +71,7 @@ export default function RoomHome() {
       setState({ room, membership });
       if (room && membership?.join_state === 'approved') {
         await loadFeed(room.id);
+        setActiveStories(await fetchActiveStories(room.id));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load this Room.');
@@ -247,6 +272,34 @@ export default function RoomHome() {
         </View>
       </View>
 
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
+        <Link href={{ pathname: '/c/[communityId]/create-story', params: { communityId } }} asChild>
+          <Pressable style={styles.storyItem}>
+            <View style={styles.storyAddCircle}>
+              <Icon name="plus" size={22} color={Colors.accent.DEFAULT} />
+            </View>
+            <Text style={styles.storyLabel}>Your story</Text>
+          </Pressable>
+        </Link>
+        {dedupeStoryAuthors(activeStories).map((s) => (
+          <Pressable
+            key={s.author_id ?? s.id}
+            style={styles.storyItem}
+            onPress={() =>
+              router.push({
+                pathname: '/c/[communityId]/story',
+                params: { communityId, authorId: s.author_id ?? undefined },
+              })
+            }
+          >
+            <Avatar gradient={s.author_id ?? 'mara'} letter={s.authorName.charAt(0).toUpperCase()} size={60} ring />
+            <Text style={styles.storyLabel} numberOfLines={1}>
+              {s.authorHandle || s.authorName}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
       {error && <Text style={styles.error}>{error}</Text>}
 
       {posts === null ? (
@@ -344,6 +397,32 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     gap: Spacing[4],
+  },
+  storyRow: {
+    flexDirection: 'row',
+    gap: Spacing[4],
+    paddingHorizontal: Spacing[6],
+    paddingBottom: Spacing[4],
+  },
+  storyItem: {
+    alignItems: 'center',
+    gap: Spacing[1],
+    width: 64,
+  },
+  storyAddCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: Colors.accent.DEFAULT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storyLabel: {
+    fontFamily: Fonts.body,
+    fontSize: 10.5,
+    color: Colors.neutral[400],
   },
   newestRow: {
     flexDirection: 'row',

@@ -41,6 +41,30 @@ export async function pickImage(): Promise<PickedImage | null> {
   return { uri: asset.uri, width: asset.width, height: asset.height };
 }
 
+export type PickedMedia = ({ kind: 'image' } & PickedImage) | { kind: 'video'; uri: string };
+
+/**
+ * Stories (Phase 7) accept either — the one media picker in the app that
+ * does. Video isn't compressed client-side (no video-compression module
+ * in this app; `story-media`'s size ceiling is set with that in mind —
+ * see supabase/migrations/20260901190000_story_media_storage.sql), so
+ * it's uploaded via uploadLocalFile() the same way voice notes are.
+ */
+export async function pickImageOrVideo(): Promise<PickedMedia | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) return null;
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images', 'videos'],
+    quality: 1,
+  });
+  if (result.canceled) return null;
+
+  const asset = result.assets[0];
+  if (asset.type === 'video') return { kind: 'video', uri: asset.uri };
+  return { kind: 'image', uri: asset.uri, width: asset.width, height: asset.height };
+}
+
 /**
  * Uploads one post image and returns its storage path (NOT a URL —
  * the bucket is private, so a stored URL would be a signed one that

@@ -11,7 +11,7 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phases 0-6 are done. Chat is real end to end — a
+**Current focus:** Phases 0-7 are done. Chat is real end to end — a
 unified inbox mixing Room group channels and DMs, realtime message
 delivery, typing indicators, read receipts, reactions, and image/voice
 attachments, all verified with two (and, for the isolation guarantee,
@@ -41,9 +41,24 @@ for a dev-client build, not just standalone. Push notifications are now
 service account key uploaded to the correct EAS credentials slot (not
 the visually similar but unrelated "EAS Submit" one — see decision-log),
 and a real notification banner arriving on a backgrounded/locked phone.
-The native image picker specifically is the one piece still pending
-direct confirmation on Android; iOS remains entirely untested on real
-hardware. See `docs/phase/phase06.md`. Next: Phase 7 — Stories.
+The native image picker is confirmed too (exercised for real picking
+both photos and videos for Phase 7's story creation, below). iOS remains
+entirely untested on real hardware. See `docs/phase/phase06.md`.
+
+**2026-09-02: Phase 7 — Stories, done and verified on the same real
+device.** Per-Room ephemeral photo/video stories, a story-ring row, a
+full-screen viewer, 24h expiry enforced by RLS itself, and an hourly
+`pg_cron` job that deletes expired media from storage for real —
+verified directly by backdating a test story and confirming the actual
+storage object came back `404` afterward, not just that the row was
+gone. Two things the mock's UI didn't actually model correctly only
+surfaced once real accounts had real stories at the same time: the
+viewer paged through every Room member's stories as one interleaved
+sequence at first (fixed to group per-author, real-Instagram-style), and
+its progress bars were purely decorative until an auto-advance timer was
+added (image: fixed duration; video: tracks actual playback and advances
+on end, not a fixed timer). See decision-log, 2026-09-02. Next: Phase 8
+— Notifications.
 
 Previously: the feed is real end to end — posts with text, images, and
 polls; likes; one-level threaded comments — all verified with two real
@@ -309,18 +324,29 @@ class recurring a third time and a reply-to Pressable-nesting bug:
 
 ---
 
-## Phase 7 — Stories
+## Phase 7 — Stories ✅ done (2026-09-02)
 
 Goal: ephemeral content that's actually ephemeral.
 
-- [ ] Story creation: image/short video, per-Room
-- [ ] Story viewer UI (port `StoryViewer.jsx` flow)
-- [ ] Expiry: stories stop showing after 24h
-- [ ] Storage lifecycle: expired story media actually gets deleted from
-      R2, not just hidden — this is the free-tier storage cap protection
+- [x] Story creation: image/short video, per-Room
+- [x] Story viewer UI (port `StoryViewer.jsx` flow) — reworked to group
+      by author rather than the mock's flat sequence, and to
+      auto-advance once a segment fills, both found wrong only once
+      actually used on a real device; see decision-log, 2026-09-02
+- [x] Expiry: stories stop showing after 24h — enforced by RLS itself,
+      not just a client-side filter
+- [x] Storage lifecycle: expired story media actually gets deleted from
+      storage, not just hidden — free-tier storage cap protection.
+      Storage runs on Supabase Storage for now, same as Phase 5's
+      post-media (Cloudflare R2 can't be provisioned/verified locally;
+      swap lands in Phase 11 alongside the rest of that seam)
 
 **Exit condition:** a story posted 25h ago is gone from both the UI and
-the storage bucket, unattended.
+the storage bucket, unattended. Verified directly — inserted a story
+backdated 25h, invoked the cleanup function, confirmed both the row and
+the actual storage object were gone (a raw `GET` against the storage API
+returned `404 NoSuchKey`), not just that the UI stopped showing it. See
+decision-log, 2026-09-02.
 
 ---
 
