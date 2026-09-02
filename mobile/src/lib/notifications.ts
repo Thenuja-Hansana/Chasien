@@ -53,7 +53,15 @@ function toAppNotification(row: NotificationRow): AppNotification {
   };
 }
 
-const NOTIFICATION_SELECT = 'id, type, actor_id, room_id, data, read_at, created_at, profiles(handle, name), rooms(slug, name)';
+/**
+ * `notifications` has TWO foreign keys to `profiles` (user_id the
+ * recipient, actor_id who did it) — the same ambiguous-embed trap
+ * `posts`/`comments` already hit (see lib/posts.ts's POST_SELECT
+ * comment): a bare `profiles(...)` embed is rejected outright by
+ * PostgREST with PGRST201, so the constraint must be named.
+ */
+const NOTIFICATION_SELECT =
+  'id, type, actor_id, room_id, data, read_at, created_at, profiles!notifications_actor_id_fkey(handle, name), rooms(slug, name)';
 
 /** Most recent 50 — this is an activity feed, not paginated history; matches the mock's own scope. */
 export async function fetchNotifications(userId: string): Promise<AppNotification[]> {
