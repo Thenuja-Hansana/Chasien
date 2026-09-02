@@ -1,5 +1,18 @@
 import { supabase } from '@/lib/supabase';
 
+// See lib/chat.ts's uniqueSuffix for why this can't be Date.now(): React
+// double-invoking an effect on mount is normal in dev builds, and the
+// cleanup's removeChannel() call is async, so a same-named channel can
+// get reused by the second invocation's channel() call before the first
+// one finishes tearing down — Supabase then rejects the second .on()
+// call because that channel already called .subscribe(). Date.now() can
+// collide across that gap (same millisecond); a monotonic counter can't.
+let channelSeq = 0;
+function uniqueSuffix() {
+  channelSeq += 1;
+  return channelSeq;
+}
+
 /**
  * Phase 8. Every row here is created by a database trigger
  * (supabase/migrations/20260902100100_notification_triggers.sql) —
@@ -115,7 +128,7 @@ export async function deleteNotification(id: string): Promise<void> {
  */
 export function subscribeToNotifications(userId: string, onChange: () => void) {
   const channel = supabase
-    .channel(`notifications:${userId}:${Date.now()}`)
+    .channel(`notifications:${userId}:${uniqueSuffix()}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => onChange())
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, () => onChange())
     .subscribe();
