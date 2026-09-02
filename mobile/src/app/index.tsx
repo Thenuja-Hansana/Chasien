@@ -1,11 +1,13 @@
 import { Link, router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import Icon from '@/components/Icon';
 import TabBar from '@/components/TabBar';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
+import { fetchUnreadCount, subscribeToNotifications } from '@/lib/notifications';
 import { fetchMyRooms, type Room, type RoomRole } from '@/lib/rooms';
 
 // The root "/" — the mock hardcodes a default Room (`grit-club`) here, but a
@@ -15,6 +17,9 @@ export default function Index() {
   const { session } = useAuth();
   const [rooms, setRooms] = useState<(Room & { myRole: RoomRole })[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const userId = session?.user.id;
 
   useFocusEffect(
     useCallback(() => {
@@ -25,6 +30,18 @@ export default function Index() {
     }, [session]),
   );
 
+  const loadUnreadCount = useCallback(() => {
+    if (!userId) return;
+    fetchUnreadCount(userId).then(setUnreadCount).catch(() => {});
+  }, [userId]);
+
+  useFocusEffect(useCallback(() => loadUnreadCount(), [loadUnreadCount]));
+
+  useEffect(() => {
+    if (!userId) return;
+    return subscribeToNotifications(userId, loadUnreadCount);
+  }, [userId, loadUnreadCount]);
+
   // AuthGate redirects away from here once it notices there's no session,
   // but that happens in an effect after this still renders once — guard
   // rather than assume `session` is non-null.
@@ -34,6 +51,12 @@ export default function Index() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.brand}>chasien</Text>
+        <Link href="/notifications" asChild>
+          <Pressable hitSlop={8} style={styles.bellWrap}>
+            <Icon name="bell" size={22} color={Colors.text} />
+            {unreadCount > 0 && <View style={styles.unreadDot} />}
+          </Pressable>
+        </Link>
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -78,6 +101,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[3],
     paddingBottom: Spacing[4],
@@ -86,6 +112,20 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.heading,
     fontSize: 22,
     color: Colors.text,
+  },
+  bellWrap: {
+    position: 'relative',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: Colors.accent.DEFAULT,
+    borderWidth: 1.5,
+    borderColor: Colors.bg,
   },
   error: {
     fontFamily: Fonts.body,
