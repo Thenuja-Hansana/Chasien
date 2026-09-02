@@ -2,8 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
@@ -36,6 +36,19 @@ import { fetchActiveStories, signStoryUrls, type Story } from '@/lib/stories';
  * `timeUpdate` event and advances on `playToEnd`, not a fixed timer —
  * a 3-second clip and a 30-second one should each get their own real
  * length, not the same arbitrary duration.
+ *
+ * Progress is an Animated.Value, not React state — a `setState` tick
+ * every 50ms (the first version of this did exactly that, via
+ * setInterval) forces the whole screen through a React re-render 20
+ * times a second, which is exactly the kind of thing that looks janky
+ * on a real device even though it's invisible in isolation. Animated
+ * updates the native view's `transform` directly, bypassing React's
+ * render cycle entirely — `useNativeDriver: true` for the image timer
+ * moves the whole animation onto the UI thread, and video's per-tick
+ * `.setValue()` calls skip the render cycle the same way regardless.
+ * Width itself can't be animated on the native driver (only transform
+ * and opacity can), hence `scaleX` + `transformOrigin: 'left'` instead
+ * of animating `width` directly.
  */
 const IMAGE_DURATION_MS = 5000;
 
@@ -45,9 +58,10 @@ export default function StoryViewer() {
   const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
   const [authorIndex, setAuthorIndex] = useState(0);
   const [storyIndex, setStoryIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
   const [roomName, setRoomName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const runningAnimation = useRef<Animated.CompositeAnimation | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -108,26 +122,31 @@ export default function StoryViewer() {
 
   const currentStoryId = groups[authorIndex]?.[1][storyIndex]?.id;
 
+  // setValue() is a direct mutation, not a React setState call — no
+  // re-render, and nothing for react-hooks/set-state-in-effect to flag.
+  const handleVideoProgress = useCallback((fraction: number) => progressAnim.setValue(fraction), [progressAnim]);
+
   // Auto-advance timer for images only — video's is driven by StoryVideo's
   // playToEnd/timeUpdate listeners below, since a fixed duration would be
   // wrong for anything but a coincidentally IMAGE_DURATION_MS-long clip.
   useEffect(() => {
-    // Resetting on the currentStoryId key itself, not deriving it from
-    // props during render — there's nothing to derive it from; a fresh
-    // 0 exactly when the displayed story changes is the whole point.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProgress(0);
+    runningAnimation.current?.stop();
+    progressAnim.setValue(0);
     if (!currentStoryId) return;
     const kind = groups[authorIndex]?.[1][storyIndex]?.kind;
     if (kind !== 'image') return;
 
-    const start = Date.now();
-    const id = setInterval(() => {
-      const fraction = Math.min(1, (Date.now() - start) / IMAGE_DURATION_MS);
-      setProgress(fraction);
-      if (fraction >= 1) next();
-    }, 50);
-    return () => clearInterval(id);
+    const animation = Animated.timing(progressAnim, {
+      toValue: 1,
+      duration: IMAGE_DURATION_MS,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    });
+    runningAnimation.current = animation;
+    animation.start(({ finished }) => {
+      if (finished) next();
+    });
+    return () => animation.stop();
     // currentStoryId alone is the real key here — it changes exactly when
     // the displayed story does, whether from a manual tap or auto-advance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,7 +186,7 @@ export default function StoryViewer() {
     <View style={styles.container}>
       {url && (
         story.kind === 'video' ? (
-          <StoryVideo key={story.id} uri={url} onProgress={setProgress} onEnd={next} />
+          <StoryVideo key={story.id} uri={url} onProgress={handleVideoProgress} onEnd={next} />
         ) : (
           <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" />
         )
@@ -177,14 +196,21 @@ export default function StoryViewer() {
 
       <SafeAreaView edges={['top']} style={styles.foreground}>
         <View style={styles.progressRow}>
-          {authorStories.map((s, i) => {
-            const fraction = i < storyIndex ? 1 : i === storyIndex ? progress : 0;
-            return (
-              <View key={s.id} style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${fraction * 100}%` }]} />
-              </View>
-            );
-          })}
+          {/* eslint-disable-next-line react-hooks/refs -- progressAnim is
+              an Animated.Value, not a plain ref: reading it in a style
+              prop during render is the standard, idiomatic way to use
+              react-native's Animated API, unlike a plain ref's .current. */}
+          {authorStories.map((s, i) => (
+            <View key={s.id} style={styles.progressTrack}>
+              {i < storyIndex ? (
+                <View style={[styles.progressFill, styles.progressFillStatic]} />
+              ) : i === storyIndex ? (
+                <Animated.View
+                  style={[styles.progressFill, styles.progressFillAnimated, { transform: [{ scaleX: progressAnim }] }]}
+                />
+              ) : null}
+            </View>
+          ))}
         </View>
 
         <View style={styles.headerRow}>
@@ -323,6 +349,16 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 999,
     backgroundColor: 'rgba(242,230,212,.95)',
+  },
+  progressFillStatic: {
+    width: '100%',
+  },
+  progressFillAnimated: {
+    width: '100%',
+    // scaleX animates from the left edge, not the center RN defaults
+    // to — without this, the fill would appear to grow from the middle
+    // outward instead of filling left-to-right like a loading bar.
+    transformOrigin: 'left',
   },
   headerRow: {
     flexDirection: 'row',

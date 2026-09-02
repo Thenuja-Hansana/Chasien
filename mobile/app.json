@@ -43,7 +43,8 @@
       ],
       "expo-secure-store",
       "expo-audio",
-      "expo-video"
+      "expo-video",
+      "expo-image-picker"
     ],
     "experiments": {
       "typedRoutes": true,

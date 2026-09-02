@@ -43,12 +43,18 @@ export async function pickImage(): Promise<PickedImage | null> {
 
 export type PickedMedia = ({ kind: 'image' } & PickedImage) | { kind: 'video'; uri: string };
 
+function assetToPickedMedia(asset: ImagePicker.ImagePickerAsset): PickedMedia {
+  if (asset.type === 'video') return { kind: 'video', uri: asset.uri };
+  return { kind: 'image', uri: asset.uri, width: asset.width, height: asset.height };
+}
+
 /**
- * Stories (Phase 7) accept either — the one media picker in the app that
- * does. Video isn't compressed client-side (no video-compression module
- * in this app; `story-media`'s size ceiling is set with that in mind —
- * see supabase/migrations/20260901190000_story_media_storage.sql), so
- * it's uploaded via uploadLocalFile() the same way voice notes are.
+ * Stories (Phase 7) accept either kind, from either source — the only
+ * media picker in the app that does. Video isn't compressed client-side
+ * (no video-compression module in this app; `story-media`'s size
+ * ceiling is set with that in mind — see
+ * supabase/migrations/20260901190000_story_media_storage.sql), so it's
+ * uploaded via uploadLocalFile() the same way voice notes are.
  */
 export async function pickImageOrVideo(): Promise<PickedMedia | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -59,10 +65,29 @@ export async function pickImageOrVideo(): Promise<PickedMedia | null> {
     quality: 1,
   });
   if (result.canceled) return null;
+  return assetToPickedMedia(result.assets[0]);
+}
 
-  const asset = result.assets[0];
-  if (asset.type === 'video') return { kind: 'video', uri: asset.uri };
-  return { kind: 'image', uri: asset.uri, width: asset.width, height: asset.height };
+/**
+ * Opens the OS's own camera app to capture a fresh photo or video —
+ * `expo-image-picker` already does this (`launchCameraAsync`), no
+ * separate `expo-camera` dependency or custom live-preview screen
+ * needed. Deliberately not auto-invoked on mount the way
+ * `pickImageOrVideo()` briefly was for stories: on web specifically,
+ * the browser silently blocks `launchCameraAsync` unless it's called
+ * directly from a user interaction (a button press), not from an effect
+ * — call this only from a tap handler.
+ */
+export async function captureImageOrVideo(): Promise<PickedMedia | null> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) return null;
+
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ['images', 'videos'],
+    quality: 1,
+  });
+  if (result.canceled) return null;
+  return assetToPickedMedia(result.assets[0]);
 }
 
 /**

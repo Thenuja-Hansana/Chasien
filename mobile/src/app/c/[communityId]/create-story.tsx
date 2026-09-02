@@ -5,13 +5,25 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import Icon from '@/components/Icon';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
-import { pickImageOrVideo, type PickedMedia } from '@/lib/media';
+import { captureImageOrVideo, pickImageOrVideo, type PickedMedia } from '@/lib/media';
 import { fetchRoomBySlug, type Room } from '@/lib/rooms';
 import { createStory } from '@/lib/stories';
 
-/** Mirrors create-post.tsx's structure, simplified: one required media item, optional caption, no poll. */
+/**
+ * Mirrors create-post.tsx's structure, simplified: one required media
+ * item, optional caption, no poll.
+ *
+ * Deliberately doesn't auto-launch a picker on mount the way an earlier
+ * version did (that only ever offered the gallery). Camera capture
+ * (`captureImageOrVideo()`, lib/media.ts) has to be triggered directly
+ * from a tap on web — browsers block `launchCameraAsync` unless it's
+ * called from a real user interaction, not an effect — so both options
+ * are shown as an explicit choice instead, which also just reads better
+ * than a picker sheet appearing before the screen has settled.
+ */
 export default function CreateStory() {
   const { session } = useAuth();
   const { communityId } = useLocalSearchParams<{ communityId: string }>();
@@ -27,26 +39,25 @@ export default function CreateStory() {
 
   useEffect(() => {
     fetchRoomBySlug(communityId)
-      .then((r) => {
-        setRoom(r);
-        // Open the picker immediately — a story is nothing without media,
-        // unlike a post, so there's no reason to show an empty composer first.
-        return pickImageOrVideo();
-      })
-      .then((picked) => {
-        if (picked) setMedia(picked);
-        else router.back();
-      })
+      .then(setRoom)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load this Room.'));
-    // Runs once on mount only — re-picking is handled by handlePickAgain, not a re-run of this effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [communityId]);
 
   if (!session) return null;
 
   const canSubmit = media !== null && !submitting;
 
-  async function handlePickAgain() {
+  async function handleCapture() {
+    setError(null);
+    try {
+      const captured = await captureImageOrVideo();
+      if (captured) setMedia(captured);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open the camera.');
+    }
+  }
+
+  async function handlePick() {
     setError(null);
     try {
       const picked = await pickImageOrVideo();
@@ -90,15 +101,29 @@ export default function CreateStory() {
         </View>
 
         {media ? (
-          <Pressable style={styles.mediaWrap} onPress={handlePickAgain} disabled={submitting}>
+          <View style={styles.mediaWrap}>
             {media.kind === 'video' ? (
               <StoryVideoPreview uri={media.uri} />
             ) : (
               <Image source={{ uri: media.uri }} style={styles.media} contentFit="cover" />
             )}
-          </Pressable>
+            <Pressable style={styles.changeMedia} onPress={() => setMedia(null)} disabled={submitting} hitSlop={8}>
+              <Icon name="close" size={16} color={Colors.text} />
+            </Pressable>
+          </View>
         ) : (
-          <View style={styles.mediaWrap} />
+          <View style={styles.mediaWrap}>
+            <View style={styles.pickChoice}>
+              <Pressable style={styles.pickButton} onPress={handleCapture} disabled={submitting}>
+                <Icon name="camera" size={22} color={Colors.accent.DEFAULT} />
+                <Text style={styles.pickButtonText}>Take photo or video</Text>
+              </Pressable>
+              <Pressable style={styles.pickButton} onPress={handlePick} disabled={submitting}>
+                <Icon name="addPhoto" size={22} color={Colors.accent.DEFAULT} />
+                <Text style={styles.pickButtonText}>Choose from gallery</Text>
+              </Pressable>
+            </View>
+          </View>
         )}
 
         <TextInput
@@ -165,6 +190,40 @@ const styles = StyleSheet.create({
   media: {
     width: '100%',
     height: '100%',
+  },
+  changeMedia: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 30,
+    height: 30,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickChoice: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing[3],
+  },
+  pickButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing[2],
+    height: 48,
+    width: '80%',
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: Colors.divider,
+  },
+  pickButtonText: {
+    fontFamily: Fonts.bodySemibold,
+    fontSize: 13.5,
+    color: Colors.accent[300],
   },
   caption: {
     minHeight: 60,
