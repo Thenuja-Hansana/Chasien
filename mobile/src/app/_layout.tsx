@@ -60,7 +60,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   // otherwise need to track.
   useEffect(() => {
     if (!session) return;
-    registerForPushNotifications(session.user.id).catch(() => {});
+    registerForPushNotifications().catch(() => {});
   }, [session]);
 
   useEffect(() => {

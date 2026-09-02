@@ -18,10 +18,20 @@ import { supabase } from '@/lib/supabase';
 const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
 
 /**
- * Registers this device for push notifications and upserts its Expo
- * push token into `push_tokens` (send side: supabase/functions/notify-new-message,
+ * Registers this device for push notifications and claims its Expo push
+ * token in `push_tokens` (send side: supabase/functions/notify-new-message,
  * triggered by 20260815002723_notify_new_message_webhook.sql on every
  * new message).
+ *
+ * Goes through the register_push_token RPC rather than a plain client
+ * upsert, because an Expo push token belongs to the device + app
+ * install, not the account — if a different account previously
+ * registered on this same device, a plain upsert's ON CONFLICT UPDATE
+ * would try to touch a row `push_tokens`' RLS policy (user_id =
+ * auth.uid()) correctly refuses to let this caller touch. The RPC is
+ * `security definer` specifically to allow that reassignment. See
+ * decision-log, 2026-09-02, "a push token belongs to the device, not
+ * the account."
  *
  * `getExpoPushTokenAsync()` requires a real EAS project id — there is no
  * way around this even for development-build testing, unlike the
@@ -32,7 +42,7 @@ const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
  * call sites treat "push isn't available yet" as a normal, silent
  * no-op, not an error condition worth surfacing to a user.
  */
-export async function registerForPushNotifications(userId: string): Promise<string | null> {
+export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice || isExpoGo) {
     // Push tokens are meaningless in the web/simulator context (no
     // device to deliver to) and unobtainable in Expo Go (see above) —
@@ -59,12 +69,10 @@ export async function registerForPushNotifications(userId: string): Promise<stri
 
   const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
 
-  const { error } = await supabase
-    .from('push_tokens')
-    .upsert(
-      { user_id: userId, token, platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web' },
-      { onConflict: 'token' },
-    );
+  const { error } = await supabase.rpc('register_push_token', {
+    p_token: token,
+    p_platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+  });
   if (error) throw error;
 
   return token;

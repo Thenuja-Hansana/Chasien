@@ -7,6 +7,40 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-02 — Real-device bug: a push token belongs to the device, not the account
+
+**What happened:** switching accounts on the same physical phone during
+Phase 8 testing (tobi, then mara, both after eve had already registered
+on that device) left every subsequent login unable to receive push —
+`registerForPushNotifications` threw a silent (caught-and-swallowed)
+Postgres `42501`. Root cause: `getExpoPushTokenAsync()` returns the same
+token for the same device + app install regardless of which account is
+logged in, so a second account's registration hits the *same* row in
+`push_tokens` a different account already owns. The plain client
+`upsert(..., { onConflict: 'token' })` this used to go through resolves
+to an `ON CONFLICT ... DO UPDATE`, and `push_tokens`' RLS policy
+(`user_id = auth.uid()`) correctly refuses to let a caller update a row
+they don't own — right call for RLS in general, wrong outcome here: the
+token genuinely should move to whoever's now logged in on that device.
+
+**Fix:** a narrow `security definer` RPC, `register_push_token(p_token,
+p_platform)`, doing the same upsert but as the table owner, using
+`auth.uid()` internally rather than a client-supplied user id (so a
+caller can only ever claim a token for their own account, not anyone
+else's). Same shape as `toggle_post_pin` — bypass RLS for one
+specific, narrow write, not by widening the policy itself.
+
+**Also worth remembering:** a brand-new Postgres function isn't visible
+to PostgREST until its schema cache reloads — `supabase db reset`
+happens to trigger that as a side effect of restarting containers, but
+`supabase migration up` (which was used here specifically to apply this
+migration *without* wiping live test data again) does not. The RPC call
+failed with `PGRST202` ("no matches were found in the schema cache")
+until `NOTIFY pgrst, 'reload schema';` was run by hand. Worth remembering
+for the next migration applied via `migration up` outside a full reset.
+
+---
+
 ## 2026-09-02 — Phase 8 follow-up: a Room's own members weren't notified of new posts/stories at all
 
 **What happened:** real-device testing surfaced a gap the mock's
