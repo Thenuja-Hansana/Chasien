@@ -1,6 +1,6 @@
-import { Image } from 'expo-image';
+import { Image, type ImageLoadEventData } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,7 +17,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
+import { useFocusHighlight } from '@/hooks/use-focus-highlight';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { togglePostPin } from '@/lib/notifications';
 import {
@@ -32,19 +35,31 @@ import {
 } from '@/lib/posts';
 import { fetchMyMembership } from '@/lib/rooms';
 
+/** Smaller than the feed card's own cap — this is a dedicated post screen, not a scrolling list, so the goal is just keeping the author row/actions/comments visibly within reach below it rather than the photo alone filling the screen. */
+const MAX_HERO_HEIGHT_FRACTION = 0.5;
+
 export default function PostDetail() {
   const { session } = useAuth();
   const { communityId, postId } = useLocalSearchParams<{ communityId: string; postId: string }>();
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [post, setPost] = useState<FeedPost | null | 'loading'>('loading');
   const [comments, setComments] = useState<Comment[]>([]);
   const [draft, setDraft] = useState('');
+  const commentFocus = useFocusHighlight();
   /** Non-null when the composer is replying to a specific top-level comment. */
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isModerator, setIsModerator] = useState(false);
   const [pinning, setPinning] = useState(false);
+  // Same reasoning as PostCard's imageWrap: the upload is pre-cropped to
+  // one of the feed's fixed ratios, but that ratio isn't stored, so the
+  // hero sizes itself from the loaded image rather than a fixed height.
+  const [heroAspectRatio, setHeroAspectRatio] = useState(1);
+  const handleHeroLoad = (event: ImageLoadEventData) => setHeroAspectRatio(event.source.width / event.source.height);
+  const maxHeroHeight = useCappedMediaHeight(MAX_HERO_HEIGHT_FRACTION);
 
   const userId = session?.user.id;
 
@@ -131,15 +146,15 @@ export default function PostDetail() {
 
   if (post === 'loading') {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <ActivityIndicator color={Colors.accent.DEFAULT} />
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
+        <ActivityIndicator color={colors.accent.DEFAULT} />
       </SafeAreaView>
     );
   }
 
   if (!post) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
         <Text style={styles.body}>This post isn&apos;t available.</Text>
         <Pressable style={styles.backCta} onPress={() => router.back()}>
           <Text style={styles.backCtaText}>Go back</Text>
@@ -159,11 +174,15 @@ export default function PostDetail() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      {/* 'height' on Android — see chats/[chatId].tsx's comment: adjustResize
+          alone doesn't reliably resize content under Expo's default
+          edge-to-edge display, so the comment composer needs its own
+          JS-driven keyboard-height adjustment too. */}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Icon name="back" size={22} color={Colors.text} />
+            <Icon name="back" size={22} color={colors.text} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>Post</Text>
@@ -174,9 +193,9 @@ export default function PostDetail() {
           {isModerator ? (
             <Pressable onPress={handleTogglePin} hitSlop={12} disabled={pinning}>
               {pinning ? (
-                <ActivityIndicator size="small" color={Colors.accent.DEFAULT} />
+                <ActivityIndicator size="small" color={colors.accent.DEFAULT} />
               ) : (
-                <Icon name="pin" size={20} filled={post.pinned} color={post.pinned ? Colors.accent.DEFAULT : Colors.text} />
+                <Icon name="pin" size={20} filled={post.pinned} color={post.pinned ? colors.accent.DEFAULT : colors.text} />
               )}
             </Pressable>
           ) : (
@@ -186,7 +205,13 @@ export default function PostDetail() {
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {post.imageUrls.length > 0 && (
-            <Image source={{ uri: post.imageUrls[0] }} style={styles.heroImage} contentFit="cover" transition={150} />
+            <Image
+              source={{ uri: post.imageUrls[0] }}
+              style={[styles.heroImage, { aspectRatio: heroAspectRatio, maxHeight: maxHeroHeight }]}
+              contentFit="contain"
+              transition={150}
+              onLoad={handleHeroLoad}
+            />
           )}
 
           <View style={styles.section}>
@@ -196,12 +221,12 @@ export default function PostDetail() {
                   name="heart"
                   size={23}
                   filled={post.likedByMe}
-                  color={post.likedByMe ? Colors.accent.DEFAULT : Colors.text}
+                  color={post.likedByMe ? colors.accent.DEFAULT : colors.text}
                 />
                 <Text style={styles.actionCount}>{post.likeCount}</Text>
               </Pressable>
               <View style={styles.action}>
-                <Icon name="comment" size={23} color={Colors.text} />
+                <Icon name="comment" size={23} color={colors.text} />
                 <Text style={styles.actionCount}>{post.commentCount}</Text>
               </View>
             </View>
@@ -254,17 +279,19 @@ export default function PostDetail() {
                 Replying to {replyTo.authorHandle}
               </Text>
               <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
-                <Icon name="close" size={14} color={Colors.neutral[400]} />
+                <Icon name="close" size={14} color={colors.neutral[400]} />
               </Pressable>
             </View>
           )}
           <View style={styles.composer}>
             <TextInput
-              style={styles.composerInput}
+              style={[styles.composerInput, commentFocus.focused && styles.composerInputFocused]}
               value={draft}
               onChangeText={setDraft}
+              onFocus={commentFocus.onFocus}
+              onBlur={commentFocus.onBlur}
               placeholder={replyTo ? `Reply to ${replyTo.authorHandle}…` : 'Add a comment…'}
-              placeholderTextColor={Colors.neutral[500]}
+              placeholderTextColor={colors.neutral[500]}
               editable={!sending}
             />
             <Pressable
@@ -272,7 +299,7 @@ export default function PostDetail() {
               onPress={handleSend}
               disabled={!draft.trim() || sending}
             >
-              {sending ? <ActivityIndicator size="small" color={Colors.bg} /> : <Icon name="send" size={18} color={Colors.bg} />}
+              {sending ? <ActivityIndicator size="small" color={colors.bg} /> : <Icon name="send" size={18} color={colors.bg} />}
             </Pressable>
           </View>
         </View>
@@ -290,6 +317,8 @@ function CommentRow({
   isReply?: boolean;
   onReply?: () => void;
 }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.commentRow}>
       <Avatar
@@ -316,10 +345,10 @@ function CommentRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
   },
   flex: {
     flex: 1,
@@ -335,10 +364,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing[3],
     paddingHorizontal: Spacing[4],
-    paddingTop: Spacing[3],
+    paddingTop: Spacing[4],
     paddingBottom: Spacing[3],
     borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
+    borderBottomColor: colors.divider,
   },
   headerText: {
     flex: 1,
@@ -346,20 +375,22 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontFamily: Fonts.bodyBold,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
   },
   headerSubtitle: {
     fontFamily: Fonts.body,
     fontSize: 11.5,
-    color: Colors.accent[300],
+    color: colors.accent[300],
   },
   content: {
     paddingBottom: Spacing[6],
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   heroImage: {
     width: '100%',
-    height: 330,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
   },
   section: {
     paddingHorizontal: Spacing[4],
@@ -379,7 +410,7 @@ const styles = StyleSheet.create({
   actionCount: {
     fontFamily: Fonts.bodyBold,
     fontSize: 13.5,
-    color: Colors.text,
+    color: colors.text,
   },
   authorRow: {
     flexDirection: 'row',
@@ -389,29 +420,29 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 14,
     lineHeight: 21,
-    color: Colors.text,
+    color: colors.text,
   },
   authorHandle: {
     fontFamily: Fonts.bodyBold,
   },
   tag: {
-    color: Colors.accent[300],
+    color: colors.accent[300],
   },
   time: {
     fontFamily: Fonts.body,
     fontSize: 11.5,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     marginTop: 5,
   },
   rule: {
     height: 1,
-    backgroundColor: Colors.divider,
+    backgroundColor: colors.divider,
     marginVertical: Spacing[4],
   },
   noComments: {
     fontFamily: Fonts.body,
     fontSize: 13.5,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   comments: {
     gap: Spacing[4],
@@ -430,7 +461,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 13.5,
     lineHeight: 20,
-    color: Colors.text,
+    color: colors.text,
   },
   commentMeta: {
     flexDirection: 'row',
@@ -441,23 +472,23 @@ const styles = StyleSheet.create({
   commentMetaText: {
     fontFamily: Fonts.body,
     fontSize: 11.5,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   replyAction: {
     fontFamily: Fonts.bodyBold,
     fontSize: 11.5,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     textAlign: 'center',
   },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     marginTop: Spacing[3],
   },
   backCta: {
@@ -465,19 +496,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing[6],
     borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     alignItems: 'center',
     justifyContent: 'center',
   },
   backCtaText: {
     fontFamily: Fonts.heading,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
   },
   composerWrap: {
     borderTopWidth: 1,
-    borderTopColor: Colors.divider,
-    backgroundColor: Colors.surface,
+    borderTopColor: colors.divider,
+    backgroundColor: colors.surface,
     paddingBottom: Spacing[6],
   },
   replyingBanner: {
@@ -490,7 +521,7 @@ const styles = StyleSheet.create({
   replyingText: {
     fontFamily: Fonts.body,
     fontSize: 12,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   composer: {
     flexDirection: 'row',
@@ -503,19 +534,23 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 42,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     paddingHorizontal: 16,
     fontSize: 13.5,
-    color: Colors.text,
+    color: colors.text,
     fontFamily: Fonts.body,
+  },
+  composerInputFocused: {
+    borderColor: colors.accent.DEFAULT,
+    borderWidth: 1.5,
   },
   sendButton: {
     width: 42,
     height: 42,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },

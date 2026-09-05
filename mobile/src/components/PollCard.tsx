@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import type { Poll } from '@/lib/posts';
 
 /**
@@ -20,6 +21,8 @@ import type { Poll } from '@/lib/posts';
 export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (optionId: string) => Promise<void> }) {
   const [optimistic, setOptimistic] = useState<Poll>(poll);
   const [busy, setBusy] = useState(false);
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   // The feed refetches after a vote, so `poll` is the source of truth
   // whenever it changes underneath us; local state exists only to cover
@@ -75,19 +78,19 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   card: {
     marginTop: Spacing[2],
     padding: Spacing[3],
     borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
   },
   question: {
     fontFamily: Fonts.bodyBold,
     fontSize: 13,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: Spacing[2],
   },
   options: {
@@ -96,7 +99,7 @@ const styles = StyleSheet.create({
   option: {
     height: 32,
     borderRadius: Radius.pill,
-    backgroundColor: `${Colors.text}12`,
+    backgroundColor: `${colors.text}12`,
     overflow: 'hidden',
     justifyContent: 'center',
   },
@@ -105,10 +108,10 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: `${Colors.accent.DEFAULT}57`,
+    backgroundColor: `${colors.accent.DEFAULT}57`,
   },
   fillMine: {
-    backgroundColor: `${Colors.accent.DEFAULT}70`,
+    backgroundColor: `${colors.accent.DEFAULT}70`,
   },
   optionRow: {
     flexDirection: 'row',
@@ -121,17 +124,17 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: Fonts.bodySemibold,
     fontSize: 12,
-    color: Colors.text,
+    color: colors.text,
   },
   optionVotes: {
     fontFamily: Fonts.bodySemibold,
     fontSize: 12,
-    color: Colors.text,
+    color: colors.text,
   },
   total: {
     fontFamily: Fonts.body,
     fontSize: 11,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     marginTop: Spacing[2],
   },
 });

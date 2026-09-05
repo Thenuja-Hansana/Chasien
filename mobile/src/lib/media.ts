@@ -102,7 +102,7 @@ export async function captureImageOrVideo(): Promise<PickedMedia | null> {
  * supabase/migrations/20260814063412_post_media_storage.sql.
  */
 export async function uploadPostImage(image: PickedImage, roomId: string, userId: string): Promise<string> {
-  const base64 = await compressImageForUpload(image);
+  const base64 = await compressImageForUpload(image, 'feed');
   const path = `${roomId}/${userId}/${randomId()}.jpg`;
   await uploadBase64(BUCKET, path, base64, 'image/jpeg');
   return path;

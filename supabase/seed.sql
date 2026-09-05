@@ -36,10 +36,10 @@ where id = '11111111-1111-1111-1111-111111111111';
 -- exercised: public (grit-club, ilford-nights) and request (sourdough,
 -- deliberately with no members besides eve — the isolation check target).
 
-insert into rooms (id, slug, name, description, visibility, accent_color, created_by) values
-  ('a0000000-0000-0000-0000-000000000001', 'grit-club', 'Grit Club', 'Berlin boulderers, all grades. Session plans, beta, and far too many photos of the same overhang.', 'public', '#e08c4e', '11111111-1111-1111-1111-111111111111'),
-  ('a0000000-0000-0000-0000-000000000002', 'ilford-nights', 'Ilford Nights', 'Film photographers who develop at 2am.', 'public', '#a3b585', '55555555-5555-5555-5555-555555555555'),
-  ('a0000000-0000-0000-0000-000000000003', 'sourdough-sunday', 'Sourdough Sunday', 'Starters, crumb shots, and gentle Sunday-morning bread chat.', 'request', '#c0b6a5', '66666666-6666-6666-6666-666666666666');
+insert into rooms (id, slug, name, description, visibility, accent_color, category, created_by) values
+  ('a0000000-0000-0000-0000-000000000001', 'grit-club', 'Grit Club', 'Berlin boulderers, all grades. Session plans, beta, and far too many photos of the same overhang.', 'public', '#e08c4e', 'Sports & Fitness', '11111111-1111-1111-1111-111111111111'),
+  ('a0000000-0000-0000-0000-000000000002', 'ilford-nights', 'Ilford Nights', 'Film photographers who develop at 2am.', 'public', '#a3b585', 'Arts & Entertainment', '55555555-5555-5555-5555-555555555555'),
+  ('a0000000-0000-0000-0000-000000000003', 'sourdough-sunday', 'Sourdough Sunday', 'Starters, crumb shots, and gentle Sunday-morning bread chat.', 'request', '#c0b6a5', 'Food & Drink', '66666666-6666-6666-6666-666666666666');
 
 -- Owner rows for each room's creator already exist — inserted by
 -- add_owner_membership_on_room_created when the rooms above were

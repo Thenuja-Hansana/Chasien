@@ -1,25 +1,35 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { useMemo } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
-import { Colors, Fonts } from '@/constants/theme';
+import { Fonts, type ThemeColors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-// Ported from app_reference/src/components/Avatar.jsx — same gradient-per-id
-// palette, referencing the ported theme tokens instead of CSS vars.
-const GRADIENTS: Record<string, [string, string]> = {
-  mara: [Colors.accent.DEFAULT, Colors.accent[700]],
-  tobi: [Colors.accent[600], Colors.accent[900]],
-  nadia: [Colors.accent2[600], Colors.accent2[900]],
-  kwame: [Colors.neutral[700], Colors.neutral[900]],
-  rui: [Colors.accent[700], Colors.neutral[900]],
-  eve: [Colors.neutral[400], Colors.neutral[800]],
-  grit: [Colors.accent.DEFAULT, Colors.accent[700]],
-  ilford: [Colors.accent2[500], Colors.accent2[900]],
-  sourdough: [Colors.neutral[400], Colors.neutral[800]],
-  alfama: [Colors.accent[400], Colors.accent2[900]],
-  bike: [Colors.accent2[500], Colors.accent2[800]],
-  wallrats: [Colors.accent2[500], Colors.accent2[900]],
-  plastic: [Colors.neutral[400], Colors.neutral[800]],
-};
+// Ported from app_reference/src/components/Avatar.jsx, then regraded for
+// the Bones Phase's black/white brand — every gradient is now a pair of
+// `neutral` steps rather than a hue. `neutral`'s 100-900 ramp runs
+// light-to-dark in Light mode and dark-to-light in Dark mode (see
+// constants/theme.ts), so the exact same pairs below read as dark-on-white
+// avatars in Light mode and light-on-black avatars in Dark mode — this map
+// never needs to know which mode is active.
+function gradientsFor(colors: ThemeColors): Record<string, [string, string]> {
+  const { neutral } = colors;
+  return {
+    mara: [neutral[700], neutral[900]],
+    tobi: [neutral[600], neutral[800]],
+    nadia: [neutral[500], neutral[900]],
+    kwame: [neutral[400], neutral[700]],
+    rui: [neutral[600], neutral[900]],
+    eve: [neutral[300], neutral[600]],
+    grit: [neutral[700], neutral[900]],
+    ilford: [neutral[500], neutral[800]],
+    sourdough: [neutral[300], neutral[600]],
+    alfama: [neutral[600], neutral[900]],
+    bike: [neutral[500], neutral[800]],
+    wallrats: [neutral[500], neutral[900]],
+    plastic: [neutral[300], neutral[600]],
+  };
+}
 
 type AvatarProps = {
   gradient: string;
@@ -32,17 +42,23 @@ type AvatarProps = {
 };
 
 export default function Avatar({ gradient, letter, size = 40, shape = 'circle', ring = false, dot = false, style }: AvatarProps) {
-  const colors = GRADIENTS[gradient] ?? GRADIENTS.mara;
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const gradientColors = gradientsFor(colors)[gradient] ?? gradientsFor(colors).mara;
   const radius = shape === 'circle' ? 999 : Math.max(10, size * 0.34);
 
   const inner = (
     <LinearGradient
-      colors={colors}
+      colors={gradientColors}
       start={{ x: 0.15, y: 0 }}
       end={{ x: 0.85, y: 1 }}
       style={[styles.fill, { borderRadius: radius }]}
     >
-      <Text style={[styles.letter, { fontSize: size * 0.4 }]}>{letter}</Text>
+      {/* The gradient always runs from a light-ish to a dark-ish `neutral`
+          step, so whichever end of the theme's bg/text pair contrasts with
+          it also works as the letter color — same trick MessageBubble uses
+          for text on its "mine" bubble. */}
+      <Text style={[styles.letter, { fontSize: size * 0.4, color: colors.bg }]}>{letter}</Text>
     </LinearGradient>
   );
 
@@ -50,10 +66,10 @@ export default function Avatar({ gradient, letter, size = 40, shape = 'circle', 
     <View style={[{ width: size, height: size }, style]}>
       {ring ? (
         <LinearGradient
-          colors={[Colors.accent.DEFAULT, Colors.accent2.DEFAULT, Colors.accent[300], Colors.accent.DEFAULT]}
+          colors={[colors.accent.DEFAULT, colors.accent.DEFAULT]}
           style={[styles.fill, { borderRadius: 999, padding: 2.5 }]}
         >
-          <View style={[styles.fill, { borderRadius: 999, borderWidth: 2.5, borderColor: Colors.surface, overflow: 'hidden' }]}>
+          <View style={[styles.fill, { borderRadius: 999, borderWidth: 2.5, borderColor: colors.surface, overflow: 'hidden' }]}>
             {inner}
           </View>
         </LinearGradient>
@@ -76,23 +92,23 @@ export default function Avatar({ gradient, letter, size = 40, shape = 'circle', 
   );
 }
 
-const styles = StyleSheet.create({
-  fill: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  letter: {
-    fontFamily: Fonts?.heading,
-    color: '#f6e7d2',
-  },
-  dot: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    backgroundColor: Colors.accent2.DEFAULT,
-    borderWidth: 2.5,
-    borderColor: Colors.bg,
-  },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    fill: {
+      width: '100%',
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    letter: {
+      fontFamily: Fonts?.heading,
+    },
+    dot: {
+      position: 'absolute',
+      right: -2,
+      bottom: -2,
+      backgroundColor: colors.accent.DEFAULT,
+      borderWidth: 2.5,
+      borderColor: colors.bg,
+    },
+  });

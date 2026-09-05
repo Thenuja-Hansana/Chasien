@@ -1,10 +1,12 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useFocusHighlight } from '@/hooks/use-focus-highlight';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchRoomNotificationsMuted, setRoomNotificationsMuted } from '@/lib/notifications';
 import {
@@ -13,8 +15,10 @@ import {
   fetchRoomBySlug,
   fetchRoomMembers,
   respondToRequest,
+  ROOM_CATEGORIES,
   updateRoomSettings,
   type Room,
+  type RoomCategory,
   type RoomMember,
   type RoomVisibility,
 } from '@/lib/rooms';
@@ -30,12 +34,16 @@ const ROLE_LABEL: Record<string, string> = { owner: 'Owner', mod: 'Mod', member:
 export default function CommunitySettings() {
   const { session } = useAuth();
   const { communityId } = useLocalSearchParams<{ communityId: string }>();
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [room, setRoom] = useState<Room | null | 'loading'>('loading');
   const [isModerator, setIsModerator] = useState(false);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [description, setDescription] = useState('');
+  const descriptionFocus = useFocusHighlight();
   const [visibility, setVisibility] = useState<RoomVisibility>('public');
+  const [category, setCategory] = useState<RoomCategory | null>(null);
   const [membersCanPost, setMembersCanPost] = useState(true);
   const [notificationsMuted, setNotificationsMuted] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -55,6 +63,7 @@ export default function CommunitySettings() {
         setIsModerator(moderator);
         setDescription(r.description ?? '');
         setVisibility(r.visibility);
+        setCategory(r.category);
         setMembersCanPost(r.members_can_post);
         setNotificationsMuted(await fetchRoomNotificationsMuted(r.id, userId));
         if (moderator) {
@@ -70,15 +79,15 @@ export default function CommunitySettings() {
 
   if (room === 'loading') {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <ActivityIndicator color={Colors.accent.DEFAULT} />
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
+        <ActivityIndicator color={colors.accent.DEFAULT} />
       </SafeAreaView>
     );
   }
 
   if (!room) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
         <Text style={styles.body}>Room not found.</Text>
       </SafeAreaView>
     );
@@ -103,10 +112,10 @@ export default function CommunitySettings() {
 
   if (!isModerator) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Icon name="back" size={22} color={Colors.text} />
+            <Icon name="back" size={22} color={colors.text} />
           </Pressable>
           <Text style={styles.headingText} numberOfLines={1}>
             {room.name}
@@ -133,7 +142,7 @@ export default function CommunitySettings() {
     setSaving(true);
     setError(null);
     try {
-      await updateRoomSettings(currentRoom.id, { description, visibility, members_can_post: membersCanPost });
+      await updateRoomSettings(currentRoom.id, { description, visibility, category, members_can_post: membersCanPost });
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save changes.');
@@ -173,27 +182,29 @@ export default function CommunitySettings() {
   const isOwner = approvedMembers.some((m) => m.user_id === session.user.id && m.role === 'owner');
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Icon name="back" size={22} color={Colors.text} />
+          <Icon name="back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headingText} numberOfLines={1}>
           {room.name}
         </Text>
         <Pressable onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color={Colors.accent.DEFAULT} /> : <Text style={styles.saveText}>Save</Text>}
+          {saving ? <ActivityIndicator color={colors.accent.DEFAULT} /> : <Text style={styles.saveText}>Save</Text>}
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.label}>Description</Text>
         <TextInput
-          style={styles.textarea}
+          style={[styles.textarea, descriptionFocus.focused && styles.textareaFocused]}
           value={description}
           onChangeText={setDescription}
+          onFocus={descriptionFocus.onFocus}
+          onBlur={descriptionFocus.onBlur}
           placeholder="What's this Room about?"
-          placeholderTextColor={Colors.neutral[500]}
+          placeholderTextColor={colors.neutral[500]}
           multiline
         />
 
@@ -209,8 +220,24 @@ export default function CommunitySettings() {
               >
                 <Text style={styles.visibilityLabel}>{opt.label}</Text>
                 <View style={[styles.radio, active && styles.radioActive]}>
-                  {active && <Icon name="check" size={11} color={Colors.bg} strokeWidth={3.6} />}
+                  {active && <Icon name="check" size={11} color={colors.bg} strokeWidth={3.6} />}
                 </View>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>Category</Text>
+        <View style={styles.categoryGrid}>
+          {ROOM_CATEGORIES.map((c) => {
+            const active = category === c;
+            return (
+              <Pressable
+                key={c}
+                onPress={() => setCategory(c)}
+                style={[styles.categoryChip, active && styles.categoryChipActive]}
+              >
+                <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{c}</Text>
               </Pressable>
             );
           })}
@@ -244,7 +271,7 @@ export default function CommunitySettings() {
                 <View key={m.user_id} style={styles.memberRow}>
                   <Text style={styles.memberName}>{m.name}</Text>
                   {busyUserId === m.user_id ? (
-                    <ActivityIndicator color={Colors.accent.DEFAULT} />
+                    <ActivityIndicator color={colors.accent.DEFAULT} />
                   ) : (
                     <View style={styles.requestActions}>
                       <Pressable onPress={() => handleRespond(m.user_id, true)}>
@@ -273,7 +300,7 @@ export default function CommunitySettings() {
                     <Text style={styles.manageText}>{m.role === 'mod' ? 'Make member' : 'Make mod'}</Text>
                   </Pressable>
                 )}
-                {busyUserId === m.user_id && <ActivityIndicator color={Colors.accent.DEFAULT} />}
+                {busyUserId === m.user_id && <ActivityIndicator color={colors.accent.DEFAULT} />}
               </View>
             </View>
           ))}
@@ -285,10 +312,10 @@ export default function CommunitySettings() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
   },
   centered: {
     alignItems: 'center',
@@ -300,30 +327,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing[6],
-    paddingTop: Spacing[3],
+    paddingTop: Spacing[4],
     paddingBottom: Spacing[4],
   },
   headingText: {
     flex: 1,
     fontFamily: Fonts.heading,
     fontSize: 17,
-    color: Colors.text,
+    color: colors.text,
     textAlign: 'center',
   },
   saveText: {
     fontFamily: Fonts.body,
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.accent[300],
+    color: colors.accent[300],
   },
   content: {
     paddingHorizontal: Spacing[6],
     paddingBottom: Spacing[8],
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     textAlign: 'center',
   },
   label: {
@@ -332,22 +362,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     marginBottom: Spacing[2],
     marginTop: Spacing[6],
   },
   textarea: {
     minHeight: 88,
     borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     padding: Spacing[3],
     fontSize: 14,
     lineHeight: 20,
-    color: Colors.text,
+    color: colors.text,
     fontFamily: Fonts.body,
     textAlignVertical: 'top',
+  },
+  textareaFocused: {
+    borderColor: colors.accent.DEFAULT,
+    borderWidth: 1.5,
   },
   visibilityList: {
     gap: Spacing[2],
@@ -359,30 +393,57 @@ const styles = StyleSheet.create({
     padding: Spacing[3],
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
   },
   visibilityRowActive: {
-    borderColor: Colors.accent.DEFAULT,
+    borderColor: colors.accent.DEFAULT,
     borderWidth: 1.5,
   },
   visibilityLabel: {
     fontFamily: Fonts.body,
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
+    color: colors.text,
   },
   radio: {
     width: 19,
     height: 19,
     borderRadius: 999,
     borderWidth: 1.5,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     alignItems: 'center',
     justifyContent: 'center',
   },
   radioActive: {
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     borderWidth: 0,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing[2],
+  },
+  categoryChip: {
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryChipActive: {
+    backgroundColor: colors.accent.DEFAULT,
+    borderColor: colors.accent.DEFAULT,
+  },
+  categoryChipText: {
+    fontFamily: Fonts.body,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  categoryChipTextActive: {
+    color: colors.bg,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -391,7 +452,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing[4],
     marginTop: Spacing[4],
     borderTopWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
   },
   toggleText: {
     flex: 1,
@@ -400,30 +461,30 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
+    color: colors.text,
   },
   toggleDesc: {
     fontFamily: Fonts.body,
     fontSize: 11.5,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   toggle: {
     width: 44,
     height: 26,
     borderRadius: 999,
-    backgroundColor: Colors.divider,
+    backgroundColor: colors.divider,
     padding: 3,
     justifyContent: 'center',
   },
   toggleOn: {
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'flex-end',
   },
   toggleThumb: {
     width: 20,
     height: 20,
     borderRadius: 999,
-    backgroundColor: Colors.neutral[300],
+    backgroundColor: colors.neutral[300],
   },
   toggleThumbOn: {
     backgroundColor: '#f6e7d2',
@@ -441,7 +502,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
+    color: colors.text,
   },
   memberRoleArea: {
     flexDirection: 'row',
@@ -452,8 +513,8 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 11,
     fontWeight: '700',
-    color: Colors.accent[300],
-    backgroundColor: `${Colors.accent.DEFAULT}33`,
+    color: colors.accent[300],
+    backgroundColor: `${colors.accent.DEFAULT}33`,
     paddingHorizontal: 11,
     paddingVertical: 4,
     borderRadius: 999,
@@ -462,7 +523,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 12.5,
     fontWeight: '700',
-    color: Colors.accent2[300],
+    color: colors.accent2[300],
   },
   requestActions: {
     flexDirection: 'row',
@@ -472,18 +533,18 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.accent2[300],
+    color: colors.accent2[300],
   },
   denyText: {
     fontFamily: Fonts.body,
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
   },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     marginTop: Spacing[4],
   },
 });

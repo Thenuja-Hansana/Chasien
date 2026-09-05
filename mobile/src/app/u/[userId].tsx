@@ -1,11 +1,16 @@
+import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import Icon from '@/components/Icon';
+import SettingsDrawer from '@/components/SettingsDrawer';
 import TabBar from '@/components/TabBar';
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
+import { useTheme } from '@/hooks/use-theme';
 import { startDm } from '@/lib/chat';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
@@ -19,9 +24,14 @@ type ProfileRow = { id: string; handle: string; name: string; bio: string | null
 export default function Profile() {
   const { session, signOut } = useAuth();
   const { userId } = useLocalSearchParams<{ userId: string }>();
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const clearance = useTabBarClearance();
+  const blurTargetRef = useRef<View>(null);
   const [profile, setProfile] = useState<ProfileRow | null | 'loading'>('loading');
   const [messaging, setMessaging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,10 +68,19 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      {isOwnProfile && (
+        <View style={styles.header}>
+          <Pressable hitSlop={8} onPress={() => setSettingsOpen(true)}>
+            <Icon name="settings" size={22} color={colors.text} />
+          </Pressable>
+        </View>
+      )}
+
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: clearance }]}>
         {profile === 'loading' ? (
           <View style={styles.loading}>
-            <ActivityIndicator color={Colors.accent.DEFAULT} />
+            <ActivityIndicator color={colors.accent.DEFAULT} />
           </View>
         ) : (
           <View style={styles.identity}>
@@ -81,7 +100,7 @@ export default function Profile() {
 
         {!isOwnProfile && profile && (
           <Pressable style={styles.messageButton} onPress={handleMessage} disabled={messaging}>
-            {messaging ? <ActivityIndicator color={Colors.bg} /> : <Text style={styles.messageButtonText}>Message</Text>}
+            {messaging ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.messageButtonText}>Message</Text>}
           </Pressable>
         )}
 
@@ -99,22 +118,37 @@ export default function Profile() {
           </View>
         )}
       </ScrollView>
+      </BlurTargetView>
 
-      <TabBar active="You" userId={session.user.id} />
+      <TabBar active="You" userId={session.user.id} blurTarget={blurTargetRef} />
+
+      {isOwnProfile && <SettingsDrawer visible={settingsOpen} onClose={() => setSettingsOpen(false)} />}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
+  },
+  flex: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: Spacing[6],
+    paddingTop: Spacing[3],
   },
   content: {
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[6],
     paddingBottom: Spacing[8],
     gap: Spacing[6],
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   loading: {
     height: 140,
@@ -128,37 +162,37 @@ const styles = StyleSheet.create({
   name: {
     fontFamily: Fonts.heading,
     fontSize: 20,
-    color: Colors.text,
+    color: colors.text,
   },
   handle: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   bio: {
     fontFamily: Fonts.body,
     fontSize: 13.5,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     textAlign: 'center',
     marginTop: Spacing[1],
   },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     textAlign: 'center',
   },
   messageButton: {
     height: 46,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },
   messageButtonText: {
     fontFamily: Fonts.heading,
     fontSize: 15,
-    color: Colors.bg,
+    color: colors.bg,
   },
   section: {
     gap: Spacing[3],
@@ -169,18 +203,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   signOutButton: {
     height: 48,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -188,6 +222,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.text,
+    color: colors.text,
   },
 });

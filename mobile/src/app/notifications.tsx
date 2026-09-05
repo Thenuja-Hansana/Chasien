@@ -1,12 +1,15 @@
+import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import TabBar from '@/components/TabBar';
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import {
   deleteNotification,
@@ -68,6 +71,10 @@ const GROUPS: Group[] = ['Today', 'This week', 'Older'];
 
 export default function Notifications() {
   const { session } = useAuth();
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const clearance = useTabBarClearance();
+  const blurTargetRef = useRef<View>(null);
   const [items, setItems] = useState<AppNotification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -123,6 +130,7 @@ export default function Notifications() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
       <View style={styles.header}>
         <Text style={styles.heading}>Activity</Text>
       </View>
@@ -131,14 +139,14 @@ export default function Notifications() {
 
       {items === null ? (
         <View style={styles.empty}>
-          <ActivityIndicator color={Colors.accent.DEFAULT} />
+          <ActivityIndicator color={colors.accent.DEFAULT} />
         </View>
       ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.body}>Nothing here yet.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: clearance }]}>
           {GROUPS.map((group) => {
             const groupItems = items.filter((n) => groupFor(n.created_at) === group);
             if (groupItems.length === 0) return null;
@@ -157,7 +165,7 @@ export default function Notifications() {
                         <Avatar gradient={n.actor_id} letter={n.actorName.charAt(0).toUpperCase()} size={42} />
                       ) : (
                         <View style={styles.systemIcon}>
-                          <Icon name="bell" size={18} color={Colors.accent[300]} />
+                          <Icon name="bell" size={18} color={colors.accent[300]} />
                         </View>
                       )}
                       <View style={styles.rowContent}>
@@ -170,7 +178,7 @@ export default function Notifications() {
                       {n.type === 'join_request' ? (
                         <View style={styles.actions}>
                           {busyId === n.id ? (
-                            <ActivityIndicator color={Colors.accent.DEFAULT} />
+                            <ActivityIndicator color={colors.accent.DEFAULT} />
                           ) : (
                             <>
                               <Pressable style={styles.acceptBtn} onPress={() => respond(n, true)} hitSlop={4}>
@@ -191,26 +199,30 @@ export default function Notifications() {
           })}
         </ScrollView>
       )}
+      </BlurTargetView>
 
-      <TabBar active="Home" userId={session.user.id} />
+      <TabBar active="Home" userId={session.user.id} blurTarget={blurTargetRef} />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
+  },
+  flex: {
+    flex: 1,
   },
   header: {
     paddingHorizontal: Spacing[6],
-    paddingTop: Spacing[3],
+    paddingTop: Spacing[4],
     paddingBottom: Spacing[2],
   },
   heading: {
     fontFamily: Fonts.heading,
     fontSize: 22,
-    color: Colors.text,
+    color: colors.text,
   },
   empty: {
     flex: 1,
@@ -220,25 +232,28 @@ const styles = StyleSheet.create({
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     textAlign: 'center',
     paddingHorizontal: Spacing[6],
     paddingBottom: Spacing[2],
   },
   list: {
     paddingBottom: Spacing[8],
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   groupLabel: {
     fontFamily: Fonts.bodyBold,
     fontSize: 10,
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[4],
     paddingBottom: Spacing[2],
@@ -251,13 +266,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   rowUnread: {
-    backgroundColor: `${Colors.accent.DEFAULT}0F`,
+    backgroundColor: `${colors.accent.DEFAULT}0F`,
   },
   systemIcon: {
     width: 42,
     height: 42,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -269,16 +284,16 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 13.5,
     lineHeight: 19,
-    color: Colors.text,
+    color: colors.text,
   },
   highlight: {
     fontFamily: Fonts.bodySemibold,
-    color: Colors.accent[300],
+    color: colors.accent[300],
   },
   time: {
     fontFamily: Fonts.body,
     fontSize: 11.5,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   actions: {
     flexDirection: 'row',
@@ -288,23 +303,23 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 13,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
   },
   acceptText: {
     fontFamily: Fonts.bodyBold,
     fontSize: 12,
-    color: Colors.bg,
+    color: colors.bg,
   },
   skipBtn: {
     paddingVertical: 7,
     paddingHorizontal: 12,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
   },
   skipText: {
     fontFamily: Fonts.bodyBold,
     fontSize: 12,
-    color: Colors.text,
+    color: colors.text,
   },
 });

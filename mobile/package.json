@@ -12,6 +12,7 @@
     "base64-arraybuffer": "^1.0.2",
     "expo": "~57.0.12",
     "expo-audio": "~57.0.3",
+    "expo-blur": "~57.0.2",
     "expo-constants": "~57.0.10",
     "expo-dev-client": "~57.0.13",
     "expo-device": "~57.0.1",

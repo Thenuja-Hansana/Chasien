@@ -43,23 +43,89 @@ const JPEG_QUALITY = 0.7;
 export type PickedImage = { uri: string; width: number; height: number };
 
 /**
- * Resize + JPEG-compress before upload, returning base64 because that's
- * what every upload path here needs — asking the manipulator for it
- * directly avoids a second read of the file off disk.
+ * Which output shape `compressImageForUpload()` should crop and resize
+ * to. 'original' (the default, used by chat/voice attachments) just caps
+ * the longest edge — no cropping, so a chat photo's own framing survives
+ * intact. 'feed' and 'story' match Instagram's own upload targets, since
+ * both this app's feed cards and its Stories viewer are full-bleed,
+ * fixed-box surfaces that need a predictable width:height coming in
+ * rather than whatever ratio a phone camera happened to shoot.
+ */
+export type MediaVariant = 'original' | 'feed' | 'story';
+
+/**
+ * Feed posts crop to whichever of these three is closest to the source
+ * photo's own ratio — square, Instagram's max-height portrait (4:5), or
+ * landscape (1.91:1) — rather than forcing every photo into one shape.
+ * Stories/Reels only ever have the one full-screen ratio (9:16).
+ */
+const FEED_PRESETS = [
+  { width: 1080, height: 1080 }, // square, 1:1
+  { width: 1080, height: 1350 }, // portrait, 4:5 — Instagram's max feed height
+  { width: 1080, height: 566 }, // landscape, 1.91:1
+];
+const STORY_PRESET = { width: 1080, height: 1920 }; // 9:16
+
+/** Closest-ratio match, compared on a log scale so 1:1.9 and 1:0.8 are equally "far" from 1:1. */
+function closestFeedPreset(width: number, height: number) {
+  const ratio = Math.log(width / height);
+  return FEED_PRESETS.reduce((best, preset) => {
+    const distance = Math.abs(ratio - Math.log(preset.width / preset.height));
+    const bestDistance = Math.abs(ratio - Math.log(best.width / best.height));
+    return distance < bestDistance ? preset : best;
+  });
+}
+
+/** The width:height a 'feed' upload of this source photo will end up cropped to — for previewing the crop before upload. */
+export function feedAspectRatioFor(width: number, height: number): number {
+  const preset = closestFeedPreset(width, height);
+  return preset.width / preset.height;
+}
+
+/** The largest centered rect of the given target ratio (width/height) that fits inside width x height. */
+function centeredCropRect(width: number, height: number, targetRatio: number) {
+  const currentRatio = width / height;
+  if (currentRatio > targetRatio) {
+    const cropWidth = Math.round(height * targetRatio);
+    return { originX: Math.round((width - cropWidth) / 2), originY: 0, width: cropWidth, height };
+  }
+  if (currentRatio < targetRatio) {
+    const cropHeight = Math.round(width / targetRatio);
+    return { originX: 0, originY: Math.round((height - cropHeight) / 2), width, height: cropHeight };
+  }
+  return { originX: 0, originY: 0, width, height };
+}
+
+/**
+ * Resize (and for 'feed'/'story', center-crop) + JPEG-compress before
+ * upload, returning base64 because that's what every upload path here
+ * needs — asking the manipulator for it directly avoids a second read
+ * of the file off disk.
  *
- * Only ever downscales: `resize` is skipped entirely when the image is
- * already under the cap, so a small image isn't upscaled into a bigger
- * file than it started as. Protects the free tier's storage *and*
- * egress (docs/architecture.md) — a modern phone camera produces
- * 4000px+ images no phone screen can actually display at full
+ * Never upscales: a source already smaller than the target width comes
+ * out cropped to the right ratio but at its own resolution, not blown up
+ * past what the camera actually captured. Protects the free tier's
+ * storage *and* egress (docs/architecture.md) — a modern phone camera
+ * produces 4000px+ images no phone screen can actually display at full
  * resolution, so uploading them raw is pure waste on both counts.
  */
-export async function compressImageForUpload(image: PickedImage): Promise<string> {
+export async function compressImageForUpload(image: PickedImage, variant: MediaVariant = 'original'): Promise<string> {
   const context = ImageManipulator.manipulate(image.uri);
 
-  const longestEdge = Math.max(image.width, image.height);
-  if (longestEdge > MAX_DIMENSION) {
-    context.resize(image.width >= image.height ? { width: MAX_DIMENSION } : { height: MAX_DIMENSION });
+  if (variant === 'original') {
+    const longestEdge = Math.max(image.width, image.height);
+    if (longestEdge > MAX_DIMENSION) {
+      context.resize(image.width >= image.height ? { width: MAX_DIMENSION } : { height: MAX_DIMENSION });
+    }
+  } else {
+    const preset = variant === 'story' ? STORY_PRESET : closestFeedPreset(image.width, image.height);
+    const cropRect = centeredCropRect(image.width, image.height, preset.width / preset.height);
+    if (cropRect.width !== image.width || cropRect.height !== image.height) {
+      context.crop(cropRect);
+    }
+    if (cropRect.width > preset.width) {
+      context.resize({ width: preset.width });
+    }
   }
 
   const rendered = await context.renderAsync();

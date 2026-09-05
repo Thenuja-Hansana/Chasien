@@ -6,6 +6,25 @@ export type RoomVisibility = 'public' | 'request' | 'invite';
 export type RoomRole = 'owner' | 'mod' | 'member';
 export type JoinState = 'pending' | 'approved' | 'invited';
 
+/**
+ * Fixed set, matching the `check` constraint on rooms.category
+ * (supabase/migrations/20260903150000_room_category_and_member_count.sql)
+ * — tailored to Chasien's own Rooms (hobby/fan communities) rather than
+ * copied from a gaming-platform reference. The single source of truth for
+ * every category picker (Room creation, Room settings) and the Explore
+ * page's filter row, so they can never list a value the database would
+ * reject.
+ */
+export const ROOM_CATEGORIES = [
+  'Hobbies & Crafts',
+  'Sports & Fitness',
+  'Food & Drink',
+  'Arts & Entertainment',
+  'Fan Clubs',
+  'Learning',
+] as const;
+export type RoomCategory = (typeof ROOM_CATEGORIES)[number];
+
 export type Room = {
   id: string;
   slug: string;
@@ -13,6 +32,10 @@ export type Room = {
   description: string | null;
   visibility: RoomVisibility;
   accent_color: string | null;
+  /** Null until an owner/mod sets one — see Room settings / Room creation. */
+  category: RoomCategory | null;
+  /** Approved-member count, maintained server-side by a trigger — see the migration above for why this can't just be counted live from the client. */
+  member_count: number;
   members_can_post: boolean;
   created_by: string | null;
 };
@@ -35,7 +58,7 @@ export type RoomMember = Membership & {
 export async function fetchDiscoverRooms() {
   const { data, error } = await supabase
     .from('rooms')
-    .select('id, slug, name, description, visibility, accent_color, members_can_post, created_by')
+    .select('id, slug, name, description, visibility, accent_color, category, member_count, members_can_post, created_by')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as Room[];
@@ -44,7 +67,7 @@ export async function fetchDiscoverRooms() {
 export async function fetchRoomBySlug(slug: string) {
   const { data, error } = await supabase
     .from('rooms')
-    .select('id, slug, name, description, visibility, accent_color, members_can_post, created_by')
+    .select('id, slug, name, description, visibility, accent_color, category, member_count, members_can_post, created_by')
     .eq('slug', slug)
     .maybeSingle();
   if (error) throw error;
@@ -95,13 +118,19 @@ export async function fetchMyMembershipMap(userId: string) {
 export async function fetchMyRooms(userId: string) {
   const { data, error } = await supabase
     .from('room_memberships')
-    .select('role, join_state, rooms(id, slug, name, description, visibility, accent_color, members_can_post, created_by)')
+    .select(
+      'role, join_state, notifications_muted, rooms(id, slug, name, description, visibility, accent_color, category, member_count, members_can_post, created_by)',
+    )
     .eq('user_id', userId)
     .eq('join_state', 'approved');
   if (error) throw error;
   return (data ?? [])
-    .map((row) => (row.rooms ? { ...(row.rooms as unknown as Room), myRole: row.role as RoomRole } : null))
-    .filter((r): r is Room & { myRole: RoomRole } => r !== null);
+    .map((row) =>
+      row.rooms
+        ? { ...(row.rooms as unknown as Room), myRole: row.role as RoomRole, myNotificationsMuted: row.notifications_muted }
+        : null,
+    )
+    .filter((r): r is Room & { myRole: RoomRole; myNotificationsMuted: boolean } => r !== null);
 }
 
 // Only owners/mods can actually see every row here (RLS: "moderators see
@@ -133,12 +162,13 @@ export async function createRoom(params: {
   description: string;
   visibility: RoomVisibility;
   accent_color: string;
+  category: RoomCategory | null;
 }) {
   const userId = (await supabase.auth.getUser()).data.user?.id;
   const { data, error } = await supabase
     .from('rooms')
     .insert({ ...params, created_by: userId })
-    .select('id, slug, name, description, visibility, accent_color, members_can_post, created_by')
+    .select('id, slug, name, description, visibility, accent_color, category, member_count, members_can_post, created_by')
     .single();
   if (error) throw error;
   return data as Room;
@@ -146,7 +176,7 @@ export async function createRoom(params: {
 
 export async function updateRoomSettings(
   roomId: string,
-  params: Partial<Pick<Room, 'description' | 'visibility' | 'accent_color' | 'members_can_post'>>,
+  params: Partial<Pick<Room, 'description' | 'visibility' | 'accent_color' | 'category' | 'members_can_post'>>,
 ) {
   const { error } = await supabase.from('rooms').update(params).eq('id', roomId);
   if (error) throw error;

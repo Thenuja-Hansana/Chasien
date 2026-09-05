@@ -76,6 +76,13 @@ const ICONS: Record<string, Shape[]> = {
     { t: 'path', d: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z' },
     { t: 'circle', cx: 12, cy: 12, r: 2.6 },
   ],
+  // Not part of app_reference/src/components/Icon.jsx's set — added for
+  // the show/hide-password toggle (TextField.tsx).
+  eyeOff: [
+    { t: 'path', d: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z' },
+    { t: 'circle', cx: 12, cy: 12, r: 2.6 },
+    { t: 'path', d: 'M3 3l18 18' },
+  ],
   apple: [{ t: 'path', fill: true, d: 'M16.4 12.8c0-2.6 2.1-3.8 2.2-3.9-1.2-1.7-3-2-3.7-2-1.6-.2-3 .9-3.8.9s-2-.9-3.3-.9c-1.7 0-3.3 1-4.1 2.5-1.8 3-.5 7.6 1.3 10.1.9 1.2 1.9 2.6 3.2 2.5 1.3 0 1.8-.8 3.3-.8s2 .8 3.3.8c1.4 0 2.3-1.2 3.1-2.5.6-.9 1.1-2 1.1-2.1s-2.6-1-2.6-3.6z' }],
   google: [{ t: 'path', d: 'M21 12.2H12v3.4h5.2A5.2 5.2 0 1 1 12 6.8c1.3 0 2.5.5 3.4 1.3' }],
   chevronRight: [{ t: 'path', d: 'm9 6 6 6-6 6' }],

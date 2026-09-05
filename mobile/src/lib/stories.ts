@@ -73,7 +73,7 @@ export async function fetchActiveStories(roomId: string): Promise<Story[]> {
 export async function createStory(roomId: string, userId: string, media: PickedMedia, caption: string | null): Promise<void> {
   let path: string;
   if (media.kind === 'image') {
-    const base64 = await compressImageForUpload(media);
+    const base64 = await compressImageForUpload(media, 'story');
     path = `${roomId}/${userId}/${randomId()}.jpg`;
     await uploadBase64(BUCKET, path, base64, 'image/jpeg');
   } else {

@@ -1,13 +1,15 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import MessageBubble from '@/components/MessageBubble';
-import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
+import { useFocusHighlight } from '@/hooks/use-focus-highlight';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import {
   addReaction,
@@ -32,11 +34,14 @@ export default function ChatView() {
   const { session } = useAuth();
   const { chatId } = useLocalSearchParams<{ chatId: string }>();
   const userId = session?.user.id;
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [summary, setSummary] = useState<InboxItem | null | 'loading'>('loading');
   const [messages, setMessages] = useState<Message[]>([]);
   const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
   const [draft, setDraft] = useState('');
+  const draftFocus = useFocusHighlight();
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [sending, setSending] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -204,15 +209,15 @@ export default function ChatView() {
 
   if (summary === 'loading') {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <ActivityIndicator color={Colors.accent.DEFAULT} />
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
+        <ActivityIndicator color={colors.accent.DEFAULT} />
       </SafeAreaView>
     );
   }
 
   if (!summary) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
         <Text style={styles.body}>This conversation isn&apos;t available.</Text>
       </SafeAreaView>
     );
@@ -229,10 +234,10 @@ export default function ChatView() {
   const messagesById = new Map(messages.map((m) => [m.id, m]));
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Icon name="back" size={22} color={Colors.text} />
+          <Icon name="back" size={22} color={colors.text} />
         </Pressable>
         <Avatar gradient={avatarKey} letter={summary.title.charAt(0).toUpperCase()} shape={summary.kind === 'room_channel' ? 'square' : 'circle'} size={38} />
         <View style={styles.headerText}>
@@ -247,7 +252,13 @@ export default function ChatView() {
         </View>
       </View>
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={8}>
+      {/* 'height' on Android, not the previous `undefined` — the manifest's
+          windowSoftInputMode="adjustResize" stops actually resizing content
+          under Expo's default edge-to-edge display (targeting Android 15+),
+          so the composer needs its own JS-driven keyboard-height listener
+          (which is what this behavior mode is) rather than relying on the
+          OS to shrink the window. */}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={8}>
         <FlatList
           style={styles.flex}
           contentContainerStyle={styles.messageList}
@@ -293,22 +304,24 @@ export default function ChatView() {
               Replying to {replyTo.author?.name ?? 'message'}
             </Text>
             <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
-              <Icon name="close" size={16} color={Colors.neutral[400]} />
+              <Icon name="close" size={16} color={colors.neutral[400]} />
             </Pressable>
           </View>
         )}
 
         <View style={styles.inputBar}>
           <Pressable style={styles.iconButton} onPress={handleAttachImage} disabled={sending}>
-            <Icon name="attach" size={22} color={Colors.neutral[400]} />
+            <Icon name="attach" size={22} color={colors.neutral[400]} />
           </Pressable>
-          <View style={styles.inputWrap}>
+          <View style={[styles.inputWrap, draftFocus.focused && styles.inputWrapFocused]}>
             <TextInput
               style={styles.input}
               value={draft}
               onChangeText={handleDraftChange}
+              onFocus={draftFocus.onFocus}
+              onBlur={draftFocus.onBlur}
               placeholder={recording ? 'Recording...' : 'Message'}
-              placeholderTextColor={Colors.neutral[500]}
+              placeholderTextColor={colors.neutral[500]}
               editable={!recording}
               multiline
             />
@@ -319,9 +332,9 @@ export default function ChatView() {
             disabled={sending && !recording}
           >
             {sending && !recording ? (
-              <ActivityIndicator size="small" color={Colors.bg} />
+              <ActivityIndicator size="small" color={colors.bg} />
             ) : (
-              <Icon name={draft.trim() ? 'send' : recording ? 'check' : 'mic'} size={19} color={Colors.bg} />
+              <Icon name={draft.trim() ? 'send' : recording ? 'check' : 'mic'} size={19} color={colors.bg} />
             )}
           </Pressable>
         </View>
@@ -330,10 +343,10 @@ export default function ChatView() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
   },
   flex: {
     flex: 1,
@@ -349,10 +362,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing[3],
     paddingHorizontal: Spacing[4],
-    paddingTop: Spacing[3],
+    paddingTop: Spacing[4],
     paddingBottom: Spacing[3],
     borderBottomWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
   },
   headerText: {
     flex: 1,
@@ -362,28 +375,31 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
+    color: colors.text,
   },
   headerSubtitle: {
     fontFamily: Fonts.body,
     fontSize: 11.5,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     textAlign: 'center',
   },
   messageList: {
     padding: Spacing[4],
     flexGrow: 1,
     justifyContent: 'flex-end',
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   replyPreview: {
     fontFamily: Fonts.body,
     fontSize: 11,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     marginBottom: 2,
   },
   replyPreviewMine: {
@@ -396,14 +412,14 @@ const styles = StyleSheet.create({
   typingText: {
     fontFamily: Fonts.body,
     fontSize: 12,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     paddingHorizontal: Spacing[4],
     paddingBottom: 4,
   },
   errorText: {
     fontFamily: Fonts.body,
     fontSize: 12.5,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     paddingHorizontal: Spacing[4],
     paddingBottom: 4,
   },
@@ -413,14 +429,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: Spacing[4],
     paddingVertical: 8,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
   },
   replyBannerText: {
     fontFamily: Fonts.body,
     fontSize: 12.5,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     flex: 1,
   },
   inputBar: {
@@ -430,9 +446,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing[4],
     paddingTop: 10,
     paddingBottom: Spacing[6],
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
   },
   iconButton: {
     height: 42,
@@ -443,27 +459,31 @@ const styles = StyleSheet.create({
     minHeight: 42,
     maxHeight: 110,
     borderRadius: 21,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     justifyContent: 'center',
     paddingHorizontal: 15,
     paddingVertical: 8,
   },
+  inputWrapFocused: {
+    borderColor: colors.accent.DEFAULT,
+    borderWidth: 1.5,
+  },
   input: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.text,
+    color: colors.text,
   },
   sendButton: {
     width: 42,
     height: 42,
     borderRadius: 999,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonRecording: {
-    backgroundColor: Colors.accent[600],
+    backgroundColor: colors.accent[600],
   },
 });

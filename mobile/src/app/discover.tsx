@@ -1,12 +1,26 @@
+import { BlurTargetView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import Icon from '@/components/Icon';
 import TabBar from '@/components/TabBar';
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
-import { fetchDiscoverRooms, fetchMyMembershipMap, joinRoom, type Membership, type Room } from '@/lib/rooms';
+import { cacheJoinedRoom } from '@/lib/room-cache';
+import {
+  fetchDiscoverRooms,
+  fetchMyMembershipMap,
+  joinRoom,
+  ROOM_CATEGORIES,
+  type Membership,
+  type Room,
+  type RoomCategory,
+} from '@/lib/rooms';
 
 const VISIBILITY_LABEL: Record<Room['visibility'], string> = {
   public: 'Public',
@@ -14,11 +28,21 @@ const VISIBILITY_LABEL: Record<Room['visibility'], string> = {
   invite: 'Invite only',
 };
 
+type CategoryFilter = 'all' | RoomCategory;
+const FILTERS: { key: CategoryFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  ...ROOM_CATEGORIES.map((c) => ({ key: c, label: c })),
+];
+
 export default function Discover() {
   const { session } = useAuth();
-  const [query, setQuery] = useState('');
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const clearance = useTabBarClearance();
+  const blurTargetRef = useRef<View>(null);
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const [memberships, setMemberships] = useState<Map<string, Membership>>(new Map());
+  const [filter, setFilter] = useState<CategoryFilter>('all');
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,6 +52,13 @@ export default function Discover() {
       .then(([roomList, membershipMap]) => {
         setRooms(roomList);
         setMemberships(membershipMap);
+        // Same reasoning as index.tsx's Home list — a row here for a Room
+        // you're already in is another way into it besides Home, so it
+        // gets the same cache treatment. See lib/room-cache.ts.
+        for (const room of roomList) {
+          const membership = membershipMap.get(room.id);
+          if (membership?.join_state === 'approved') cacheJoinedRoom(room, membership.role);
+        }
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load Rooms.'));
   }, [session]);
@@ -35,10 +66,6 @@ export default function Discover() {
   useFocusEffect(useCallback(() => load(), [load]));
 
   if (!session) return null;
-
-  function handleSearchSubmit() {
-    router.push(`/search?q=${encodeURIComponent(query.trim())}`);
-  }
 
   async function handleJoin(room: Room) {
     setJoiningId(room.id);
@@ -57,58 +84,100 @@ export default function Discover() {
     }
   }
 
+  const filteredRooms = rooms?.filter((r) => filter === 'all' || r.category === filter) ?? null;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.heading}>Find your Rooms</Text>
-        <TextInput
-          style={styles.input}
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={handleSearchSubmit}
-          placeholder="Search Rooms"
-          placeholderTextColor={Colors.neutral[500]}
-          returnKeyType="search"
-        />
-      </View>
-
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      {rooms === null ? (
-        <View style={styles.empty}>
-          <ActivityIndicator color={Colors.accent.DEFAULT} />
+      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: clearance }]}>
+        <View style={styles.banner}>
+          <Text style={styles.bannerHeading}>FIND YOUR{'\n'}ROOM</Text>
+          <Text style={styles.bannerSubtext}>From climbing crews to sourdough starters — there&apos;s a Room for you.</Text>
         </View>
-      ) : rooms.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyHeading}>No Rooms yet</Text>
-          <Text style={styles.body}>Public Rooms will show up here once there are some to join.</Text>
-          <Pressable style={styles.cta} onPress={() => router.push('/create-community')}>
-            <Text style={styles.ctaText}>Start a Room</Text>
+
+        <View style={styles.filterRow}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+            {FILTERS.map((f) => {
+              const active = filter === f.key;
+              return (
+                <Pressable
+                  key={f.key}
+                  onPress={() => setFilter(f.key)}
+                  style={[styles.filterChip, active && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{f.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <Pressable style={styles.searchButton} onPress={() => router.push('/search')} hitSlop={10}>
+            <Icon name="search" size={20} color={colors.text} />
           </Pressable>
         </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.list}>
-          {rooms.map((room) => (
-            <RoomRow
-              key={room.id}
-              room={room}
-              membership={memberships.get(room.id)}
-              joining={joiningId === room.id}
-              onJoin={() => handleJoin(room)}
-            />
-          ))}
-          <Pressable style={styles.startRoomCta} onPress={() => router.push('/create-community')}>
-            <Text style={styles.ctaText}>Start a Room</Text>
-          </Pressable>
-        </ScrollView>
-      )}
 
-      <TabBar active="Explore" userId={session.user.id} />
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        {rooms === null ? (
+          <View style={styles.empty}>
+            <ActivityIndicator color={colors.accent.DEFAULT} />
+          </View>
+        ) : (
+          <View style={styles.listWrap}>
+            <Text style={styles.sectionLabel}>{filter === 'all' ? 'Featured Rooms' : filter}</Text>
+
+            {rooms.length === 0 ? (
+              <View style={styles.emptyInline}>
+                <Text style={styles.emptyHeading}>No Rooms yet</Text>
+                <Text style={styles.body}>Public Rooms will show up here once there are some to join.</Text>
+              </View>
+            ) : filteredRooms && filteredRooms.length === 0 ? (
+              <View style={styles.emptyInline}>
+                <Text style={styles.body}>No Rooms in {filter} yet — try another category.</Text>
+              </View>
+            ) : (
+              <View style={styles.list}>
+                {filteredRooms?.map((room) => (
+                  <RoomCard
+                    key={room.id}
+                    room={room}
+                    membership={memberships.get(room.id)}
+                    joining={joiningId === room.id}
+                    onJoin={() => handleJoin(room)}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
+      </BlurTargetView>
+
+      <StartRoomFab />
+      <TabBar active="Explore" userId={session.user.id} blurTarget={blurTargetRef} />
     </SafeAreaView>
   );
 }
 
-function RoomRow({
+/**
+ * Same round, floating treatment and position as PostFab
+ * (components/PostFab.tsx) — but a pencil, not a "+": this button doesn't
+ * add an item to a list the way PostFab's "+" does, it opens a whole new
+ * Room's worth of things to fill in (name, description, category,
+ * visibility), which reads closer to "compose/create" than "add".
+ */
+function StartRoomFab() {
+  const colors = useTheme();
+  const clearance = useTabBarClearance();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  return (
+    <Pressable style={[styles.fab, { bottom: clearance }]} onPress={() => router.push('/create-community')}>
+      <Icon name="edit" size={22} color={colors.bg} />
+    </Pressable>
+  );
+}
+
+function RoomCard({
   room,
   membership,
   joining,
@@ -119,6 +188,8 @@ function RoomRow({
   joining: boolean;
   onJoin: () => void;
 }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const buttonLabel = !membership
     ? room.visibility === 'public'
       ? 'Join'
@@ -129,68 +200,144 @@ function RoomRow({
         ? 'Requested'
         : 'Invited';
   const disabled = membership?.join_state === 'pending' || joining;
+  const accent = room.accent_color ?? colors.accent.DEFAULT;
 
   return (
     <Pressable
-      style={styles.row}
+      style={styles.card}
       onPress={() => router.push({ pathname: '/c/[communityId]', params: { communityId: room.slug } })}
     >
-      <View style={[styles.roomIcon, { backgroundColor: room.accent_color ?? Colors.accent.DEFAULT }]}>
-        <Text style={styles.roomIconLetter}>{room.name.charAt(0).toUpperCase()}</Text>
+      <View style={[styles.cardBanner, { backgroundColor: accent }]}>
+        <LinearGradient
+          colors={['rgba(255,255,255,0.35)', 'rgba(0,0,0,0.25)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
       </View>
-      <View style={styles.rowContent}>
-        <Text style={styles.roomName}>{room.name}</Text>
-        <Text style={styles.roomMeta}>{VISIBILITY_LABEL[room.visibility]}</Text>
-      </View>
-      <Pressable
-        style={[styles.joinButton, (membership || joining) && styles.joinButtonSecondary]}
-        onPress={onJoin}
-        disabled={disabled}
-      >
-        {joining ? (
-          <ActivityIndicator size="small" color={Colors.accent.DEFAULT} />
-        ) : (
-          <Text style={[styles.joinButtonText, (membership || joining) && styles.joinButtonTextSecondary]}>
-            {buttonLabel}
+
+      <View style={styles.cardBody}>
+        <View style={styles.cardTopRow}>
+          <View style={[styles.cardLogo, { backgroundColor: accent }]}>
+            <Text style={styles.cardLogoLetter}>{room.name.charAt(0).toUpperCase()}</Text>
+          </View>
+          <Pressable
+            style={[styles.joinButton, (membership || joining) && styles.joinButtonSecondary]}
+            onPress={onJoin}
+            disabled={disabled}
+          >
+            {joining ? (
+              <ActivityIndicator size="small" color={colors.accent.DEFAULT} />
+            ) : (
+              <Text style={[styles.joinButtonText, (membership || joining) && styles.joinButtonTextSecondary]}>
+                {buttonLabel}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+
+        <Text style={styles.cardTitle}>{room.name}</Text>
+        {room.description ? (
+          <Text style={styles.cardBio} numberOfLines={2}>
+            {room.description}
           </Text>
-        )}
-      </Pressable>
+        ) : null}
+
+        <View style={styles.cardStatsRow}>
+          <View style={[styles.statDot, { backgroundColor: colors.neutral[400] }]} />
+          <Text style={styles.cardStatsText}>
+            {room.member_count} {room.member_count === 1 ? 'member' : 'members'}
+          </Text>
+          <Text style={styles.cardStatsSep}>·</Text>
+          <Text style={styles.cardStatsText}>{VISIBILITY_LABEL[room.visibility]}</Text>
+        </View>
+      </View>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
   },
-  header: {
-    paddingHorizontal: Spacing[6],
+  flex: {
+    flex: 1,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: Spacing[6],
+    paddingRight: Spacing[4],
     paddingTop: Spacing[3],
-    gap: Spacing[3],
+    paddingBottom: Spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.divider,
+    gap: Spacing[2],
   },
-  heading: {
-    fontFamily: Fonts.heading,
-    fontSize: 26,
-    color: Colors.text,
+  filterScroll: {
+    gap: Spacing[2],
+    paddingRight: Spacing[2],
   },
-  input: {
-    height: 48,
+  filterChip: {
+    height: 34,
+    paddingHorizontal: 14,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.divider,
-    paddingHorizontal: 18,
-    fontSize: 15,
-    color: Colors.text,
+    borderColor: colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterChipActive: {
+    backgroundColor: colors.accent.DEFAULT,
+    borderColor: colors.accent.DEFAULT,
+  },
+  filterChipText: {
     fontFamily: Fonts.body,
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  filterChipTextActive: {
+    color: colors.bg,
+  },
+  searchButton: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  scrollContent: {
+    paddingBottom: Spacing[8],
+  },
+  banner: {
+    backgroundColor: colors.accent.DEFAULT,
+    paddingHorizontal: Spacing[6],
+    paddingTop: Spacing[8],
+    paddingBottom: Spacing[7],
+  },
+  bannerHeading: {
+    fontFamily: Fonts.heading,
+    fontSize: 34,
+    lineHeight: 38,
+    color: colors.bg,
+  },
+  bannerSubtext: {
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    color: colors.bg,
+    opacity: 0.75,
+    marginTop: Spacing[3],
+    maxWidth: 320,
   },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     paddingHorizontal: Spacing[6],
-    paddingTop: Spacing[2],
+    paddingTop: Spacing[3],
   },
   empty: {
     flex: 1,
@@ -199,105 +346,141 @@ const styles = StyleSheet.create({
     gap: Spacing[2],
     paddingHorizontal: Spacing[6],
   },
+  emptyInline: {
+    alignItems: 'center',
+    gap: Spacing[2],
+    paddingVertical: Spacing[6],
+  },
   emptyHeading: {
     fontFamily: Fonts.heading,
     fontSize: 20,
-    color: Colors.text,
+    color: colors.text,
   },
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     textAlign: 'center',
   },
-  cta: {
-    marginTop: Spacing[4],
-    height: 44,
+  listWrap: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
     paddingHorizontal: Spacing[6],
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: Colors.accent.DEFAULT,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: Spacing[6],
   },
-  startRoomCta: {
-    height: 48,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: Colors.divider,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing[2],
-  },
-  ctaText: {
-    fontFamily: Fonts.heading,
-    fontSize: 15,
-    color: Colors.accent.DEFAULT,
+  sectionLabel: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 17,
+    color: colors.text,
+    marginBottom: Spacing[4],
   },
   list: {
-    paddingHorizontal: Spacing[6],
-    paddingTop: Spacing[4],
-    paddingBottom: Spacing[8],
-    gap: Spacing[3],
+    gap: Spacing[6],
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing[3],
-    padding: Spacing[3],
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-  },
-  roomIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+  fab: {
+    position: 'absolute',
+    right: Spacing[4],
+    width: 54,
+    height: 54,
+    borderRadius: Radius.pill,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  roomIconLetter: {
+  card: {
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+  },
+  cardBanner: {
+    height: 96,
+  },
+  cardBody: {
+    padding: Spacing[4],
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginTop: -38,
+    marginBottom: Spacing[3],
+  },
+  cardLogo: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.surface,
+  },
+  cardLogoLetter: {
     fontFamily: Fonts.heading,
-    fontSize: 18,
+    fontSize: 26,
     color: '#f6e7d2',
   },
-  rowContent: {
-    flex: 1,
-    gap: 2,
+  cardTitle: {
+    fontFamily: Fonts.heading,
+    fontSize: 18,
+    color: colors.text,
+    marginBottom: Spacing[1],
   },
-  roomName: {
+  cardBio: {
     fontFamily: Fonts.body,
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: Colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.neutral[400],
+    marginBottom: Spacing[3],
   },
-  roomMeta: {
+  cardStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  statDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  cardStatsText: {
     fontFamily: Fonts.body,
-    fontSize: 11.5,
-    color: Colors.neutral[400],
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.neutral[500],
+  },
+  cardStatsSep: {
+    fontFamily: Fonts.body,
+    fontSize: 12,
+    color: colors.neutral[500],
   },
   joinButton: {
-    height: 32,
-    paddingHorizontal: 16,
+    height: 34,
+    paddingHorizontal: 18,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },
   joinButtonSecondary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: Colors.accent2.DEFAULT,
+    borderColor: colors.accent2.DEFAULT,
   },
   joinButtonText: {
     fontFamily: Fonts.body,
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: '700',
-    color: Colors.bg,
+    color: colors.bg,
   },
   joinButtonTextSecondary: {
-    color: Colors.accent2[300],
+    color: colors.accent2[300],
   },
 });

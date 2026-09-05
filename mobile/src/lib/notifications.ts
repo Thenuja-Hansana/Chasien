@@ -98,6 +98,32 @@ export async function fetchUnreadCount(userId: string): Promise<number> {
   return count ?? 0;
 }
 
+/**
+ * Home's Room list needs "how much unseen activity in this specific
+ * Room" — a per-Room unread bubble, Telegram/WhatsApp-style — which is
+ * this same `notifications` table grouped by room_id instead of
+ * collapsed into one total the way fetchUnreadCount() is for the bell
+ * icon. PostgREST has no GROUP BY over REST, so this pulls the caller's
+ * unread, room-scoped rows (bounded by how much they actually have
+ * unread — never large in practice) and counts them client-side.
+ */
+export async function fetchRoomUnreadCounts(userId: string): Promise<Map<string, number>> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('room_id')
+    .eq('user_id', userId)
+    .is('read_at', null)
+    .not('room_id', 'is', null);
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    const roomId = row.room_id as string;
+    counts.set(roomId, (counts.get(roomId) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export async function markNotificationRead(id: string): Promise<void> {
   const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', id);
   if (error) throw error;

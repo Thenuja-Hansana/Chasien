@@ -1,12 +1,15 @@
+import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import TabBar from '@/components/TabBar';
-import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
+import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchInbox, subscribeToInbox, type InboxItem } from '@/lib/chat';
 
@@ -33,6 +36,10 @@ function previewFor(item: InboxItem) {
 
 export default function Chats() {
   const { session } = useAuth();
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const clearance = useTabBarClearance();
+  const blurTargetRef = useRef<View>(null);
   const [items, setItems] = useState<InboxItem[] | null>(null);
   const [filter, setFilter] = useState<Filter>('All');
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +77,7 @@ export default function Chats() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
       <View style={styles.header}>
         <Text style={styles.heading}>Chats</Text>
         <View style={styles.filterRow}>
@@ -91,14 +99,14 @@ export default function Chats() {
 
       {items === null ? (
         <View style={styles.empty}>
-          <ActivityIndicator color={Colors.accent.DEFAULT} />
+          <ActivityIndicator color={colors.accent.DEFAULT} />
         </View>
       ) : visible.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.body}>No chats here yet.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: clearance }]}>
           {pinned.length > 0 && (
             <>
               <Text style={styles.sectionLabel}>Pinned</Text>
@@ -117,13 +125,16 @@ export default function Chats() {
           )}
         </ScrollView>
       )}
+      </BlurTargetView>
 
-      <TabBar active="Chats" userId={session.user.id} />
+      <TabBar active="Chats" userId={session.user.id} blurTarget={blurTargetRef} />
     </SafeAreaView>
   );
 }
 
 function ChatRow({ item }: { item: InboxItem }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const avatarKey = item.kind === 'room_channel' ? (item.room_id ?? 'grit') : (item.otherUserId ?? 'mara');
   const letter = item.title.charAt(0).toUpperCase();
 
@@ -138,8 +149,8 @@ function ChatRow({ item }: { item: InboxItem }) {
           <Text style={styles.rowTitle} numberOfLines={1}>
             {item.kind === 'room_channel' ? `${item.title} · ${item.channel_name}` : item.title}
           </Text>
-          {item.pinned && <Icon name="bookmark" size={12} color={Colors.neutral[500]} filled />}
-          {item.muted && <Icon name="bellSlash" size={13} color={Colors.neutral[500]} />}
+          {item.pinned && <Icon name="bookmark" size={12} color={colors.neutral[500]} filled />}
+          {item.muted && <Icon name="bellSlash" size={13} color={colors.neutral[500]} />}
         </View>
         <Text style={styles.rowPreview} numberOfLines={1}>
           {previewFor(item)}
@@ -157,21 +168,24 @@ function ChatRow({ item }: { item: InboxItem }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
+  },
+  flex: {
+    flex: 1,
   },
   header: {
     paddingHorizontal: Spacing[6],
-    paddingTop: Spacing[3],
+    paddingTop: Spacing[4],
     paddingBottom: Spacing[3],
     gap: Spacing[3],
   },
   heading: {
     fontFamily: Fonts.heading,
     fontSize: 26,
-    color: Colors.text,
+    color: colors.text,
   },
   filterRow: {
     flexDirection: 'row',
@@ -182,27 +196,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     alignItems: 'center',
     justifyContent: 'center',
   },
   chipActive: {
-    backgroundColor: Colors.accent.DEFAULT,
-    borderColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
+    borderColor: colors.accent.DEFAULT,
   },
   chipText: {
     fontFamily: Fonts.body,
     fontSize: 12.5,
     fontWeight: '600',
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   chipTextActive: {
-    color: Colors.bg,
+    color: colors.bg,
   },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     paddingHorizontal: Spacing[6],
   },
   empty: {
@@ -213,10 +227,13 @@ const styles = StyleSheet.create({
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   list: {
     paddingBottom: Spacing[8],
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   sectionLabel: {
     fontFamily: Fonts.body,
@@ -224,7 +241,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[3],
     paddingBottom: Spacing[1],
@@ -237,7 +254,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   rowPinned: {
-    backgroundColor: `${Colors.accent.DEFAULT}12`,
+    backgroundColor: `${colors.accent.DEFAULT}12`,
   },
   rowContent: {
     flex: 1,
@@ -253,13 +270,13 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
+    color: colors.text,
     flexShrink: 1,
   },
   rowPreview: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   rowMeta: {
     alignItems: 'flex-end',
@@ -268,14 +285,14 @@ const styles = StyleSheet.create({
   rowTime: {
     fontFamily: Fonts.body,
     fontSize: 11,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   unreadBadge: {
     minWidth: 20,
     height: 20,
     paddingHorizontal: 6,
     borderRadius: 999,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -283,6 +300,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 11.5,
     fontWeight: '700',
-    color: Colors.bg,
+    color: colors.bg,
   },
 });

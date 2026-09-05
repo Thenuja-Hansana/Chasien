@@ -1,12 +1,14 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useFocusHighlight } from '@/hooks/use-focus-highlight';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { captureImageOrVideo, pickImageOrVideo, type PickedMedia } from '@/lib/media';
 import { fetchRoomBySlug, type Room } from '@/lib/rooms';
@@ -27,10 +29,13 @@ import { createStory } from '@/lib/stories';
 export default function CreateStory() {
   const { session } = useAuth();
   const { communityId } = useLocalSearchParams<{ communityId: string }>();
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [room, setRoom] = useState<Room | null>(null);
   const [media, setMedia] = useState<PickedMedia | null>(null);
   const [caption, setCaption] = useState('');
+  const captionFocus = useFocusHighlight();
   const [submitting, setSubmitting] = useState(false);
   const [statusLine, setStatusLine] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +89,8 @@ export default function CreateStory() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} disabled={submitting}>
             <Text style={styles.headerAction}>Cancel</Text>
@@ -93,7 +98,7 @@ export default function CreateStory() {
           <Text style={styles.headingText}>New story</Text>
           <Pressable onPress={handleSubmit} disabled={!canSubmit}>
             {submitting ? (
-              <ActivityIndicator color={Colors.accent.DEFAULT} />
+              <ActivityIndicator color={colors.accent.DEFAULT} />
             ) : (
               <Text style={[styles.headerAction, !canSubmit && styles.headerActionDisabled]}>Share</Text>
             )}
@@ -108,18 +113,18 @@ export default function CreateStory() {
               <Image source={{ uri: media.uri }} style={styles.media} contentFit="cover" />
             )}
             <Pressable style={styles.changeMedia} onPress={() => setMedia(null)} disabled={submitting} hitSlop={8}>
-              <Icon name="close" size={16} color={Colors.text} />
+              <Icon name="close" size={16} color={colors.text} />
             </Pressable>
           </View>
         ) : (
           <View style={styles.mediaWrap}>
             <View style={styles.pickChoice}>
               <Pressable style={styles.pickButton} onPress={handleCapture} disabled={submitting}>
-                <Icon name="camera" size={22} color={Colors.accent.DEFAULT} />
+                <Icon name="camera" size={22} color={colors.accent.DEFAULT} />
                 <Text style={styles.pickButtonText}>Take photo or video</Text>
               </Pressable>
               <Pressable style={styles.pickButton} onPress={handlePick} disabled={submitting}>
-                <Icon name="addPhoto" size={22} color={Colors.accent.DEFAULT} />
+                <Icon name="addPhoto" size={22} color={colors.accent.DEFAULT} />
                 <Text style={styles.pickButtonText}>Choose from gallery</Text>
               </Pressable>
             </View>
@@ -127,11 +132,13 @@ export default function CreateStory() {
         )}
 
         <TextInput
-          style={styles.caption}
+          style={[styles.caption, captionFocus.focused && styles.captionFocused]}
           value={caption}
           onChangeText={setCaption}
+          onFocus={captionFocus.onFocus}
+          onBlur={captionFocus.onBlur}
           placeholder={room ? `Say something about this, ${room.name}…` : 'Add a caption…'}
-          placeholderTextColor={Colors.neutral[500]}
+          placeholderTextColor={colors.neutral[500]}
           multiline
           editable={!submitting}
         />
@@ -144,6 +151,8 @@ export default function CreateStory() {
 }
 
 function StoryVideoPreview({ uri }: { uri: string }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
     p.play();
@@ -151,10 +160,10 @@ function StoryVideoPreview({ uri }: { uri: string }) {
   return <VideoView player={player} style={styles.media} contentFit="cover" nativeControls={false} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
   },
   flex: {
     flex: 1,
@@ -164,18 +173,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing[6],
-    paddingTop: Spacing[3],
+    paddingTop: Spacing[4],
     paddingBottom: Spacing[4],
   },
   headingText: {
     fontFamily: Fonts.heading,
     fontSize: 16,
-    color: Colors.text,
+    color: colors.text,
   },
   headerAction: {
     fontFamily: Fonts.bodyBold,
     fontSize: 14,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
   },
   headerActionDisabled: {
     opacity: 0.35,
@@ -185,7 +194,7 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing[6],
     borderRadius: Radius.md,
     overflow: 'hidden',
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
   },
   media: {
     width: '100%',
@@ -218,38 +227,42 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
   },
   pickButtonText: {
     fontFamily: Fonts.bodySemibold,
     fontSize: 13.5,
-    color: Colors.accent[300],
+    color: colors.accent[300],
   },
   caption: {
     minHeight: 60,
     margin: Spacing[6],
     borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     padding: Spacing[4],
     fontSize: 15,
     lineHeight: 22,
-    color: Colors.text,
+    color: colors.text,
     fontFamily: Fonts.body,
     textAlignVertical: 'top',
+  },
+  captionFocused: {
+    borderColor: colors.accent.DEFAULT,
+    borderWidth: 1.5,
   },
   status: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent2[300],
+    color: colors.accent2[300],
     textAlign: 'center',
     paddingBottom: Spacing[3],
   },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     textAlign: 'center',
     paddingBottom: Spacing[3],
   },

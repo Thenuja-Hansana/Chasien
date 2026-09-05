@@ -1,9 +1,11 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useMemo } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import type { Message } from '@/lib/chat';
 
 function formatTime(iso: string) {
@@ -13,6 +15,8 @@ function formatTime(iso: string) {
 function VoicePlayer({ uri, mine }: { uri: string; mine: boolean }) {
   const player = useAudioPlayer(uri);
   const status = useAudioPlayerStatus(player);
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <Pressable
@@ -21,7 +25,7 @@ function VoicePlayer({ uri, mine }: { uri: string; mine: boolean }) {
       hitSlop={8}
     >
       <View style={[styles.voicePlayButton, mine && styles.voicePlayButtonMine]}>
-        <Icon name={status.playing ? 'pause' : 'play'} size={14} color={mine ? Colors.bg : Colors.text} filled />
+        <Icon name={status.playing ? 'pause' : 'play'} size={14} color={mine ? colors.bg : colors.text} filled />
       </View>
       <View style={[styles.voiceTrack, mine && styles.voiceTrackMine]}>
         <View
@@ -56,6 +60,8 @@ export default function MessageBubble({
 }) {
   const reactionCounts = new Map<string, number>();
   for (const r of message.reactions) reactionCounts.set(r.emoji, (reactionCounts.get(r.emoji) ?? 0) + 1);
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (mine) {
     return (
@@ -80,7 +86,7 @@ export default function MessageBubble({
         </Pressable>
         <View style={styles.mineMetaRow}>
           <Text style={styles.metaText}>{formatTime(message.created_at)}</Text>
-          {showRead && <Icon name="checkDouble" size={14} color={Colors.accent2[300]} strokeWidth={2.6} />}
+          {showRead && <Icon name="checkDouble" size={14} color={colors.accent2[300]} strokeWidth={2.6} />}
         </View>
         {reactionCounts.size > 0 && (
           <View style={styles.reactionRow}>
@@ -132,7 +138,7 @@ export default function MessageBubble({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   mineWrap: {
     alignSelf: 'flex-end',
     maxWidth: '75%',
@@ -153,12 +159,12 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   mineBubble: {
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     borderRadius: 18,
     borderBottomRightRadius: 6,
   },
   theirsBubble: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 18,
     borderBottomLeftRadius: 6,
   },
@@ -166,17 +172,17 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 14.5,
     lineHeight: 20,
-    color: Colors.bg,
+    color: colors.bg,
   },
   theirsText: {
     fontFamily: Fonts.body,
     fontSize: 14.5,
     lineHeight: 20,
-    color: Colors.text,
+    color: colors.text,
   },
   inlineTime: {
     fontSize: 10.5,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   mineMetaRow: {
     flexDirection: 'row',
@@ -189,16 +195,16 @@ const styles = StyleSheet.create({
   metaText: {
     fontFamily: Fonts.body,
     fontSize: 10.5,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   mineImage: {
     width: 200,
     height: 150,
     borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
   },
   theirsImageWrap: {
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: 18,
     padding: 5,
     width: 200,
@@ -207,12 +213,12 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 150,
     borderRadius: 14,
-    backgroundColor: Colors.neutral[800],
+    backgroundColor: colors.neutral[800],
   },
   imageTime: {
     fontFamily: Fonts.body,
     fontSize: 10.5,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     textAlign: 'right',
     paddingTop: 5,
     paddingRight: 2,
@@ -229,18 +235,18 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 999,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   voicePlayButtonMine: {
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
   },
   voiceTrack: {
     flex: 1,
     height: 4,
     borderRadius: 999,
-    backgroundColor: Colors.divider,
+    backgroundColor: colors.divider,
     overflow: 'hidden',
   },
   voiceTrackMine: {
@@ -248,10 +254,10 @@ const styles = StyleSheet.create({
   },
   voiceProgress: {
     height: '100%',
-    backgroundColor: Colors.accent2.DEFAULT,
+    backgroundColor: colors.accent2.DEFAULT,
   },
   voiceProgressMine: {
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
   },
   reactionRow: {
     flexDirection: 'row',
@@ -262,8 +268,8 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 11.5,
     fontWeight: '700',
-    color: Colors.text,
-    backgroundColor: `${Colors.accent.DEFAULT}33`,
+    color: colors.text,
+    backgroundColor: `${colors.accent.DEFAULT}33`,
     paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: 999,

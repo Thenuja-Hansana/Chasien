@@ -8,7 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
-import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { Fonts, Spacing, type ThemeColors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { fetchRoomBySlug } from '@/lib/rooms';
 import { relativeTime } from '@/lib/posts';
 import { fetchActiveStories, signStoryUrls, type Story } from '@/lib/stories';
@@ -54,6 +55,8 @@ const IMAGE_DURATION_MS = 5000;
 
 export default function StoryViewer() {
   const { communityId, authorId } = useLocalSearchParams<{ communityId: string; authorId?: string }>();
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [stories, setStories] = useState<Story[] | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
   const [authorIndex, setAuthorIndex] = useState(0);
@@ -154,21 +157,21 @@ export default function StoryViewer() {
 
   if (stories === null) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <ActivityIndicator color={Colors.accent.DEFAULT} />
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
+        <ActivityIndicator color={colors.accent.DEFAULT} />
       </SafeAreaView>
     );
   }
 
   if (error || groups.length === 0) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <Text style={styles.headingText} numberOfLines={1}>
             {communityId}
           </Text>
           <Pressable onPress={goHome} hitSlop={12}>
-            <Icon name="close" size={22} color={Colors.text} />
+            <Icon name="close" size={22} color={colors.text} />
           </Pressable>
         </View>
         <View style={styles.empty}>
@@ -194,7 +197,7 @@ export default function StoryViewer() {
       <LinearGradient colors={['rgba(0,0,0,.65)', 'transparent']} style={styles.topShade} />
       <LinearGradient colors={['transparent', 'rgba(0,0,0,.75)']} style={styles.bottomShade} />
 
-      <SafeAreaView edges={['top']} style={styles.foreground}>
+      <SafeAreaView edges={['top', 'bottom']} style={styles.foreground}>
         <View style={styles.progressRow}>
           {/* eslint-disable-next-line react-hooks/refs -- progressAnim is
               an Animated.Value, not a plain ref: reading it in a style
@@ -283,7 +286,7 @@ function StoryVideo({ uri, onProgress, onEnd }: { uri: string; onProgress: (frac
   return <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0c0a08',
@@ -297,13 +300,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing[6],
-    paddingTop: Spacing[3],
+    paddingTop: Spacing[4],
     paddingBottom: Spacing[4],
   },
   headingText: {
     fontFamily: Fonts.heading,
     fontSize: 17,
-    color: Colors.text,
+    color: colors.text,
   },
   empty: {
     flex: 1,
@@ -313,7 +316,7 @@ const styles = StyleSheet.create({
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   topShade: {
     position: 'absolute',
@@ -373,7 +376,7 @@ const styles = StyleSheet.create({
   authorName: {
     fontFamily: Fonts.bodyBold,
     fontSize: 14,
-    color: Colors.text,
+    color: colors.text,
   },
   headerMeta: {
     fontFamily: Fonts.body,
@@ -410,7 +413,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 14.5,
     lineHeight: 20,
-    color: Colors.text,
+    color: colors.text,
     maxWidth: 270,
   },
 });

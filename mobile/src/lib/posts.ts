@@ -313,6 +313,59 @@ export async function votePoll(pollId: string, optionId: string, userId: string,
   if (error) throw error;
 }
 
+export type RoomActivityPreview = { authorName: string; summary: string; createdAt: string };
+
+const ACTIVITY_PREVIEW_MAX_CHARS = 60;
+
+function truncate(text: string, max: number) {
+  const trimmed = text.trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max).trimEnd()}…` : trimmed;
+}
+
+/**
+ * The single newest post in a Room, condensed into a WhatsApp/Telegram-
+ * style "Name: content" line (plus its timestamp) for Home's Room list.
+ * A poll's question takes priority over the post's own text (the more
+ * notable content when both exist on one post), then the text itself,
+ * then a photo fallback for an image with no caption. Returns null when
+ * the Room has no posts yet — distinct from "still loading", which the
+ * caller represents separately.
+ *
+ * Scoped to posts only, not stories: stories already get their own ring
+ * on Home and expire in 24h, so folding them into "latest activity" would
+ * make that phrase mean two different things depending on timing.
+ */
+export async function fetchLatestPostPreview(roomId: string): Promise<RoomActivityPreview | null> {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('text, created_at, profiles!posts_author_id_fkey(name), post_media(url), polls(question)')
+    .eq('room_id', roomId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as unknown as {
+    text: string | null;
+    created_at: string;
+    profiles: { name: string } | null;
+    post_media: { url: string }[];
+    polls: { question: string } | null;
+  };
+
+  const summary = row.polls
+    ? `New poll — ${row.polls.question}`
+    : row.text
+      ? truncate(row.text, ACTIVITY_PREVIEW_MAX_CHARS)
+      : row.post_media.length > 0
+        ? '📷 Photo'
+        : '';
+
+  return { authorName: row.profiles?.name ?? 'Someone', summary, createdAt: row.created_at };
+}
+
 /** "3h", "2d" — the compact relative stamp the mock uses on every post. */
 export function relativeTime(iso: string) {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));

@@ -70,7 +70,14 @@ this phase is entirely the fan-out. A grouped Activity feed
 (`app/notifications.tsx`, Today/This week/Older), a per-Room mute
 toggle, an unread badge on the feed's bell icon, and a mods-only pin
 action in post detail round out the client side. See decision-log,
-2026-09-02. Next: Phase 9 — Trust & Safety.
+2026-09-02.
+
+**2026-09-02: starting the Bones Phase** — a UI/UX polish and mobile
+performance pass across every screen built in Phases 0-8, inserted ahead
+of Phase 9 (Trust & Safety) since real-device testing keeps surfacing UX
+issues late and the surface area only grows from here. Verified on the
+Galaxy A14, the same physical device used since Phase 6. Next after this:
+Phase 9 — Trust & Safety.
 
 Previously: the feed is real end to end — posts with text, images, and
 polls; likes; one-level threaded comments — all verified with two real
@@ -380,6 +387,56 @@ has a real trigger and a real push notification. ✅ See decision-log,
 
 ---
 
+## Bones Phase — UI/UX polish & mobile performance
+
+Goal: the app should feel good and run smoothly on the real hardware
+available, not just be feature-complete. Inserted here, ahead of Trust &
+Safety, on purpose — every phase so far has been "make the feature real,"
+verified mostly on a single physical device (the Galaxy A14) plus a
+browser, and real-device testing has already surfaced UX problems late
+(Phase 7's story sequencing/progress bars, Phase 8's bucket grouping).
+Better to do one systematic pass across every existing screen now, while
+the surface area is still Phases 0-8's worth and not Phases 0-13's. Two
+items below are pulled forward from Phase 10 (list virtualization/image
+caching, loading/empty/error-state audit) rather than duplicated there —
+Phase 10 keeps a re-verification pass instead, see its note below.
+
+- [ ] UI consistency audit: every existing screen checked against
+      `app_reference/`'s tokens (spacing, type scale, color, corner
+      radii, iconography) — fix drift, don't redesign
+- [ ] Small-screen audit: verify every screen on a small form factor
+      (compact Android width, e.g. an iPhone-SE-class 375px-equivalent)
+      — check for truncation, overflow, tab bar / keyboard collisions
+- [ ] List virtualization pass: tune `FlatList` (or migrate hot lists to
+      `FlashList`) — `windowSize`, `removeClippedSubviews`,
+      `getItemLayout` where row height is knowable — for the feed, chat
+      message lists, notifications feed, and the story-ring row
+- [ ] Image loading/caching pass: `expo-image` cache policy, placeholders
+      (blurhash or solid-color), and right-sized variants for thumbnails
+      vs. full-screen views instead of always loading the full asset
+- [ ] Loading / empty / error states audited on every screen, not just
+      the happy path
+- [ ] Animation and transition polish (`react-native-reanimated`) —
+      screen transitions, tab switches, modal/sheet presentations
+- [ ] Cold start time measured and reduced (font loading sequence, bundle
+      size) — measured on the Galaxy A14 itself, not an emulator or a
+      faster dev machine
+- [ ] Memory profiling pass on the Galaxy A14 — confirm no growth/leak
+      scrolling a long feed or chat history, given this project's own
+      8GB-RAM dev-machine constraints mean the target device can't be
+      assumed to have headroom either
+- [ ] Touch target and accessibility pass: minimum tap sizes, and
+      confirm layouts survive larger system font-scale settings without
+      breaking
+
+**Exit condition:** the app feels smooth (no dropped-frame scrolling on
+feed/chat/notifications, no layout breakage) on the Galaxy A14 specifically,
+and every screen visually matches `app_reference/`'s design language.
+Verify on the same real device the rest of this project has been verified
+on, not just in a browser or emulator.
+
+---
+
 ## Phase 9 — Trust & safety (store-required, not optional)
 
 Goal: the things that get a UGC app rejected if missing. See
@@ -406,9 +463,10 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
 - [ ] Crash reporting (free tier — e.g. Sentry free tier)
 - [ ] Offline behavior: what happens with no connection, for feed and chat
       — at minimum, don't crash or silently drop user actions
-- [ ] Loading / empty / error states audited on every screen, not just the
-      happy path
-- [ ] List virtualization / image caching pass for feed performance
+- [ ] Re-verify loading/empty/error states and list virtualization/image
+      caching still hold after Phase 9's new screens — the audit itself
+      moved to Bones Phase, done ahead of Trust & Safety; this is a
+      re-check, not the first pass
 - [ ] Security pass: re-verify RLS + Edge Function checks from Phase 1
       still hold after all the features built on top; rate-limit auth
       endpoints

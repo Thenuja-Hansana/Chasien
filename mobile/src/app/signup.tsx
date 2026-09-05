@@ -5,13 +5,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import Icon from '@/components/Icon';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useFocusHighlight } from '@/hooks/use-focus-highlight';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 
 // Matches the CHECK constraint on profiles.handle (identity_and_rooms
@@ -22,6 +27,8 @@ const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
 
 export default function SignUp() {
   const { signUp } = useAuth();
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [email, setEmail] = useState('');
   const [handle, setHandle] = useState('');
   const [name, setName] = useState('');
@@ -30,6 +37,11 @@ export default function SignUp() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkEmail, setCheckEmail] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const emailFocus = useFocusHighlight();
+  const handleFocus = useFocusHighlight();
+  const nameFocus = useFocusHighlight();
+  const passwordFocus = useFocusHighlight();
 
   const handleValid = HANDLE_PATTERN.test(handle);
   const canSubmit = email.trim().length > 0 && handleValid && name.trim().length > 0 && password.length >= 6 && agree;
@@ -72,7 +84,7 @@ export default function SignUp() {
 
   if (checkEmail) {
     return (
-      <View style={[styles.container, styles.centered]}>
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
         <Text style={styles.heading}>Check your email</Text>
         <Text style={styles.tagline}>
           We sent a confirmation link to {email}. Open it to activate your account, then log in.
@@ -80,137 +92,167 @@ export default function SignUp() {
         <Link href="/login" style={styles.footerLink}>
           Back to login
         </Link>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.content}>
-        <Text style={styles.heading}>Create your account</Text>
-        <Text style={styles.tagline}>This is how people find you across every room.</Text>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.content}>
+            <Text style={styles.heading}>Create your account</Text>
+            <Text style={styles.tagline}>This is how people find you across every room.</Text>
 
-        <View style={styles.fields}>
-          <View>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor={Colors.neutral[500]}
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-            />
-          </View>
-
-          <View>
-            <Text style={styles.label}>Handle</Text>
-            <TextInput
-              style={styles.input}
-              value={handle}
-              onChangeText={(v) => setHandle(v.replace(/\s/g, '').toLowerCase())}
-              placeholder="lowercase, numbers, underscores"
-              placeholderTextColor={Colors.neutral[500]}
-              autoCapitalize="none"
-            />
-            <Text style={styles.hint}>
-              {handle.length === 0 ? '3-30 characters, lowercase' : handleValid ? 'Looks good' : 'Lowercase letters, numbers, underscores only'}
-            </Text>
-          </View>
-
-          <View>
-            <Text style={styles.label}>Display name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              placeholderTextColor={Colors.neutral[500]}
-            />
-          </View>
-
-          <View>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="At least 6 characters"
-              placeholderTextColor={Colors.neutral[500]}
-              secureTextEntry
-              autoCapitalize="none"
-            />
-            <View style={styles.strengthRow}>
-              {[0, 1, 2, 3].map((i) => (
-                <View
-                  key={i}
-                  style={[styles.strengthBar, i < strength && styles.strengthBarFilled]}
+            <View style={styles.fields}>
+              <View>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={[styles.input, emailFocus.focused && styles.inputFocused]}
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={emailFocus.onFocus}
+                  onBlur={emailFocus.onBlur}
+                  placeholder="you@example.com"
+                  placeholderTextColor={colors.neutral[500]}
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
                 />
-              ))}
+              </View>
+
+              <View>
+                <Text style={styles.label}>Handle</Text>
+                <TextInput
+                  style={[styles.input, handleFocus.focused && styles.inputFocused]}
+                  value={handle}
+                  onChangeText={(v) => setHandle(v.replace(/\s/g, '').toLowerCase())}
+                  onFocus={handleFocus.onFocus}
+                  onBlur={handleFocus.onBlur}
+                  placeholder="lowercase, numbers, underscores"
+                  placeholderTextColor={colors.neutral[500]}
+                  autoCapitalize="none"
+                />
+                <Text style={styles.hint}>
+                  {handle.length === 0 ? '3-30 characters, lowercase' : handleValid ? 'Looks good' : 'Lowercase letters, numbers, underscores only'}
+                </Text>
+              </View>
+
+              <View>
+                <Text style={styles.label}>Display name</Text>
+                <TextInput
+                  style={[styles.input, nameFocus.focused && styles.inputFocused]}
+                  value={name}
+                  onChangeText={setName}
+                  onFocus={nameFocus.onFocus}
+                  onBlur={nameFocus.onBlur}
+                  placeholder="Your name"
+                  placeholderTextColor={colors.neutral[500]}
+                />
+              </View>
+
+              <View>
+                <Text style={styles.label}>Password</Text>
+                <View style={[styles.passwordWrap, passwordFocus.focused && styles.inputFocused]}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={password}
+                    onChangeText={setPassword}
+                    onFocus={passwordFocus.onFocus}
+                    onBlur={passwordFocus.onBlur}
+                    placeholder="At least 6 characters"
+                    placeholderTextColor={colors.neutral[500]}
+                    secureTextEntry={!passwordVisible}
+                    autoCapitalize="none"
+                  />
+                  <Pressable
+                    onPress={() => setPasswordVisible((v) => !v)}
+                    hitSlop={10}
+                    style={styles.eyeButton}
+                    accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                  >
+                    <Icon name={passwordVisible ? 'eyeOff' : 'eye'} size={19} color={colors.neutral[500]} />
+                  </Pressable>
+                </View>
+                <View style={styles.strengthRow}>
+                  {[0, 1, 2, 3].map((i) => (
+                    <View
+                      key={i}
+                      style={[styles.strengthBar, i < strength && styles.strengthBarFilled]}
+                    />
+                  ))}
+                </View>
+              </View>
             </View>
+
+            <Pressable style={styles.agreeRow} onPress={() => setAgree((v) => !v)}>
+              <View style={[styles.checkbox, agree && styles.checkboxChecked]}>
+                {agree && <Text style={styles.checkboxMark}>✓</Text>}
+              </View>
+              <Text style={styles.agreeText}>I&apos;m 16 or older and accept the community guidelines.</Text>
+            </Pressable>
+
+            {error && <Text style={styles.error}>{error}</Text>}
           </View>
-        </View>
 
-        <Pressable style={styles.agreeRow} onPress={() => setAgree((v) => !v)}>
-          <View style={[styles.checkbox, agree && styles.checkboxChecked]}>
-            {agree && <Text style={styles.checkboxMark}>✓</Text>}
+          <View style={styles.footer}>
+            <Pressable
+              style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={!canSubmit || submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color={colors.bg} />
+              ) : (
+                <Text style={styles.submitButtonText}>Create account</Text>
+              )}
+            </Pressable>
           </View>
-          <Text style={styles.agreeText}>I&apos;m 16 or older and accept the community guidelines.</Text>
-        </Pressable>
-
-        {error && <Text style={styles.error}>{error}</Text>}
-      </View>
-
-      <View style={styles.footer}>
-        <Pressable
-          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={!canSubmit || submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color={Colors.bg} />
-          ) : (
-            <Text style={styles.submitButtonText}>Create account</Text>
-          )}
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
-    justifyContent: 'space-between',
+    backgroundColor: colors.bg,
+  },
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   centered: {
     alignItems: 'flex-start',
     justifyContent: 'center',
     paddingHorizontal: Spacing[6],
     gap: Spacing[3],
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   content: {
     flex: 1,
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[8],
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   heading: {
     fontFamily: Fonts?.heading,
     fontSize: 30,
-    color: Colors.text,
+    color: colors.text,
     marginBottom: Spacing[2],
   },
   tagline: {
     fontFamily: Fonts?.body,
     fontSize: 14,
     lineHeight: 21,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     marginBottom: Spacing[6],
   },
   fields: {
@@ -222,24 +264,50 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     marginBottom: Spacing[2],
   },
   input: {
     height: 52,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     paddingHorizontal: 20,
     fontSize: 15,
-    color: Colors.text,
+    color: colors.text,
     fontFamily: Fonts?.body,
+  },
+  inputFocused: {
+    borderColor: colors.accent.DEFAULT,
+    borderWidth: 1.5,
+  },
+  passwordWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    borderRadius: Radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    paddingLeft: 20,
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    fontFamily: Fonts?.body,
+    height: '100%',
+  },
+  eyeButton: {
+    paddingHorizontal: 16,
+    height: '100%',
+    justifyContent: 'center',
   },
   hint: {
     fontFamily: Fonts?.body,
     fontSize: 12,
-    color: Colors.accent2[300],
+    color: colors.accent2[300],
     marginTop: Spacing[2],
     paddingLeft: 6,
   },
@@ -253,10 +321,10 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 3,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.divider,
+    backgroundColor: colors.divider,
   },
   strengthBarFilled: {
-    backgroundColor: Colors.accent2.DEFAULT,
+    backgroundColor: colors.accent2.DEFAULT,
   },
   agreeRow: {
     flexDirection: 'row',
@@ -269,16 +337,16 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 7,
     borderWidth: 1.5,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     borderWidth: 0,
   },
   checkboxMark: {
-    color: Colors.bg,
+    color: colors.bg,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -287,18 +355,18 @@ const styles = StyleSheet.create({
     fontFamily: Fonts?.body,
     fontSize: 12.5,
     lineHeight: 18,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   error: {
     fontFamily: Fonts?.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     marginTop: Spacing[3],
   },
   submitButton: {
     height: 54,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -308,16 +376,20 @@ const styles = StyleSheet.create({
   submitButtonText: {
     fontFamily: Fonts?.heading,
     fontSize: 16,
-    color: Colors.bg,
+    color: colors.bg,
   },
   footer: {
     paddingHorizontal: Spacing[6],
-    paddingBottom: Spacing[8],
+    paddingTop: Spacing[3],
+    paddingBottom: Spacing[4],
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   footerLink: {
     fontFamily: Fonts?.body,
     fontSize: 14,
     fontWeight: '700',
-    color: Colors.accent[300],
+    color: colors.accent[300],
   },
 });

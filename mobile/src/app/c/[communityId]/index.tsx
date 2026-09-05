@@ -1,15 +1,20 @@
+import { BlurTargetView } from 'expo-blur';
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import PostCard from '@/components/PostCard';
+import PostFab from '@/components/PostFab';
 import TabBar from '@/components/TabBar';
-import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
+import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchUnreadCount, subscribeToNotifications } from '@/lib/notifications';
+import { getCachedJoinedRoom } from '@/lib/room-cache';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
 import { FEED_PAGE_SIZE, fetchPost, fetchRoomFeed, setLiked, votePoll, type FeedPost } from '@/lib/posts';
 import { fetchActiveStories, type Story } from '@/lib/stories';
@@ -35,7 +40,15 @@ function dedupeStoryAuthors(stories: Story[]): Story[] {
 export default function RoomHome() {
   const { session } = useAuth();
   const { communityId } = useLocalSearchParams<{ communityId: string }>();
-  const [state, setState] = useState<LoadState>('loading');
+  // Render the header immediately if Home already told us this Room and
+  // our role in it (tapping in from the "my Rooms" list, the common case)
+  // instead of starting on a blank loading screen every time — see
+  // lib/room-cache.ts. `load()` below still re-fetches to catch anything
+  // that's actually changed since.
+  const [state, setState] = useState<LoadState>(() => {
+    const cached = getCachedJoinedRoom(communityId);
+    return cached ? { room: cached.room, membership: { role: cached.myRole, join_state: 'approved' } } : 'loading';
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +64,10 @@ export default function RoomHome() {
   // media on its own when it's actually opened.
   const [activeStories, setActiveStories] = useState<Story[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const clearance = useTabBarClearance();
+  const blurTargetRef = useRef<View>(null);
 
   const userId = session?.user.id;
 
@@ -67,13 +84,23 @@ export default function RoomHome() {
 
   const load = useCallback(async () => {
     if (!userId) return;
+    // Cache hit: the feed and stories fetch don't actually depend on
+    // fresh room+membership data (only on the room's id, which the cache
+    // already gives us), so start them right away instead of gating both
+    // behind a room+membership round trip that, for a Room you're already
+    // in, almost always comes back unchanged.
+    const cached = getCachedJoinedRoom(communityId);
+    const immediateFeed = cached
+      ? Promise.all([loadFeed(cached.room.id), fetchActiveStories(cached.room.id).then(setActiveStories)])
+      : null;
     try {
       const room = await fetchRoomBySlug(communityId);
       const membership = room ? await fetchMyMembership(room.id, userId) : null;
       setState({ room, membership });
       if (room && membership?.join_state === 'approved') {
-        await loadFeed(room.id);
-        setActiveStories(await fetchActiveStories(room.id));
+        // Independent of each other either way — run together rather than
+        // one after the other.
+        await (immediateFeed ?? Promise.all([loadFeed(room.id), fetchActiveStories(room.id).then(setActiveStories)]));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load this Room.');
@@ -192,7 +219,7 @@ export default function RoomHome() {
   if (state === 'loading') {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <ActivityIndicator color={Colors.accent.DEFAULT} />
+        <ActivityIndicator color={colors.accent.DEFAULT} />
       </SafeAreaView>
     );
   }
@@ -219,7 +246,7 @@ export default function RoomHome() {
         {error && <Text style={styles.error}>{error}</Text>}
         <Pressable style={styles.cta} onPress={() => handleJoin(room)} disabled={busy}>
           {busy ? (
-            <ActivityIndicator color={Colors.bg} />
+            <ActivityIndicator color={colors.bg} />
           ) : (
             <Text style={styles.ctaText}>{room.visibility === 'public' ? 'Join' : 'Request to join'}</Text>
           )}
@@ -263,6 +290,7 @@ export default function RoomHome() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
       <View style={styles.header}>
         <Text style={styles.title} numberOfLines={1}>
           {room.name}
@@ -270,72 +298,81 @@ export default function RoomHome() {
         <View style={styles.headerActions}>
           <Link href="/notifications" asChild>
             <Pressable hitSlop={8} style={styles.bellWrap}>
-              <Icon name="bell" size={20} color={Colors.text} />
+              <Icon name="bell" size={20} color={colors.text} />
               {unreadCount > 0 && <View style={styles.unreadDot} />}
             </Pressable>
           </Link>
           <Link href="/search" asChild>
             <Pressable hitSlop={8}>
-              <Icon name="search" size={20} color={Colors.text} />
+              <Icon name="search" size={20} color={colors.text} />
             </Pressable>
           </Link>
           <Link href={{ pathname: '/c/[communityId]/settings', params: { communityId } }} asChild>
             <Pressable hitSlop={8}>
-              <Icon name="settings" size={20} color={Colors.text} />
+              <Icon name="settings" size={20} color={colors.text} />
             </Pressable>
           </Link>
         </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
-        <Link href={{ pathname: '/c/[communityId]/create-story', params: { communityId } }} asChild>
-          <Pressable style={styles.storyItem}>
-            <View style={styles.storyAddCircle}>
-              <Icon name="plus" size={22} color={Colors.accent.DEFAULT} />
-            </View>
-            <Text style={styles.storyLabel}>Your story</Text>
-          </Pressable>
-        </Link>
-        {dedupeStoryAuthors(activeStories).map((s) => (
-          <Pressable
-            key={s.author_id ?? s.id}
-            style={styles.storyItem}
-            onPress={() =>
-              router.push({
-                pathname: '/c/[communityId]/story',
-                params: { communityId, authorId: s.author_id ?? undefined },
-              })
-            }
-          >
-            <Avatar gradient={s.author_id ?? 'mara'} letter={s.authorName.charAt(0).toUpperCase()} size={60} ring />
-            <Text style={styles.storyLabel} numberOfLines={1}>
-              {s.authorHandle || s.authorName}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      {/* Hard height on a plain View wrapper, not on the ScrollView's own
+          `style` — a horizontal ScrollView on Android doesn't reliably
+          respect a height set that way and was stretching to fill
+          whatever vertical space happened to be free (visible as a huge
+          gap before the first post whenever that free space was large,
+          e.g. a Room with just one short post). A plain View's height is
+          a hard Yoga constraint the ScrollView is then measured within. */}
+      <View style={styles.storyScroll}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
+          <Link href={{ pathname: '/c/[communityId]/create-story', params: { communityId } }} asChild>
+            <Pressable style={styles.storyItem}>
+              <View style={styles.storyAddCircle}>
+                <Icon name="plus" size={22} color={colors.accent.DEFAULT} />
+              </View>
+              <Text style={styles.storyLabel}>Your story</Text>
+            </Pressable>
+          </Link>
+          {dedupeStoryAuthors(activeStories).map((s) => (
+            <Pressable
+              key={s.author_id ?? s.id}
+              style={styles.storyItem}
+              onPress={() =>
+                router.push({
+                  pathname: '/c/[communityId]/story',
+                  params: { communityId, authorId: s.author_id ?? undefined },
+                })
+              }
+            >
+              <Avatar gradient={s.author_id ?? 'mara'} letter={s.authorName.charAt(0).toUpperCase()} size={60} ring />
+              <Text style={styles.storyLabel} numberOfLines={1}>
+                {s.authorHandle || s.authorName}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
 
       {posts === null ? (
         <View style={styles.centered}>
-          <ActivityIndicator color={Colors.accent.DEFAULT} />
+          <ActivityIndicator color={colors.accent.DEFAULT} />
         </View>
       ) : (
         <FlatList
           data={posts}
           keyExtractor={(post) => post.id}
+          contentContainerStyle={[styles.feedContent, { paddingBottom: clearance }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => handleRefresh(room.id)}
-              tintColor={Colors.accent.DEFAULT}
+              tintColor={colors.accent.DEFAULT}
             />
           }
           ListHeaderComponent={
             posts.length > 0 ? (
               <View style={styles.newestRow}>
-                <Text style={styles.newestLabel}>Newest first</Text>
                 <View style={styles.newestRule} />
               </View>
             ) : null
@@ -349,7 +386,7 @@ export default function RoomHome() {
             </View>
           }
           ListFooterComponent={
-            loadingMore ? <ActivityIndicator style={styles.footerSpinner} color={Colors.accent.DEFAULT} /> : null
+            loadingMore ? <ActivityIndicator style={styles.footerSpinner} color={colors.accent.DEFAULT} /> : null
           }
           onEndReached={() => handleLoadMore(room.id)}
           onEndReachedThreshold={0.4}
@@ -368,24 +405,29 @@ export default function RoomHome() {
           )}
         />
       )}
+      </BlurTargetView>
 
-      {canPost && (
-        <Link href={{ pathname: '/c/[communityId]/create-post', params: { communityId } }} asChild>
-          <Pressable style={styles.fab}>
-            <Icon name="plus" size={24} color={Colors.bg} />
-          </Pressable>
-        </Link>
-      )}
-
-      <TabBar active="Home" communityId={communityId} userId={session.user.id} />
+      <TabBar active="Home" communityId={communityId} userId={session.user.id} blurTarget={blurTargetRef} />
+      {canPost && <PostFab communityId={communityId} />}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bg,
+    backgroundColor: colors.bg,
+  },
+  flex: {
+    flex: 1,
+  },
+  // Caps the feed at a readable line length and centers it on a tablet —
+  // a single-column social feed stretched edge-to-edge on a 10" screen
+  // reads as unfinished, not "responsive".
+  feedContent: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
   },
   centered: {
     flex: 1,
@@ -400,14 +442,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing[3],
     paddingHorizontal: Spacing[6],
-    paddingTop: Spacing[3],
+    paddingTop: Spacing[4],
     paddingBottom: Spacing[4],
   },
   title: {
     flex: 1,
     fontFamily: Fonts.heading,
     fontSize: 20,
-    color: Colors.text,
+    color: colors.text,
   },
   headerActions: {
     flexDirection: 'row',
@@ -423,15 +465,21 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 999,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     borderWidth: 1.5,
-    borderColor: Colors.bg,
+    borderColor: colors.bg,
+  },
+  // Story item content (60px avatar + gap + label) plus storyRow's own
+  // paddingBottom — matched explicitly rather than left for the
+  // ScrollView to infer, see the comment where this is used.
+  storyScroll: {
+    height: 92,
   },
   storyRow: {
     flexDirection: 'row',
     gap: Spacing[4],
     paddingHorizontal: Spacing[6],
-    paddingBottom: Spacing[4],
+    paddingBottom: Spacing[3],
   },
   storyItem: {
     alignItems: 'center',
@@ -444,33 +492,26 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: Colors.accent.DEFAULT,
+    borderColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },
   storyLabel: {
     fontFamily: Fonts.body,
     fontSize: 10.5,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   newestRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing[2],
     paddingHorizontal: Spacing[4],
+    paddingTop: Spacing[2],
     paddingBottom: Spacing[2],
-  },
-  newestLabel: {
-    fontFamily: Fonts.bodyBold,
-    fontSize: 10,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: Colors.accent[300],
   },
   newestRule: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.divider,
+    backgroundColor: colors.divider,
   },
   emptyFeed: {
     alignItems: 'center',
@@ -482,19 +523,19 @@ const styles = StyleSheet.create({
   emptyHeading: {
     fontFamily: Fonts.heading,
     fontSize: 20,
-    color: Colors.text,
+    color: colors.text,
     textAlign: 'center',
   },
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     textAlign: 'center',
   },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.accent.DEFAULT,
+    color: colors.accent.DEFAULT,
     textAlign: 'center',
     paddingHorizontal: Spacing[6],
     paddingBottom: Spacing[2],
@@ -507,14 +548,14 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: Spacing[6],
     borderRadius: Radius.pill,
-    backgroundColor: Colors.accent.DEFAULT,
+    backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ctaText: {
     fontFamily: Fonts.heading,
     fontSize: 15,
-    color: Colors.bg,
+    color: colors.bg,
   },
   inviteActions: {
     flexDirection: 'row',
@@ -530,30 +571,13 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: Colors.divider,
+    borderColor: colors.divider,
     alignItems: 'center',
     justifyContent: 'center',
   },
   declineCtaText: {
     fontFamily: Fonts.heading,
     fontSize: 15,
-    color: Colors.text,
-  },
-  fab: {
-    position: 'absolute',
-    right: Spacing[4],
-    bottom: 96,
-    width: 54,
-    height: 54,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.accent.DEFAULT,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // `boxShadow` rather than the shadow* family: RN Web logs a
-    // deprecation warning for shadowColor/Offset/Opacity/Radius on every
-    // render (32 of them in one verification run). `elevation` stays for
-    // Android, which doesn't read boxShadow.
-    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3)',
-    elevation: 6,
+    color: colors.text,
   },
 });

@@ -1,11 +1,13 @@
-import { Colors } from '@/constants/theme';
+import { useThemeContext } from '@/lib/theme-context';
+import type { ThemeColors } from '@/constants/theme';
 
 /**
- * Chasien has one deliberate dark palette, no light/dark switch — see
- * constants/theme.ts. This hook exists so components have a stable,
- * consistent way to reach the palette, the same shape a future
- * light/dark-aware version would have.
+ * The active palette (Light or Dark, per the user's Settings choice or
+ * the OS default) — see `lib/theme-context.tsx`. This is the one hook
+ * every screen/component reaches for instead of importing a static
+ * `Colors` object, so the whole app re-renders in the new palette the
+ * moment the mode changes.
  */
-export function useTheme() {
-  return Colors;
+export function useTheme(): ThemeColors {
+  return useThemeContext().colors;
 }

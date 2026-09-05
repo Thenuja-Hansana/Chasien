@@ -7,6 +7,47 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-02 — Insert a "Bones Phase" (UI/UX + mobile performance) ahead of Phase 9
+
+**Decision:** Pause the phase-number sequence after Phase 8 and run an
+unnumbered "Bones Phase" — a UI/UX polish and mobile-performance pass
+across every screen shipped in Phases 0-8 — before starting Phase 9
+(Trust & Safety). Deliberately not renumbered into the sequence (i.e. not
+"Phase 9", pushing Trust & Safety to Phase 10 and everything after it up
+by one) to avoid touching every cross-reference to Phase 9-13 already
+written into `roadmap.md`, `decision-log.md`, and the `docs/phase/*.md`
+write-ups.
+
+**Context:** Every phase so far has been "make the feature real," verified
+mostly on one physical device (a Galaxy A14) plus a browser. That
+verification style has repeatedly caught *functional* bugs but has also
+repeatedly caught late-discovered *UX* problems that only showed up under
+real use — Phase 7's story viewer needed reworking to group by author and
+add real auto-advance progress bars, Phase 8's activity feed needed a
+third "Older" bucket the mock never modeled. Nothing so far has been a
+dedicated pass across the whole app for visual consistency against
+`app_reference/`'s design tokens, small-screen layout, or performance
+(list virtualization, image caching, cold start, memory) on the actual
+target hardware.
+
+**Why now, ahead of Trust & Safety:** Phase 9 only adds more screens
+(report/block flows, mod actions) to audit later; doing the UI/UX and
+performance pass now, while the surface area is still Phases 0-8's worth,
+is cheaper than doing it after Phase 9 adds more, and a polished app is
+also a better one to be manually testing report/block flows in. Phase
+10 ("Hardening") already listed two of these items (list virtualization/
+image caching, loading/empty/error-state audit) — those moved into Bones
+Phase as the actual first pass; Phase 10 keeps a lighter re-verification
+of the same items after Phase 9's new screens exist, rather than doing
+the work twice.
+
+**What this doesn't change:** the dependency ordering rationale for
+Phases 9-13 themselves is untouched — Bones Phase does no new backend or
+data-model work, just polishes what Phases 0-8 already built. Phase 9
+still starts immediately after.
+
+---
+
 ## 2026-09-02 — Real-device bug: a push token belongs to the device, not the account
 
 **What happened:** switching accounts on the same physical phone during
