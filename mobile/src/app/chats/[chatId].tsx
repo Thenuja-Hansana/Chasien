@@ -79,7 +79,9 @@ export default function ChatView() {
     const paths = messages.flatMap((m) => [m.image_url, m.voice_url].filter((p): p is string => !!p));
     const unsigned = paths.filter((p) => !mediaUrls.has(p));
     if (unsigned.length === 0) return;
-    signMessageMediaUrls(unsigned).then((signed) => setMediaUrls((prev) => new Map([...prev, ...signed])));
+    signMessageMediaUrls(unsigned)
+      .then((signed) => setMediaUrls((prev) => new Map([...prev, ...signed])))
+      .catch(() => {});
     // mediaUrls intentionally excluded — it's the thing this effect
     // grows, not something a change to it should re-run the effect for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
