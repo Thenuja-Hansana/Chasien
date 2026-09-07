@@ -3,7 +3,7 @@ import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
 export type RoomVisibility = 'public' | 'request' | 'invite';
-export type RoomRole = 'owner' | 'mod' | 'member';
+export type RoomRole = 'owner' | 'admin' | 'mod' | 'member';
 export type JoinState = 'pending' | 'approved' | 'invited';
 
 /**
@@ -187,7 +187,10 @@ export async function updateRoomSettings(
 // which applies the actual business rules as code instead. See
 // supabase/functions/room-membership/index.ts.
 
-async function callRoomMembership(body: Record<string, unknown>) {
+// Exported for lib/subgroups.ts — sub-group membership goes through
+// this exact same Edge Function (see its own top-of-file comment for
+// why), just with different `action` values.
+export async function callRoomMembership(body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke('room-membership', { body });
   if (error) {
     if (error instanceof FunctionsHttpError) {

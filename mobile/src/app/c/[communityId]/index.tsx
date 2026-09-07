@@ -286,7 +286,7 @@ export default function RoomHome() {
     );
   }
 
-  const canPost = room.members_can_post || membership.role === 'owner' || membership.role === 'mod';
+  const canPost = room.members_can_post || membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -296,6 +296,11 @@ export default function RoomHome() {
           {room.name}
         </Text>
         <View style={styles.headerActions}>
+          <Link href={{ pathname: '/c/[communityId]/chat', params: { communityId } }} asChild>
+            <Pressable hitSlop={8}>
+              <Icon name="comment" size={20} color={colors.text} />
+            </Pressable>
+          </Link>
           <Link href="/notifications" asChild>
             <Pressable hitSlop={8} style={styles.bellWrap}>
               <Icon name="bell" size={20} color={colors.text} />

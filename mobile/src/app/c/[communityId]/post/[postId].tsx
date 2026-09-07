@@ -71,7 +71,10 @@ export default function PostDetail() {
       setComments(freshComments);
       if (fresh) {
         const membership = await fetchMyMembership(fresh.roomId, userId);
-        setIsModerator(membership?.join_state === 'approved' && (membership.role === 'owner' || membership.role === 'mod'));
+        setIsModerator(
+          membership?.join_state === 'approved' &&
+            (membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'),
+        );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load this post.');

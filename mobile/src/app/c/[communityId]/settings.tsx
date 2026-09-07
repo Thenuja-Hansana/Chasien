@@ -59,7 +59,9 @@ export default function CommunitySettings() {
         setRoom(r);
         if (!r) return;
         const membership = await fetchMyMembership(r.id, userId);
-        const moderator = membership?.join_state === 'approved' && (membership.role === 'owner' || membership.role === 'mod');
+        const moderator =
+          membership?.join_state === 'approved' &&
+          (membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod');
         setIsModerator(moderator);
         setDescription(r.description ?? '');
         setVisibility(r.visibility);

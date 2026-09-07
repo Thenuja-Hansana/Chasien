@@ -40,6 +40,11 @@ export type InboxRow = {
   last_message_author_id: string | null;
   last_message_created_at: string | null;
   unread_count: number;
+  /** Room-channel only: true for the one permanent, auto-joined "General" channel; false for a sub-group. Null for a DM. */
+  is_default: boolean | null;
+  channel_visibility: 'public' | 'request' | 'invite' | null;
+  channel_description: string | null;
+  channel_member_count: number | null;
 };
 
 /** What the inbox row's kind-specific fields resolve to for display, from the current user's point of view. */
@@ -63,7 +68,12 @@ export async function fetchInbox(myUserId: string): Promise<InboxItem[]> {
 
 function toInboxItem(row: InboxRow, myUserId: string): InboxItem {
   if (row.kind === 'room_channel') {
-    return { ...row, title: row.room_name ?? 'Room', otherUserId: null };
+    // General shows just the Room's name, same as always; a sub-group
+    // needs its own name too, or every sub-group row in a mixed list
+    // (this view's the same one the global Chats list reads) would look
+    // identical to General and to each other.
+    const title = row.is_default ? (row.room_name ?? 'Room') : `${row.room_name ?? 'Room'} · ${row.channel_name ?? 'Sub-group'}`;
+    return { ...row, title, otherUserId: null };
   }
   const otherIsA = row.dm_user_a !== myUserId;
   return {
