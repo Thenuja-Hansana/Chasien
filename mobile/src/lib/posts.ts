@@ -313,7 +313,7 @@ export async function votePoll(pollId: string, optionId: string, userId: string,
   if (error) throw error;
 }
 
-export type RoomActivityPreview = { authorName: string; summary: string; createdAt: string };
+export type RoomActivityPreview = { authorName: string; summary: string; createdAt: string; imagePath: string | null };
 
 const ACTIVITY_PREVIEW_MAX_CHARS = 60;
 
@@ -363,7 +363,12 @@ export async function fetchLatestPostPreview(roomId: string): Promise<RoomActivi
         ? '📷 Photo'
         : '';
 
-  return { authorName: row.profiles?.name ?? 'Someone', summary, createdAt: row.created_at };
+  return {
+    authorName: row.profiles?.name ?? 'Someone',
+    summary,
+    createdAt: row.created_at,
+    imagePath: row.post_media[0]?.url ?? null,
+  };
 }
 
 /** "3h", "2d" — the compact relative stamp the mock uses on every post. */
