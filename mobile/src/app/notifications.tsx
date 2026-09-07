@@ -1,5 +1,5 @@
 import { BlurTargetView } from 'expo-blur';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -75,6 +75,7 @@ export default function Notifications() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
   const blurTargetRef = useRef<View>(null);
+  const { roomId, roomName } = useLocalSearchParams<{ roomId?: string; roomName?: string }>();
   const [items, setItems] = useState<AppNotification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -83,10 +84,10 @@ export default function Notifications() {
 
   const load = useCallback(() => {
     if (!userId) return;
-    fetchNotifications(userId)
+    fetchNotifications(userId, roomId)
       .then(setItems)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load activity.'));
-  }, [userId]);
+  }, [userId, roomId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -132,7 +133,12 @@ export default function Notifications() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <BlurTargetView ref={blurTargetRef} style={styles.flex}>
       <View style={styles.header}>
-        <Text style={styles.heading}>Activity</Text>
+        {roomId && (
+          <Pressable hitSlop={8} onPress={() => router.back()} style={styles.backButton}>
+            <Icon name="back" size={22} color={colors.text} strokeWidth={2.4} />
+          </Pressable>
+        )}
+        <Text style={styles.heading}>{roomId ? `${roomName ?? 'Room'} Activity` : 'Activity'}</Text>
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -143,7 +149,7 @@ export default function Notifications() {
         </View>
       ) : items.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.body}>Nothing here yet.</Text>
+          <Text style={styles.body}>{roomId ? 'No activity in this Room yet.' : 'Nothing here yet.'}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: clearance }]}>
@@ -215,9 +221,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[2],
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[4],
     paddingBottom: Spacing[2],
+  },
+  backButton: {
+    marginLeft: -Spacing[1],
   },
   heading: {
     fontFamily: Fonts.heading,

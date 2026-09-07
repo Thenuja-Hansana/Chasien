@@ -13,7 +13,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
-import { fetchUnreadCount, subscribeToNotifications } from '@/lib/notifications';
+import { fetchRoomUnreadCounts, markAllNotificationsRead, subscribeToNotifications } from '@/lib/notifications';
 import { getCachedJoinedRoom } from '@/lib/room-cache';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
 import { FEED_PAGE_SIZE, fetchPost, fetchRoomFeed, setLiked, votePoll, type FeedPost } from '@/lib/posts';
@@ -101,6 +101,14 @@ export default function RoomHome() {
         // Independent of each other either way — run together rather than
         // one after the other.
         await (immediateFeed ?? Promise.all([loadFeed(room.id), fetchActiveStories(room.id).then(setActiveStories)]));
+        // Actually opening a Room reads its activity, same as a real chat
+        // app marking a thread read the instant you open it — without
+        // this, the badge stayed stuck at whatever it was even after the
+        // member had genuinely seen everything, since nothing else in the
+        // app ever called this. Cheap no-op once already caught up.
+        markAllNotificationsRead(userId, room.id)
+          .then(() => setUnreadCount(0))
+          .catch(() => {});
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load this Room.');
@@ -113,10 +121,17 @@ export default function RoomHome() {
     }, [load]),
   );
 
+  // Room-scoped, not the app-wide total the bell shows everywhere else —
+  // the badge on this Room's own header bell now has to agree with what
+  // tapping it actually opens (this Room's Activity, not everything).
   const loadUnreadCount = useCallback(() => {
     if (!userId) return;
-    fetchUnreadCount(userId).then(setUnreadCount).catch(() => {});
-  }, [userId]);
+    const roomId = state !== 'loading' ? state.room?.id : undefined;
+    if (!roomId) return;
+    fetchRoomUnreadCounts(userId)
+      .then((counts) => setUnreadCount(counts.get(roomId) ?? 0))
+      .catch(() => {});
+  }, [userId, state]);
 
   useFocusEffect(useCallback(() => loadUnreadCount(), [loadUnreadCount]));
 
@@ -298,23 +313,18 @@ export default function RoomHome() {
         <View style={styles.headerActions}>
           <Link href={{ pathname: '/c/[communityId]/chat', params: { communityId } }} asChild>
             <Pressable hitSlop={8}>
-              <Icon name="comment" size={20} color={colors.text} />
+              <Icon name="comment" size={24} color={colors.text} />
             </Pressable>
           </Link>
-          <Link href="/notifications" asChild>
+          <Link href={{ pathname: '/notifications', params: { roomId: room.id, roomName: room.name } }} asChild>
             <Pressable hitSlop={8} style={styles.bellWrap}>
-              <Icon name="bell" size={20} color={colors.text} />
+              <Icon name="bell" size={24} color={colors.text} />
               {unreadCount > 0 && <View style={styles.unreadDot} />}
-            </Pressable>
-          </Link>
-          <Link href="/search" asChild>
-            <Pressable hitSlop={8}>
-              <Icon name="search" size={20} color={colors.text} />
             </Pressable>
           </Link>
           <Link href={{ pathname: '/c/[communityId]/settings', params: { communityId } }} asChild>
             <Pressable hitSlop={8}>
-              <Icon name="settings" size={20} color={colors.text} />
+              <Icon name="settings" size={24} color={colors.text} />
             </Pressable>
           </Link>
         </View>

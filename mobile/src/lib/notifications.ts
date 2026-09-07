@@ -76,14 +76,23 @@ function toAppNotification(row: NotificationRow): AppNotification {
 const NOTIFICATION_SELECT =
   'id, type, actor_id, room_id, data, read_at, created_at, profiles!notifications_actor_id_fkey(handle, name), rooms(slug, name)';
 
-/** Most recent 50 — this is an activity feed, not paginated history; matches the mock's own scope. */
-export async function fetchNotifications(userId: string): Promise<AppNotification[]> {
-  const { data, error } = await supabase
+/**
+ * Most recent 50 — this is an activity feed, not paginated history; matches
+ * the mock's own scope. `roomId`, when given, scopes this to one Room's own
+ * activity only (every row already carries `room_id`, so this is a plain
+ * equality filter, not a second query shape) — the per-Room bell icon uses
+ * this so a Room's own Activity view never shows another Room's notices.
+ */
+export async function fetchNotifications(userId: string, roomId?: string): Promise<AppNotification[]> {
+  let query = supabase
     .from('notifications')
     .select(NOTIFICATION_SELECT)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(50);
+  if (roomId) query = query.eq('room_id', roomId);
+
+  const { data, error } = await query;
   if (error) throw error;
   return ((data ?? []) as unknown as NotificationRow[]).map(toAppNotification);
 }
@@ -129,12 +138,17 @@ export async function markNotificationRead(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function markAllNotificationsRead(userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ read_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .is('read_at', null);
+/**
+ * `roomId`, when given, scopes this to one Room's own notifications —
+ * used when a member actually opens that Room (its feed, or its
+ * Activity view) so that Room's badge clears the way a real chat app's
+ * does, without touching unread activity from any other Room.
+ */
+export async function markAllNotificationsRead(userId: string, roomId?: string): Promise<void> {
+  let query = supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('user_id', userId).is('read_at', null);
+  if (roomId) query = query.eq('room_id', roomId);
+
+  const { error } = await query;
   if (error) throw error;
 }
 
