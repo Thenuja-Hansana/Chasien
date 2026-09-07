@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
@@ -14,12 +14,15 @@ import {
   fetchMyMembership,
   fetchRoomBySlug,
   fetchRoomMembers,
+  leaveRoom,
+  removeFromRoom,
   respondToRequest,
   ROOM_CATEGORIES,
   updateRoomSettings,
   type Room,
   type RoomCategory,
   type RoomMember,
+  type RoomRole,
   type RoomVisibility,
 } from '@/lib/rooms';
 
@@ -29,7 +32,12 @@ const VISIBILITY_OPTIONS: { key: RoomVisibility; label: string }[] = [
   { key: 'invite', label: 'Invite only' },
 ];
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Owner', mod: 'Mod', member: 'Member' };
+const ROLE_LABEL: Record<RoomRole, string> = { owner: 'Owner', admin: 'Admin', mod: 'Mod', member: 'Member' };
+// owner > admin > mod > member — mirrors ROLE_RANK in the room-membership
+// Edge Function exactly, so the UI never offers an action the backend
+// would reject (an admin never sees "Make Admin", a mod never sees a
+// manage button on the owner, etc).
+const ROLE_RANK: Record<RoomRole, number> = { owner: 3, admin: 2, mod: 1, member: 0 };
 
 export default function CommunitySettings() {
   const { session } = useAuth();
@@ -49,6 +57,8 @@ export default function CommunitySettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [manageTarget, setManageTarget] = useState<RoomMember | null>(null);
+  const [leaving, setLeaving] = useState(false);
 
   const userId = session?.user.id;
 
@@ -134,6 +144,9 @@ export default function CommunitySettings() {
               <View style={[styles.toggleThumb, notificationsMuted && styles.toggleThumbOn]} />
             </View>
           </Pressable>
+          <Pressable style={styles.leaveRow} onPress={handleLeave} disabled={leaving}>
+            {leaving ? <ActivityIndicator color={colors.accent.DEFAULT} /> : <Text style={styles.leaveText}>Leave Room</Text>}
+          </Pressable>
           {error && <Text style={styles.error}>{error}</Text>}
         </ScrollView>
       </SafeAreaView>
@@ -166,7 +179,8 @@ export default function CommunitySettings() {
     }
   }
 
-  async function handleRoleChange(targetUserId: string, newRole: 'mod' | 'member') {
+  async function handleRoleChange(targetUserId: string, newRole: RoomRole) {
+    setManageTarget(null);
     setBusyUserId(targetUserId);
     setError(null);
     try {
@@ -179,9 +193,36 @@ export default function CommunitySettings() {
     }
   }
 
+  async function handleRemove(targetUserId: string) {
+    setManageTarget(null);
+    setBusyUserId(targetUserId);
+    setError(null);
+    try {
+      await removeFromRoom(currentRoom.id, targetUserId);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove that member.');
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
+  async function handleLeave() {
+    setLeaving(true);
+    setError(null);
+    try {
+      await leaveRoom(currentRoom.id);
+      router.replace('/discover');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not leave this Room.');
+      setLeaving(false);
+    }
+  }
+
   const approvedMembers = members.filter((m) => m.join_state === 'approved');
   const pendingRequests = members.filter((m) => m.join_state === 'pending');
-  const isOwner = approvedMembers.some((m) => m.user_id === session.user.id && m.role === 'owner');
+  const myRole = approvedMembers.find((m) => m.user_id === session.user.id)?.role ?? 'member';
+  const myRank = ROLE_RANK[myRole];
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -292,25 +333,91 @@ export default function CommunitySettings() {
 
         <Text style={styles.label}>Roles</Text>
         <View style={styles.memberList}>
-          {approvedMembers.map((m) => (
-            <View key={m.user_id} style={styles.memberRow}>
-              <Text style={styles.memberName}>{m.name}</Text>
-              <View style={styles.memberRoleArea}>
-                <Text style={styles.roleBadge}>{ROLE_LABEL[m.role]}</Text>
-                {isOwner && m.user_id !== session.user.id && busyUserId !== m.user_id && (
-                  <Pressable onPress={() => handleRoleChange(m.user_id, m.role === 'mod' ? 'member' : 'mod')}>
-                    <Text style={styles.manageText}>{m.role === 'mod' ? 'Make member' : 'Make mod'}</Text>
-                  </Pressable>
-                )}
-                {busyUserId === m.user_id && <ActivityIndicator color={colors.accent.DEFAULT} />}
+          {approvedMembers.map((m) => {
+            const canManage = m.user_id !== session.user.id && myRank > ROLE_RANK[m.role] && busyUserId !== m.user_id;
+            return (
+              <View key={m.user_id} style={styles.memberRow}>
+                <Text style={styles.memberName}>{m.name}</Text>
+                <View style={styles.memberRoleArea}>
+                  <Text style={styles.roleBadge}>{ROLE_LABEL[m.role]}</Text>
+                  {canManage && (
+                    <Pressable onPress={() => setManageTarget(m)}>
+                      <Text style={styles.manageText}>Manage</Text>
+                    </Pressable>
+                  )}
+                  {busyUserId === m.user_id && <ActivityIndicator color={colors.accent.DEFAULT} />}
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
+
+        <Pressable style={styles.leaveRow} onPress={handleLeave} disabled={leaving}>
+          {leaving ? <ActivityIndicator color={colors.accent.DEFAULT} /> : <Text style={styles.leaveText}>Leave Room</Text>}
+        </Pressable>
 
         {error && <Text style={styles.error}>{error}</Text>}
       </ScrollView>
+
+      <ManageMemberSheet
+        member={manageTarget}
+        myRank={myRank}
+        onClose={() => setManageTarget(null)}
+        onChangeRole={handleRoleChange}
+        onRemove={handleRemove}
+      />
     </SafeAreaView>
+  );
+}
+
+function ManageMemberSheet({
+  member,
+  myRank,
+  onClose,
+  onChangeRole,
+  onRemove,
+}: {
+  member: RoomMember | null;
+  myRank: number;
+  onClose: () => void;
+  onChangeRole: (userId: string, role: RoomRole) => void;
+  onRemove: (userId: string) => void;
+}) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const roleOptions = (['admin', 'mod', 'member'] as RoomRole[]).filter(
+    (role) => member && role !== member.role && ROLE_RANK[role] < myRank,
+  );
+
+  return (
+    <Modal visible={!!member} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.sheetOverlay} onPress={onClose}>
+        {member && (
+          <View style={styles.sheetCard}>
+            <Text style={styles.sheetTitle} numberOfLines={1}>
+              {member.name}
+            </Text>
+            {roleOptions.map((role) => (
+              <Pressable key={role} style={styles.sheetOption} onPress={() => onChangeRole(member.user_id, role)}>
+                <Text style={styles.sheetOptionText}>Make {ROLE_LABEL[role]}</Text>
+              </Pressable>
+            ))}
+            {myRank === ROLE_RANK.owner && (
+              <Pressable style={styles.sheetOption} onPress={() => onChangeRole(member.user_id, 'owner')}>
+                <Text style={styles.sheetOptionText}>Transfer Ownership</Text>
+              </Pressable>
+            )}
+            <Pressable style={styles.sheetOption} onPress={() => onRemove(member.user_id)}>
+              <Text style={[styles.sheetOptionText, styles.sheetDangerText]}>Remove from Community</Text>
+            </Pressable>
+            <Pressable style={styles.sheetOption} onPress={onClose}>
+              <Text style={[styles.sheetOptionText, styles.sheetCancelText]}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -548,5 +655,60 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 13,
     color: colors.accent.DEFAULT,
     marginTop: Spacing[4],
+  },
+  leaveRow: {
+    marginTop: Spacing[6],
+    paddingVertical: Spacing[4],
+    borderTopWidth: 1,
+    borderColor: colors.divider,
+    alignItems: 'center',
+  },
+  leaveText: {
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.accent.DEFAULT,
+  },
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing[8],
+  },
+  sheetCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: Radius.lg,
+    backgroundColor: colors.surface,
+    paddingVertical: Spacing[2],
+    overflow: 'hidden',
+  },
+  sheetTitle: {
+    fontFamily: Fonts.body,
+    fontSize: 12.5,
+    color: colors.neutral[500],
+    textAlign: 'center',
+    paddingHorizontal: Spacing[4],
+    paddingTop: Spacing[3],
+    paddingBottom: Spacing[2],
+  },
+  sheetOption: {
+    paddingHorizontal: Spacing[6],
+    paddingVertical: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.divider,
+  },
+  sheetOptionText: {
+    fontFamily: Fonts.bodySemibold,
+    fontSize: 16,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  sheetDangerText: {
+    color: colors.accent.DEFAULT,
+  },
+  sheetCancelText: {
+    color: colors.neutral[500],
   },
 });

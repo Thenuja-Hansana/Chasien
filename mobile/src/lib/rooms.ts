@@ -221,3 +221,11 @@ export function respondToInvite(roomId: string, accept: boolean) {
 export function changeRole(roomId: string, targetUserId: string, newRole: RoomRole) {
   return callRoomMembership({ action: 'change_role', room_id: roomId, target_user_id: targetUserId, new_role: newRole });
 }
+
+export function leaveRoom(roomId: string) {
+  return callRoomMembership({ action: 'leave', room_id: roomId });
+}
+
+export function removeFromRoom(roomId: string, targetUserId: string) {
+  return callRoomMembership({ action: 'remove_from_room', room_id: roomId, target_user_id: targetUserId });
+}
