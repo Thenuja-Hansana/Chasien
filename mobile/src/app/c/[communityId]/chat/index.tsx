@@ -6,12 +6,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
-import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchInbox, type InboxItem } from '@/lib/chat';
 import { fetchMyMembership, fetchRoomBySlug, type Room } from '@/lib/rooms';
+import {
+  fetchMySubgroupParticipations,
+  fetchRoomSubgroups,
+  joinSubgroup,
+  respondToSubgroupInvite,
+  type Subgroup,
+  type SubgroupParticipation,
+} from '@/lib/subgroups';
+
+const VISIBILITY_LABEL = { public: 'Public', request: 'Request to join', invite: 'Invite only' } as const;
 
 function previewFor(item: InboxItem) {
   if (item.last_message_text) return item.last_message_text;
@@ -21,12 +31,14 @@ function previewFor(item: InboxItem) {
 }
 
 /**
- * A Room's own chat space: General (auto-joined the moment you join the
- * Room, always present) plus whichever sub-groups you've actually
- * joined — independent membership, never inherited from the Room join
- * (see the 20260905140xxx migrations). "Discover sub-groups" is the
- * separate All-Groups view, listing every sub-group whether joined or
- * not.
+ * A Room's own chat space — WhatsApp Community-style: the Main chat
+ * (General, auto-joined, always present) at the top, then every
+ * sub-group in the Community below it, joined or not, all on this one
+ * page. A sub-group you haven't joined shows its size and a Join/
+ * Request/Accept button instead of a preview; no separate Discover
+ * screen — sub-group visibility is independent of membership (you can
+ * see one exists without being in it), so this page just shows all of
+ * them at once, same as the rest of the Community's chat.
  */
 export default function RoomChat() {
   const { session } = useAuth();
@@ -38,7 +50,11 @@ export default function RoomChat() {
 
   const [room, setRoom] = useState<Room | null | 'loading'>('loading');
   const [canCreate, setCanCreate] = useState(false);
-  const [items, setItems] = useState<InboxItem[] | null>(null);
+  const [general, setGeneral] = useState<InboxItem | null>(null);
+  const [inboxByConversation, setInboxByConversation] = useState<Map<string, InboxItem>>(new Map());
+  const [subgroups, setSubgroups] = useState<Subgroup[] | null>(null);
+  const [participations, setParticipations] = useState<Map<string, SubgroupParticipation>>(new Map());
+  const [joiningId, setJoiningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const userId = session?.user.id;
@@ -49,9 +65,20 @@ export default function RoomChat() {
       const r = await fetchRoomBySlug(communityId);
       setRoom(r);
       if (!r) return;
-      const [membership, inbox] = await Promise.all([fetchMyMembership(r.id, userId), fetchInbox(userId)]);
+
+      const [membership, inbox, allSubgroups] = await Promise.all([
+        fetchMyMembership(r.id, userId),
+        fetchInbox(userId),
+        fetchRoomSubgroups(r.id),
+      ]);
       setCanCreate(membership?.role === 'owner' || membership?.role === 'admin');
-      setItems(inbox.filter((i) => i.kind === 'room_channel' && i.room_id === r.id));
+
+      const roomInbox = inbox.filter((i) => i.kind === 'room_channel' && i.room_id === r.id);
+      setGeneral(roomInbox.find((i) => i.is_default) ?? null);
+      setInboxByConversation(new Map(roomInbox.map((i) => [i.conversation_id, i])));
+
+      setSubgroups(allSubgroups);
+      setParticipations(await fetchMySubgroupParticipations(allSubgroups.map((s) => s.id), userId));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load this Room's chat.");
     }
@@ -61,7 +88,25 @@ export default function RoomChat() {
 
   if (!session) return null;
 
-  if (room === 'loading' || items === null) {
+  async function handleJoin(subgroup: Subgroup) {
+    const invited = participations.get(subgroup.id)?.join_state === 'invited';
+    setJoiningId(subgroup.id);
+    setError(null);
+    try {
+      if (invited) {
+        await respondToSubgroupInvite(subgroup.id, true);
+      } else {
+        await joinSubgroup(subgroup.id);
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not join that sub-group.');
+    } finally {
+      setJoiningId(null);
+    }
+  }
+
+  if (room === 'loading' || subgroups === null) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
         <ActivityIndicator color={colors.accent.DEFAULT} />
@@ -76,9 +121,6 @@ export default function RoomChat() {
       </SafeAreaView>
     );
   }
-
-  const general = items.find((i) => i.is_default);
-  const subgroups = items.filter((i) => !i.is_default);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -106,56 +148,113 @@ export default function RoomChat() {
         {error && <Text style={styles.error}>{error}</Text>}
 
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: clearance }]}>
-          {general && <ChatEntryRow item={general} />}
+          <Text style={styles.sectionLabel}>Main chat</Text>
+          {general && <ChatEntryRow label="General" item={general} />}
 
           <Text style={styles.sectionLabel}>Sub-groups</Text>
           {subgroups.length === 0 ? (
-            <Text style={styles.emptyNote}>You haven&apos;t joined any sub-groups yet.</Text>
+            <Text style={styles.emptyNote}>No sub-groups in this Room yet.</Text>
           ) : (
-            subgroups.map((item) => <ChatEntryRow key={item.conversation_id} item={item} />)
+            subgroups.map((s) => {
+              const participation = participations.get(s.id);
+              const inboxItem = inboxByConversation.get(s.id);
+              return participation?.join_state === 'approved' && !participation.banned ? (
+                <ChatEntryRow key={s.id} label={s.name} item={inboxItem} conversationId={s.id} />
+              ) : (
+                <BrowseSubgroupRow
+                  key={s.id}
+                  subgroup={s}
+                  participation={participation}
+                  joining={joiningId === s.id}
+                  onJoin={() => handleJoin(s)}
+                />
+              );
+            })
           )}
-
-          <Pressable
-            style={styles.discoverRow}
-            onPress={() => router.push({ pathname: '/c/[communityId]/chat/discover', params: { communityId } })}
-          >
-            <View style={styles.discoverIcon}>
-              <Icon name="search" size={18} color={colors.bg} strokeWidth={2.4} />
-            </View>
-            <Text style={styles.discoverText}>Discover sub-groups</Text>
-            <Icon name="chevronRight" size={18} color={colors.neutral[400]} />
-          </Pressable>
         </ScrollView>
       </BlurTargetView>
     </SafeAreaView>
   );
 }
 
-function ChatEntryRow({ item }: { item: InboxItem }) {
+function ChatEntryRow({ label, item, conversationId }: { label: string; item: InboxItem | undefined | null; conversationId?: string }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const label = item.is_default ? 'General' : (item.channel_name ?? 'Sub-group');
+  const targetId = item?.conversation_id ?? conversationId;
 
   return (
     <Pressable
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      onPress={() => router.push({ pathname: '/chats/[chatId]', params: { chatId: item.conversation_id } })}
+      onPress={() => targetId && router.push({ pathname: '/chats/[chatId]', params: { chatId: targetId } })}
     >
-      <Avatar gradient={item.room_id ?? 'grit'} letter={label.charAt(0).toUpperCase()} shape="square" size={48} />
+      <Avatar gradient={item?.room_id ?? 'grit'} letter={label.charAt(0).toUpperCase()} shape="square" size={48} />
       <View style={styles.rowContent}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {label}
         </Text>
         <Text style={styles.rowPreview} numberOfLines={1}>
-          {previewFor(item)}
+          {item ? previewFor(item) : 'No messages yet'}
         </Text>
       </View>
-      {item.unread_count > 0 && (
+      {item && item.unread_count > 0 && (
         <View style={styles.unreadBadge}>
           <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
         </View>
       )}
     </Pressable>
+  );
+}
+
+function BrowseSubgroupRow({
+  subgroup,
+  participation,
+  joining,
+  onJoin,
+}: {
+  subgroup: Subgroup;
+  participation: SubgroupParticipation | undefined;
+  joining: boolean;
+  onJoin: () => void;
+}) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  let actionLabel: string;
+  let disabled = false;
+  if (participation?.banned) {
+    actionLabel = 'Removed';
+    disabled = true;
+  } else if (participation?.join_state === 'pending') {
+    actionLabel = 'Requested';
+    disabled = true;
+  } else if (participation?.join_state === 'invited') {
+    actionLabel = 'Accept';
+  } else if (subgroup.visibility === 'invite') {
+    actionLabel = 'Invite only';
+    disabled = true;
+  } else {
+    actionLabel = subgroup.visibility === 'public' ? 'Join' : 'Request';
+  }
+
+  return (
+    <View style={styles.row}>
+      <Avatar gradient={subgroup.room_id} letter={subgroup.name.charAt(0).toUpperCase()} shape="square" size={48} />
+      <View style={styles.rowContent}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {subgroup.name}
+        </Text>
+        <Text style={styles.rowPreview} numberOfLines={1}>
+          {subgroup.member_count} member{subgroup.member_count === 1 ? '' : 's'} · {VISIBILITY_LABEL[subgroup.visibility]}
+        </Text>
+      </View>
+      <Pressable style={[styles.actionButton, disabled && styles.actionButtonSecondary]} onPress={onJoin} disabled={disabled || joining}>
+        {joining ? (
+          <ActivityIndicator size="small" color={colors.accent.DEFAULT} />
+        ) : (
+          <Text style={[styles.actionText, disabled && styles.actionTextSecondary]}>{actionLabel}</Text>
+        )}
+      </Pressable>
+    </View>
   );
 }
 
@@ -264,26 +363,26 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 11,
     color: colors.bg,
   },
-  discoverRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing[3],
-    paddingHorizontal: Spacing[6],
-    paddingVertical: Spacing[3],
-    marginTop: Spacing[3],
-  },
-  discoverIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 999,
+  actionButton: {
+    height: 32,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
     backgroundColor: colors.accent.DEFAULT,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  discoverText: {
-    flex: 1,
-    fontFamily: Fonts.bodySemibold,
-    fontSize: 14.5,
-    color: colors.text,
+  actionButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.divider,
+  },
+  actionText: {
+    fontFamily: Fonts.body,
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.bg,
+  },
+  actionTextSecondary: {
+    color: colors.neutral[400],
   },
 });
