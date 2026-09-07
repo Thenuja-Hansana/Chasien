@@ -33,6 +33,15 @@ function gradientsFor(colors: ThemeColors): Record<string, [string, string]> {
 
 type AvatarProps = {
   gradient: string;
+  /**
+   * A real per-Room `accent_color`, when the caller has one — takes over
+   * from `gradient`'s small hardcoded neutral-tone lookup entirely (flat
+   * fill, not a gradient), same treatment Home's own Room-row icon already
+   * uses. `gradient` stays required so every existing call site (DMs,
+   * profile avatars, stories — anything without a Room's own color) keeps
+   * working unchanged.
+   */
+  color?: string | null;
   letter: string;
   size?: number;
   shape?: 'circle' | 'square';
@@ -41,13 +50,21 @@ type AvatarProps = {
   style?: ViewStyle;
 };
 
-export default function Avatar({ gradient, letter, size = 40, shape = 'circle', ring = false, dot = false, style }: AvatarProps) {
+export default function Avatar({ gradient, color, letter, size = 40, shape = 'circle', ring = false, dot = false, style }: AvatarProps) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const gradientColors = gradientsFor(colors)[gradient] ?? gradientsFor(colors).mara;
   const radius = shape === 'circle' ? 999 : Math.max(10, size * 0.34);
 
-  const inner = (
+  const inner = color ? (
+    <View style={[styles.fill, { borderRadius: radius, backgroundColor: color }]}>
+      {/* Fixed warm off-white, not the theme-derived contrast the gradient
+          branch below uses — matches Home's roomIconLetter exactly, since
+          an arbitrary accent color can't be assumed to pair with either
+          theme's bg color the way the neutral gradient ramp is designed to. */}
+      <Text style={[styles.letter, { fontSize: size * 0.4, color: '#f6e7d2' }]}>{letter}</Text>
+    </View>
+  ) : (
     <LinearGradient
       colors={gradientColors}
       start={{ x: 0.15, y: 0 }}
