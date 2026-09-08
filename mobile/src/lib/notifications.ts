@@ -22,7 +22,17 @@ function uniqueSuffix() {
  * real RLS policies from Phase 1).
  */
 
-export type NotificationType = 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'new_post' | 'new_story' | 'message';
+export type NotificationType =
+  | 'reply'
+  | 'like'
+  | 'mention'
+  | 'join_request'
+  | 'pinned_post'
+  | 'new_post'
+  | 'new_story'
+  | 'message'
+  | 'friend_request'
+  | 'friend_accept';
 
 export type AppNotification = {
   id: string;
