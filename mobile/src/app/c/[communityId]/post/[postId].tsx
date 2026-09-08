@@ -23,6 +23,7 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { togglePostPin } from '@/lib/notifications';
+import { useUserPreview } from '@/lib/user-preview-context';
 import {
   addComment,
   fetchComments,
@@ -40,6 +41,7 @@ const MAX_HERO_HEIGHT_FRACTION = 0.5;
 
 export default function PostDetail() {
   const { session } = useAuth();
+  const { open: openUserPreview } = useUserPreview();
   const { communityId, postId } = useLocalSearchParams<{ communityId: string; postId: string }>();
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -235,14 +237,21 @@ export default function PostDetail() {
             </View>
 
             <View style={styles.authorRow}>
-              <Avatar
-                gradient={post.authorId ?? 'mara'}
-                letter={post.authorName.charAt(0).toUpperCase() || '?'}
-                size={34}
-              />
+              <Pressable disabled={!post.authorId} onPress={() => openUserPreview(post.authorId as string)}>
+                <Avatar
+                  gradient={post.authorId ?? 'mara'}
+                  letter={post.authorName.charAt(0).toUpperCase() || '?'}
+                  size={34}
+                />
+              </Pressable>
               <View style={styles.flex}>
                 <Text style={styles.postBody}>
-                  <Text style={styles.authorHandle}>{post.authorHandle} </Text>
+                  <Text
+                    style={styles.authorHandle}
+                    onPress={post.authorId ? () => openUserPreview(post.authorId as string) : undefined}
+                  >
+                    {post.authorHandle}{' '}
+                  </Text>
                   {post.text}
                   {post.tag ? <Text style={styles.tag}> {post.tag}</Text> : null}
                 </Text>
@@ -322,16 +331,24 @@ function CommentRow({
 }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { open: openUserPreview } = useUserPreview();
   return (
     <View style={styles.commentRow}>
-      <Avatar
-        gradient={comment.authorId ?? 'mara'}
-        letter={comment.authorName.charAt(0).toUpperCase() || '?'}
-        size={isReply ? 28 : 32}
-      />
+      <Pressable disabled={!comment.authorId} onPress={() => openUserPreview(comment.authorId as string)}>
+        <Avatar
+          gradient={comment.authorId ?? 'mara'}
+          letter={comment.authorName.charAt(0).toUpperCase() || '?'}
+          size={isReply ? 28 : 32}
+        />
+      </Pressable>
       <View style={styles.flex}>
         <Text style={styles.commentText}>
-          <Text style={styles.authorHandle}>{comment.authorHandle} </Text>
+          <Text
+            style={styles.authorHandle}
+            onPress={comment.authorId ? () => openUserPreview(comment.authorId as string) : undefined}
+          >
+            {comment.authorHandle}{' '}
+          </Text>
           {comment.text}
         </Text>
         <View style={styles.commentMeta}>

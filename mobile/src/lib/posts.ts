@@ -371,6 +371,45 @@ export async function fetchLatestPostPreview(roomId: string): Promise<RoomActivi
   };
 }
 
+export type AuthorPostPreview = { id: string; roomSlug: string; imagePath: string | null; text: string | null; hasPoll: boolean };
+
+/**
+ * The user-preview popup's small "some recent posts" strip, and the full
+ * profile page's own post grid. Deliberately just `eq('author_id', ...)`
+ * with no room_id filter — RLS on `posts` already only returns rows from
+ * Rooms the *viewer* is a member of, so this naturally shows only posts
+ * both people can actually see, the same guarantee every other cross-Room
+ * query in this app already leans on. `rooms(slug)` is only there so a
+ * tapped thumbnail can link straight to `/c/[communityId]/post/[postId]`
+ * — the same two-param route every other post link in the app already
+ * uses — without a second round-trip to look the Room back up.
+ */
+export async function fetchRecentPostsByAuthor(authorId: string, limit = 3): Promise<AuthorPostPreview[]> {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('id, text, post_media(url), polls(id), rooms(slug)')
+    .eq('author_id', authorId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+
+  const rows = data as unknown as {
+    id: string;
+    text: string | null;
+    post_media: { url: string }[];
+    polls: { id: string } | null;
+    rooms: { slug: string } | null;
+  }[];
+  return rows.map((row) => ({
+    id: row.id,
+    roomSlug: row.rooms?.slug ?? '',
+    imagePath: row.post_media[0]?.url ?? null,
+    text: row.text,
+    hasPoll: !!row.polls,
+  }));
+}
+
 /** "3h", "2d" — the compact relative stamp the mock uses on every post. */
 export function relativeTime(iso: string) {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));

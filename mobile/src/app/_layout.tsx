@@ -10,6 +10,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import { configureForegroundNotificationHandler, registerForPushNotifications, subscribeToNotificationTaps } from '@/lib/push';
 import { ThemeProvider as ChasienThemeProvider, useThemeContext } from '@/lib/theme-context';
+import { UserPreviewProvider } from '@/lib/user-preview-context';
 
 // Held open until fonts resolve so screens never flash with the platform
 // default font before Caprasimo/Figtree are ready — see constants/theme.ts.
@@ -108,6 +109,7 @@ function AppShell() {
     <ThemeProvider value={navigationTheme}>
       <AuthProvider>
         <AuthGate>
+          <UserPreviewProvider>
           <Stack screenOptions={{ headerShown: false }}>
             {/* The four main tab destinations (Home/Explore/Chats/You)
                 swap instantly instead of sliding in from the right — each
@@ -121,8 +123,9 @@ function AppShell() {
             <Stack.Screen name="index" options={{ animation: 'none' }} />
             <Stack.Screen name="discover" options={{ animation: 'none' }} />
             <Stack.Screen name="chats/index" options={{ animation: 'none' }} />
-            <Stack.Screen name="u/[userId]" options={{ animation: 'none' }} />
+            <Stack.Screen name="u/[userId]/index" options={{ animation: 'none' }} />
           </Stack>
+          </UserPreviewProvider>
         </AuthGate>
       </AuthProvider>
     </ThemeProvider>

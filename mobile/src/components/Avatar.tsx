@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
@@ -42,6 +43,8 @@ type AvatarProps = {
    * working unchanged.
    */
   color?: string | null;
+  /** A real uploaded photo (a signed URL, already resolved by the caller) — takes priority over both `color` and the gradient fallback below it. */
+  imageUrl?: string | null;
   letter: string;
   size?: number;
   shape?: 'circle' | 'square';
@@ -50,13 +53,15 @@ type AvatarProps = {
   style?: ViewStyle;
 };
 
-export default function Avatar({ gradient, color, letter, size = 40, shape = 'circle', ring = false, dot = false, style }: AvatarProps) {
+export default function Avatar({ gradient, color, imageUrl, letter, size = 40, shape = 'circle', ring = false, dot = false, style }: AvatarProps) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const gradientColors = gradientsFor(colors)[gradient] ?? gradientsFor(colors).mara;
   const radius = shape === 'circle' ? 999 : Math.max(10, size * 0.34);
 
-  const inner = color ? (
+  const inner = imageUrl ? (
+    <Image source={{ uri: imageUrl }} style={[styles.fill, { borderRadius: radius }]} contentFit="cover" />
+  ) : color ? (
     <View style={[styles.fill, { borderRadius: radius, backgroundColor: color }]}>
       {/* Fixed warm off-white, not the theme-derived contrast the gradient
           branch below uses — matches Home's roomIconLetter exactly, since

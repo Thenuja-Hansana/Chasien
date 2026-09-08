@@ -1,7 +1,11 @@
 import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { AppState } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
+
+/** How often to bump profiles.last_active_at while the app is open and in the foreground — a plain heartbeat, not real-time presence (see the migration's own comment for why). */
+const LAST_ACTIVE_INTERVAL_MS = 2 * 60 * 1000;
 
 type SignUpParams = {
   email: string;
@@ -42,6 +46,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId) return;
+
+    const bump = () => {
+      supabase.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('id', userId).then(() => {});
+    };
+    bump();
+
+    const interval = setInterval(bump, LAST_ACTIVE_INTERVAL_MS);
+    // Bumping only on the interval would leave a stale timestamp for
+    // however long someone had the app backgrounded before reopening it —
+    // catching the foreground transition directly makes "Active now"
+    // actually mean now.
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') bump();
+    });
+
+    return () => {
+      clearInterval(interval);
+      subscription.remove();
+    };
+  }, [session?.user.id]);
 
   const value: AuthContextValue = {
     session,

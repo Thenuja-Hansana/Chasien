@@ -26,14 +26,26 @@ const BUCKET = 'post-media';
 
 export type { PickedImage };
 
+export type PickImageOptions = {
+  /** Shows the OS's own crop UI before returning — Android gets crop +
+   *  rotate, iOS gets crop only (and iOS always crops to a square,
+   *  ignoring `aspect` — an expo-image-picker platform limitation, not
+   *  something this app controls). */
+  allowsEditing?: boolean;
+  /** Android-only; iOS's crop rectangle is always square. */
+  aspect?: [number, number];
+};
+
 /** Returns null when the user cancels or declines the permission prompt. */
-export async function pickImage(): Promise<PickedImage | null> {
+export async function pickImage(options: PickImageOptions = {}): Promise<PickedImage | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) return null;
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     quality: 1, // Compression happens in compressImageForUpload() — don't do it twice.
+    allowsEditing: options.allowsEditing,
+    aspect: options.aspect,
   });
   if (result.canceled) return null;
 
