@@ -38,6 +38,15 @@ export type ThemeColors = {
   neutral: Omit<ColorScale, 'DEFAULT'>;
   accent: ColorScale;
   accent2: ColorScale;
+  /**
+   * The one color outside the black/white/gray system — reserved solely
+   * for errors and destructive actions (failed requests, delete
+   * confirmations). Never used for likes, links, badges, or anything
+   * else the accent already covers; see the design audit's "Fixes at a
+   * glance" — before this, error text rendered in the same black/white
+   * accent as everything else and carried no visual urgency of its own.
+   */
+  error: string;
 };
 
 export type ThemeMode = 'light' | 'dark';
@@ -69,6 +78,8 @@ export const LightColors: ThemeColors = {
   // states.
   accent: flatScale('#111111'),
   accent2: flatScale('#111111'),
+
+  error: '#B3473C',
 };
 
 export const DarkColors: ThemeColors = {
@@ -93,6 +104,10 @@ export const DarkColors: ThemeColors = {
   // light, and the accent is an off-white rather than pure #fff.
   accent: flatScale('#F2F2F2'),
   accent2: flatScale('#F2F2F2'),
+
+  // Lighter than Light mode's error so it still reads at AA contrast
+  // against the #121212 background.
+  error: '#E2685C',
 };
 
 /**

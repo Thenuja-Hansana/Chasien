@@ -93,11 +93,14 @@ export default function TabBar({ active, communityId, userId, blurTarget }: TabB
       {tabs.map((tab) => {
         const isActive = tab.label === active;
         const color = isActive ? colors.accent.DEFAULT : `${colors.text}6B`;
+        // Filled counterpart on activation, not just a color swap — see
+        // Icon.tsx's homeTabFilled/etc.
+        const iconName = isActive ? (`${tab.icon}Filled` as const) : tab.icon;
         return (
           <Link key={tab.label} href={tab.href} asChild style={styles.tab}>
             <Pressable>
               <View style={styles.tabContent}>
-                <Icon name={tab.icon} size={22} color={color} />
+                <Icon name={iconName} size={22} color={color} />
                 <Text style={[styles.label, { color }]}>{tab.label}</Text>
               </View>
             </Pressable>

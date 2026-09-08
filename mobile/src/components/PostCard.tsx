@@ -1,4 +1,5 @@
 import { Image, type ImageLoadEventData } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -9,6 +10,7 @@ import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime, type FeedPost } from '@/lib/posts';
+import { useUserPreview } from '@/lib/user-preview-context';
 
 /** Leaves the rest of the window free for the caption/actions row below and a peek of the next card, the way Instagram's own feed keeps scrolling legible. */
 const MAX_IMAGE_HEIGHT_FRACTION = 0.55;
@@ -36,6 +38,7 @@ export default function PostCard({
   onVote: (optionId: string) => Promise<void>;
 }) {
   const isModerator = post.authorRole === 'owner' || post.authorRole === 'mod';
+  const { open: openUserPreview } = useUserPreview();
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // Uploads are pre-cropped to one of the feed's fixed ratios (square, 4:5
@@ -49,7 +52,11 @@ export default function PostCard({
 
   return (
     <View style={styles.container}>
-      <View style={styles.authorRow}>
+      <Pressable
+        style={styles.authorRow}
+        disabled={!post.authorId}
+        onPress={() => openUserPreview(post.authorId as string)}
+      >
         <Avatar gradient={post.authorId ?? 'mara'} letter={post.authorName.charAt(0).toUpperCase() || '?'} size={38} />
         <View style={styles.authorText}>
           <View style={styles.authorNameRow}>
@@ -64,7 +71,7 @@ export default function PostCard({
             @{post.authorHandle} · {relativeTime(post.createdAt)}
           </Text>
         </View>
-      </View>
+      </Pressable>
 
       {post.text ? (
         <Text style={styles.body}>
@@ -89,7 +96,14 @@ export default function PostCard({
       {post.poll && <PollCard poll={post.poll} onVote={onVote} />}
 
       <View style={styles.actions}>
-        <Pressable style={styles.action} onPress={onToggleLike} hitSlop={6}>
+        <Pressable
+          style={styles.action}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            onToggleLike();
+          }}
+          hitSlop={6}
+        >
           <Icon
             name="heart"
             size={21}

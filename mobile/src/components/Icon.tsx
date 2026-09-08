@@ -101,6 +101,21 @@ const ICONS: Record<string, Shape[]> = {
   postTab: [{ t: 'path', d: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1M12 8.4v7.2M8.4 12h7.2' }],
   chatsTab: [{ t: 'path', d: 'M21 12a8 8 0 0 1-11.7 7.1L3.2 21l1.9-6.2A8 8 0 1 1 21 12z' }],
   youTab: [{ t: 'path', d: 'M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2M4.9 20a7.1 7.1 0 0 1 14.2 0' }],
+  // Solid counterparts of the four tabs above, for TabBar's active state —
+  // an outline-vs-filled distinction (Instagram/Twitter's convention)
+  // instead of color alone. homeTab/chatsTab/youTab's own outline paths
+  // already close into a single well-formed silhouette, so they're reused
+  // as-is with `fill: true`; exploreTab's compass needle doesn't survive a
+  // single-color fill legibly, so its filled state is a plain solid disc
+  // rather than repeating the needle in the same flat color.
+  homeTabFilled: [{ t: 'path', fill: true, d: 'M3 10.6 12 3.2l9 7.4V20a1 1 0 0 1-1 1h-4.6v-6H8.6v6H4a1 1 0 0 1-1-1z' }],
+  exploreTabFilled: [{ t: 'path', fill: true, d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z' }],
+  chatsTabFilled: [{ t: 'path', fill: true, d: 'M21 12a8 8 0 0 1-11.7 7.1L3.2 21l1.9-6.2A8 8 0 1 1 21 12z' }],
+  youTabFilled: [{ t: 'path', fill: true, d: 'M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2M4.9 20a7.1 7.1 0 0 1 14.2 0' }],
+  alertCircle: [
+    { t: 'circle', cx: 12, cy: 12, r: 9 },
+    { t: 'path', d: 'M12 8v5M12 16.2v.1' },
+  ],
   // Not part of app_reference/src/components/Icon.jsx's set — added for
   // Phase 8's mod-only pin-a-post action (post/[postId].tsx).
   pin: [{ t: 'path', d: 'M14 4 20 10 15.5 12.5 13 18l-2-2-4 4-1.5-1.5 4-4-2-2 5.5-2.5z' }],

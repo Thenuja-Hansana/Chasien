@@ -2,10 +2,12 @@ import { BlurTargetView } from 'expo-blur';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
@@ -139,7 +141,11 @@ export default function Index() {
           <Link href="/notifications" asChild>
             <Pressable hitSlop={8} style={styles.bellWrap}>
               <Icon name="bell" size={22} color={colors.text} />
-              {unreadCount > 0 && <View style={styles.unreadDot} />}
+              {unreadCount > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
             </Pressable>
           </Link>
         </View>
@@ -152,17 +158,27 @@ export default function Index() {
         {error && <Text style={styles.error}>{error}</Text>}
 
         {sortedRooms === null ? (
-          <View style={styles.empty}>
-            <ActivityIndicator color={colors.accent.DEFAULT} />
+          <View style={styles.listWrap}>
+            <View style={styles.list}>
+              {[128, 96, 150, 110, 134, 100].map((nameWidth, i) => (
+                <View key={i} style={styles.roomRow}>
+                  <Skeleton width={48} height={48} radius={999} />
+                  <View style={styles.roomRowBody}>
+                    <Skeleton width={nameWidth} height={13} radius={6} />
+                    <Skeleton width={nameWidth + 80} height={11} radius={5} />
+                  </View>
+                </View>
+              ))}
+            </View>
           </View>
         ) : sortedRooms.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.heading}>No Rooms yet</Text>
-            <Text style={styles.body}>Join or start a Room to see its feed here.</Text>
-            <Link href="/discover" style={styles.cta}>
-              Find a Room
-            </Link>
-          </View>
+          <EmptyState
+            icon="globe"
+            heading="No Rooms yet"
+            message="Join or start a Room to see its feed here."
+            actionLabel="Find a Room"
+            onAction={() => router.push('/discover')}
+          />
         ) : (
           <ScrollView contentContainerStyle={[styles.listWrap, { paddingBottom: clearance }]}>
             <View style={styles.list}>
@@ -261,16 +277,26 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   bellWrap: {
     position: 'relative',
   },
-  unreadDot: {
+  // A real count, not a bare dot — matches roomRow's own unreadBadge below
+  // instead of leaving the two badge styles inconsistent with each other.
+  bellBadge: {
     position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
+    top: -6,
+    right: -8,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
     borderRadius: 999,
     backgroundColor: colors.accent.DEFAULT,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: colors.bg,
+  },
+  bellBadgeText: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 9.5,
+    color: colors.bg,
   },
   searchBar: {
     flexDirection: 'row',
@@ -291,39 +317,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: colors.accent.DEFAULT,
+    color: colors.error,
     paddingHorizontal: Spacing[6],
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing[2],
-    paddingHorizontal: Spacing[6],
-  },
-  heading: {
-    fontFamily: Fonts.heading,
-    fontSize: 22,
-    color: colors.text,
-  },
-  body: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: colors.neutral[400],
-    textAlign: 'center',
-  },
-  cta: {
-    marginTop: Spacing[4],
-    height: 44,
-    paddingHorizontal: Spacing[6],
-    borderRadius: Radius.pill,
-    backgroundColor: colors.accent.DEFAULT,
-    color: colors.bg,
-    fontFamily: Fonts.heading,
-    fontSize: 15,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    overflow: 'hidden',
   },
   // No horizontal padding here — rows go edge-to-edge inside this
   // constrained column, Telegram-style, with the padding living on each

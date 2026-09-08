@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -31,6 +32,7 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
 
   async function handleVote(optionId: string) {
     if (busy || optionId === poll.myOptionId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
     const previous = poll.myOptionId;
     setOptimistic({
