@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -8,7 +9,11 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { pickImage, type PickedImage } from '@/lib/media';
 import { fetchRoomNotificationsMuted, setRoomNotificationsMuted } from '@/lib/notifications';
+import { signRoomMediaUrls, uploadRoomAvatar, uploadRoomBanner } from '@/lib/roomMedia';
+import { PUBLIC_OPTION, PRIVATE_JOIN_TYPES, isValidDomain } from '@/lib/roomVisibility';
+import { useUserPreview } from '@/lib/user-preview-context';
 import {
   changeRole,
   fetchMyMembership,
@@ -26,12 +31,6 @@ import {
   type RoomVisibility,
 } from '@/lib/rooms';
 
-const VISIBILITY_OPTIONS: { key: RoomVisibility; label: string }[] = [
-  { key: 'public', label: 'Public' },
-  { key: 'request', label: 'Request to join' },
-  { key: 'invite', label: 'Invite only' },
-];
-
 const ROLE_LABEL: Record<RoomRole, string> = { owner: 'Owner', admin: 'Admin', mod: 'Mod', member: 'Member' };
 // owner > admin > mod > member — mirrors ROLE_RANK in the room-membership
 // Edge Function exactly, so the UI never offers an action the backend
@@ -41,19 +40,30 @@ const ROLE_RANK: Record<RoomRole, number> = { owner: 3, admin: 2, mod: 1, member
 
 export default function CommunitySettings() {
   const { session } = useAuth();
+  const { open: openUserPreview } = useUserPreview();
   const { communityId } = useLocalSearchParams<{ communityId: string }>();
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [room, setRoom] = useState<Room | null | 'loading'>('loading');
-  const [isModerator, setIsModerator] = useState(false);
+  // null = not yet known — distinct from `false` (confirmed non-moderator)
+  // so the plain member view doesn't flash on screen for the moment
+  // between `room` resolving and this membership check's own await
+  // finishing (see load() below).
+  const [isModerator, setIsModerator] = useState<boolean | null>(null);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [description, setDescription] = useState('');
   const descriptionFocus = useFocusHighlight();
   const [visibility, setVisibility] = useState<RoomVisibility>('public');
+  const [requiredDomain, setRequiredDomain] = useState('');
+  const domainFocus = useFocusHighlight();
   const [category, setCategory] = useState<RoomCategory | null>(null);
   const [membersCanPost, setMembersCanPost] = useState(true);
   const [notificationsMuted, setNotificationsMuted] = useState(false);
+  const [avatarImage, setAvatarImage] = useState<PickedImage | null>(null);
+  const [bannerImage, setBannerImage] = useState<PickedImage | null>(null);
+  const [existingAvatarUrl, setExistingAvatarUrl] = useState<string | null>(null);
+  const [existingBannerUrl, setExistingBannerUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
@@ -75,9 +85,18 @@ export default function CommunitySettings() {
         setIsModerator(moderator);
         setDescription(r.description ?? '');
         setVisibility(r.visibility);
+        setRequiredDomain(r.required_email_domain ?? '');
         setCategory(r.category);
         setMembersCanPost(r.members_can_post);
         setNotificationsMuted(await fetchRoomNotificationsMuted(r.id, userId));
+
+        const mediaPaths = [r.avatar_url, r.banner_url].filter((p): p is string => !!p);
+        if (mediaPaths.length > 0) {
+          const signed = await signRoomMediaUrls(mediaPaths);
+          setExistingAvatarUrl(r.avatar_url ? (signed.get(r.avatar_url) ?? null) : null);
+          setExistingBannerUrl(r.banner_url ? (signed.get(r.banner_url) ?? null) : null);
+        }
+
         if (moderator) {
           setMembers(await fetchRoomMembers(r.id));
         }
@@ -89,7 +108,7 @@ export default function CommunitySettings() {
 
   if (!session) return null;
 
-  if (room === 'loading') {
+  if (room === 'loading' || (room && isModerator === null)) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
         <ActivityIndicator color={colors.accent.DEFAULT} />
@@ -110,6 +129,21 @@ export default function CommunitySettings() {
   // even though the guards above already ruled out anything but `Room`.
   const currentRoom: Room = room;
   const currentUserId = session.user.id;
+  const isPrivate = visibility !== 'public';
+  const needsDomain = visibility === 'domain_verified';
+
+  // Public needs no further choice, so picking it sets the real
+  // visibility directly. Private isn't itself a RoomVisibility value —
+  // it's the umbrella over the three real ones in PRIVATE_JOIN_TYPES —
+  // so tapping it just reveals that list, defaulting to the first entry
+  // the way a radio group defaults to its first option.
+  function handleTopChoice(choice: 'public' | 'private') {
+    if (choice === 'public') {
+      setVisibility('public');
+    } else if (visibility === 'public') {
+      setVisibility(PRIVATE_JOIN_TYPES[0].key);
+    }
+  }
 
   async function handleToggleMute() {
     const next = !notificationsMuted;
@@ -153,11 +187,37 @@ export default function CommunitySettings() {
     );
   }
 
+  async function handlePickAvatar() {
+    // Same square crop as Room creation's own avatar picker — matches
+    // previewAvatar's shape below.
+    const image = await pickImage({ allowsEditing: true, aspect: [1, 1] });
+    if (image) setAvatarImage(image);
+  }
+
+  async function handlePickBanner() {
+    // Same wide crop as Room creation's own banner picker — matches
+    // previewBannerWrap's proportions below.
+    const image = await pickImage({ allowsEditing: true, aspect: [3, 1] });
+    if (image) setBannerImage(image);
+  }
+
   async function handleSave() {
     setSaving(true);
     setError(null);
     try {
-      await updateRoomSettings(currentRoom.id, { description, visibility, category, members_can_post: membersCanPost });
+      const [avatar_url, banner_url] = await Promise.all([
+        avatarImage ? uploadRoomAvatar(avatarImage, currentRoom.id, currentUserId) : Promise.resolve(undefined),
+        bannerImage ? uploadRoomBanner(bannerImage, currentRoom.id, currentUserId) : Promise.resolve(undefined),
+      ]);
+      await updateRoomSettings(currentRoom.id, {
+        description,
+        visibility,
+        category,
+        members_can_post: membersCanPost,
+        required_email_domain: needsDomain ? requiredDomain.trim().toLowerCase() : null,
+        ...(avatar_url ? { avatar_url } : {}),
+        ...(banner_url ? { banner_url } : {}),
+      });
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save changes.');
@@ -233,15 +293,58 @@ export default function CommunitySettings() {
         <Text style={styles.headingText} numberOfLines={1}>
           {room.name}
         </Text>
-        <Pressable onPress={handleSave} disabled={saving}>
+        <Pressable onPress={handleSave} disabled={saving || (needsDomain && !isValidDomain(requiredDomain))}>
           {saving ? <ActivityIndicator color={colors.accent.DEFAULT} /> : <Text style={styles.saveText}>Save</Text>}
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.previewCard}>
+          <Pressable onPress={handlePickBanner} style={styles.previewBannerWrap}>
+            {bannerImage || existingBannerUrl ? (
+              <>
+                <Image source={{ uri: bannerImage?.uri ?? existingBannerUrl! }} style={styles.previewBannerImage} contentFit="cover" />
+                <View style={styles.bannerEditButton}>
+                  <Icon name="camera" size={18} color="#ffffff" />
+                </View>
+              </>
+            ) : (
+              <View style={styles.previewBanner}>
+                <View style={styles.bannerEmptyIconCircle}>
+                  <Icon name="camera" size={24} color="#000000" />
+                </View>
+                <Text style={styles.bannerEmptyText}>Add cover photo</Text>
+              </View>
+            )}
+          </Pressable>
+
+          <View style={styles.previewRow}>
+            <Pressable onPress={handlePickAvatar} style={styles.avatarRing}>
+              {avatarImage || existingAvatarUrl ? (
+                <Image source={{ uri: avatarImage?.uri ?? existingAvatarUrl! }} style={styles.previewAvatar} contentFit="cover" />
+              ) : (
+                <View style={[styles.previewAvatar, { backgroundColor: currentRoom.accent_color ?? colors.neutral[700] }]}>
+                  <Text style={styles.previewAvatarLetter}>{currentRoom.name.charAt(0).toUpperCase()}</Text>
+                </View>
+              )}
+              <View style={styles.avatarAddBadge}>
+                <Icon name="addPhoto" size={16} color="#000000" />
+              </View>
+            </Pressable>
+            <View style={styles.previewNameArea}>
+              <Text style={styles.previewName} numberOfLines={1}>
+                {currentRoom.name}
+              </Text>
+              <Text style={styles.previewMeta}>
+                {currentRoom.member_count} member{currentRoom.member_count === 1 ? '' : 's'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
         <Text style={styles.label}>Description</Text>
         <TextInput
-          style={[styles.textarea, descriptionFocus.focused && styles.textareaFocused]}
+          style={[styles.input, styles.textarea, descriptionFocus.focused && styles.inputFocused]}
           value={description}
           onChangeText={setDescription}
           onFocus={descriptionFocus.onFocus}
@@ -252,23 +355,81 @@ export default function CommunitySettings() {
         />
 
         <Text style={styles.label}>Who can join</Text>
-        <View style={styles.visibilityList}>
-          {VISIBILITY_OPTIONS.map((opt) => {
-            const active = visibility === opt.key;
-            return (
-              <Pressable
-                key={opt.key}
-                onPress={() => setVisibility(opt.key)}
-                style={[styles.visibilityRow, active && styles.visibilityRowActive]}
-              >
-                <Text style={styles.visibilityLabel}>{opt.label}</Text>
-                <View style={[styles.radio, active && styles.radioActive]}>
-                  {active && <Icon name="check" size={11} color={colors.bg} strokeWidth={3.6} />}
-                </View>
-              </Pressable>
-            );
-          })}
+        <View style={styles.joinTypeList}>
+          <Pressable
+            onPress={() => handleTopChoice('public')}
+            style={[styles.joinTypeRow, !isPrivate && styles.joinTypeRowActive]}
+          >
+            <Icon name={PUBLIC_OPTION.icon} size={19} color={!isPrivate ? colors.accent.DEFAULT : colors.neutral[400]} />
+            <View style={styles.joinTypeText}>
+              <Text style={styles.joinTypeTitle}>{PUBLIC_OPTION.title}</Text>
+              <Text style={styles.joinTypeDesc}>{PUBLIC_OPTION.desc}</Text>
+            </View>
+            <View style={[styles.radio, !isPrivate && styles.radioActive]}>
+              {!isPrivate && <Icon name="check" size={11} color={colors.bg} strokeWidth={3.6} />}
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={() => handleTopChoice('private')}
+            style={[styles.joinTypeRow, isPrivate && styles.joinTypeRowActive]}
+          >
+            <Icon name="lock" size={19} color={isPrivate ? colors.accent.DEFAULT : colors.neutral[400]} />
+            <View style={styles.joinTypeText}>
+              <Text style={styles.joinTypeTitle}>Private</Text>
+              <Text style={styles.joinTypeDesc}>Choose exactly how people get in</Text>
+            </View>
+            <View style={[styles.radio, isPrivate && styles.radioActive]}>
+              {isPrivate && <Icon name="check" size={11} color={colors.bg} strokeWidth={3.6} />}
+            </View>
+          </Pressable>
+
+          {isPrivate && (
+            <View style={styles.privateSubList}>
+              {PRIVATE_JOIN_TYPES.map((j) => {
+                const active = visibility === j.key;
+                return (
+                  <Pressable
+                    key={j.key}
+                    onPress={() => setVisibility(j.key)}
+                    style={[styles.joinTypeRow, styles.joinTypeRowNested, active && styles.joinTypeRowActive]}
+                  >
+                    <Icon name={j.icon} size={17} color={active ? colors.accent.DEFAULT : colors.neutral[400]} />
+                    <View style={styles.joinTypeText}>
+                      <Text style={styles.joinTypeTitle}>{j.title}</Text>
+                      <Text style={styles.joinTypeDesc}>{j.desc}</Text>
+                    </View>
+                    <View style={[styles.radio, active && styles.radioActive]}>
+                      {active && <Icon name="check" size={11} color={colors.bg} strokeWidth={3.6} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
+
+        {needsDomain && (
+          <View style={styles.domainSection}>
+            <Text style={styles.label}>Required email domain</Text>
+            <TextInput
+              style={[styles.input, styles.domainInput, domainFocus.focused && styles.inputFocused]}
+              value={requiredDomain}
+              onChangeText={setRequiredDomain}
+              onFocus={domainFocus.onFocus}
+              onBlur={domainFocus.onBlur}
+              placeholder="e.g. iit.ac.lk"
+              placeholderTextColor={colors.neutral[500]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            <Text style={styles.domainHint}>
+              Anyone can request to join, but only someone who verifies an email ending in{' '}
+              <Text style={styles.domainHintAccent}>@{requiredDomain.trim() || 'your-domain.edu'}</Text> actually gets in.
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.label}>Category</Text>
         <View style={styles.categoryGrid}>
@@ -312,7 +473,9 @@ export default function CommunitySettings() {
             <View style={styles.memberList}>
               {pendingRequests.map((m) => (
                 <View key={m.user_id} style={styles.memberRow}>
-                  <Text style={styles.memberName}>{m.name}</Text>
+                  <Pressable onPress={() => openUserPreview(m.user_id)}>
+                    <Text style={styles.memberName}>{m.name}</Text>
+                  </Pressable>
                   {busyUserId === m.user_id ? (
                     <ActivityIndicator color={colors.accent.DEFAULT} />
                   ) : (
@@ -337,7 +500,9 @@ export default function CommunitySettings() {
             const canManage = m.user_id !== session.user.id && myRank > ROLE_RANK[m.role] && busyUserId !== m.user_id;
             return (
               <View key={m.user_id} style={styles.memberRow}>
-                <Text style={styles.memberName}>{m.name}</Text>
+                <Pressable onPress={() => openUserPreview(m.user_id)}>
+                  <Text style={styles.memberName}>{m.name}</Text>
+                </Pressable>
                 <View style={styles.memberRoleArea}>
                   <Text style={styles.roleBadge}>{ROLE_LABEL[m.role]}</Text>
                   {canManage && (
@@ -475,44 +640,193 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: Spacing[2],
     marginTop: Spacing[6],
   },
-  textarea: {
-    minHeight: 88,
-    borderRadius: Radius.md,
+  previewCard: {
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.divider,
+    marginBottom: Spacing[6],
+  },
+  previewBannerWrap: {
+    height: 140,
+  },
+  previewBanner: {
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing[2],
+    backgroundColor: '#B8B8B8',
+  },
+  previewBannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  bannerEmptyIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerEmptyText: {
+    fontFamily: Fonts.bodySemibold,
+    fontSize: 13.5,
+    color: '#000000',
+  },
+  bannerEditButton: {
+    position: 'absolute',
+    right: Spacing[3],
+    bottom: Spacing[3],
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  previewRow: {
+    backgroundColor: colors.surface,
+    paddingHorizontal: Spacing[4],
+    paddingTop: Spacing[2],
+    paddingBottom: Spacing[4],
+  },
+  avatarRing: {
+    position: 'absolute',
+    left: Spacing[4],
+    top: -46,
+    padding: 4,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    zIndex: 2,
+  },
+  previewAvatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarAddBadge: {
+    position: 'absolute',
+    right: -6,
+    bottom: -6,
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#000000',
+  },
+  previewAvatarLetter: {
+    fontFamily: Fonts.heading,
+    fontSize: 30,
+    color: colors.bg,
+  },
+  previewNameArea: {
+    marginLeft: Spacing[4] + 92 + Spacing[3],
+    paddingBottom: Spacing[1],
+  },
+  previewName: {
+    fontFamily: Fonts.heading,
+    fontSize: 18,
+    color: colors.text,
+  },
+  previewMeta: {
+    fontFamily: Fonts.body,
+    fontSize: 11.5,
+    color: colors.neutral[400],
+  },
+  input: {
+    height: 52,
+    borderRadius: Radius.pill,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.divider,
-    padding: Spacing[3],
-    fontSize: 14,
-    lineHeight: 20,
+    paddingHorizontal: 20,
+    fontSize: 15,
     color: colors.text,
     fontFamily: Fonts.body,
-    textAlignVertical: 'top',
   },
-  textareaFocused: {
+  inputFocused: {
     borderColor: colors.accent.DEFAULT,
     borderWidth: 1.5,
   },
-  visibilityList: {
-    gap: Spacing[2],
+  textarea: {
+    height: 88,
+    borderRadius: Radius.md,
+    paddingTop: 14,
+    textAlignVertical: 'top',
   },
-  visibilityRow: {
+  joinTypeList: {
+    gap: Spacing[2],
+    marginBottom: Spacing[4],
+  },
+  joinTypeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: Spacing[3],
     padding: Spacing[3],
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: colors.divider,
   },
-  visibilityRowActive: {
+  joinTypeRowActive: {
     borderColor: colors.accent.DEFAULT,
     borderWidth: 1.5,
+    backgroundColor: `${colors.accent.DEFAULT}22`,
   },
-  visibilityLabel: {
+  privateSubList: {
+    gap: Spacing[2],
+    marginLeft: Spacing[4],
+    paddingLeft: Spacing[3],
+    borderLeftWidth: 2,
+    borderLeftColor: colors.divider,
+  },
+  joinTypeRowNested: {
+    padding: Spacing[2],
+  },
+  joinTypeText: {
+    flex: 1,
+    gap: 2,
+  },
+  joinTypeTitle: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
+  },
+  joinTypeDesc: {
+    fontFamily: Fonts.body,
+    fontSize: 11.5,
+    color: colors.neutral[400],
+  },
+  domainSection: {
+    marginTop: Spacing[6],
+    marginBottom: Spacing[2],
+    padding: Spacing[4],
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    backgroundColor: colors.surface,
+  },
+  domainInput: {
+    marginBottom: Spacing[3],
+  },
+  domainHint: {
+    fontFamily: Fonts.body,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.neutral[400],
+  },
+  domainHintAccent: {
+    color: colors.accent2[300],
+    fontWeight: '600',
   },
   radio: {
     width: 19,

@@ -2,7 +2,7 @@ import { FunctionsHttpError } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase';
 
-export type RoomVisibility = 'public' | 'request' | 'invite';
+export type RoomVisibility = 'public' | 'request' | 'invite' | 'domain_verified';
 export type RoomRole = 'owner' | 'admin' | 'mod' | 'member';
 export type JoinState = 'pending' | 'approved' | 'invited';
 
@@ -32,13 +32,21 @@ export type Room = {
   description: string | null;
   visibility: RoomVisibility;
   accent_color: string | null;
+  /** Storage paths (not URLs — the bucket is private), signed at render time via lib/roomMedia.ts's signRoomMediaUrls(). Null until an owner/admin sets one. */
+  avatar_url: string | null;
+  banner_url: string | null;
   /** Null until an owner/mod sets one — see Room settings / Room creation. */
   category: RoomCategory | null;
+  /** Only meaningful when visibility = 'domain_verified' — e.g. "iit.ac.lk". See lib/domainVerification.ts. */
+  required_email_domain: string | null;
   /** Approved-member count, maintained server-side by a trigger — see the migration above for why this can't just be counted live from the client. */
   member_count: number;
   members_can_post: boolean;
   created_by: string | null;
 };
+
+const ROOM_COLUMNS =
+  'id, slug, name, description, visibility, accent_color, avatar_url, banner_url, category, required_email_domain, member_count, members_can_post, created_by';
 
 export type Membership = {
   role: RoomRole;
@@ -58,7 +66,7 @@ export type RoomMember = Membership & {
 export async function fetchDiscoverRooms() {
   const { data, error } = await supabase
     .from('rooms')
-    .select('id, slug, name, description, visibility, accent_color, category, member_count, members_can_post, created_by')
+    .select(ROOM_COLUMNS)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data as Room[];
@@ -67,7 +75,7 @@ export async function fetchDiscoverRooms() {
 export async function fetchRoomBySlug(slug: string) {
   const { data, error } = await supabase
     .from('rooms')
-    .select('id, slug, name, description, visibility, accent_color, category, member_count, members_can_post, created_by')
+    .select(ROOM_COLUMNS)
     .eq('slug', slug)
     .maybeSingle();
   if (error) throw error;
@@ -118,9 +126,7 @@ export async function fetchMyMembershipMap(userId: string) {
 export async function fetchMyRooms(userId: string) {
   const { data, error } = await supabase
     .from('room_memberships')
-    .select(
-      'role, join_state, notifications_muted, rooms(id, slug, name, description, visibility, accent_color, category, member_count, members_can_post, created_by)',
-    )
+    .select(`role, join_state, notifications_muted, rooms(${ROOM_COLUMNS})`)
     .eq('user_id', userId)
     .eq('join_state', 'approved');
   if (error) throw error;
@@ -163,12 +169,13 @@ export async function createRoom(params: {
   visibility: RoomVisibility;
   accent_color: string;
   category: RoomCategory | null;
+  required_email_domain?: string | null;
 }) {
   const userId = (await supabase.auth.getUser()).data.user?.id;
   const { data, error } = await supabase
     .from('rooms')
     .insert({ ...params, created_by: userId })
-    .select('id, slug, name, description, visibility, accent_color, category, member_count, members_can_post, created_by')
+    .select(ROOM_COLUMNS)
     .single();
   if (error) throw error;
   return data as Room;
@@ -176,7 +183,12 @@ export async function createRoom(params: {
 
 export async function updateRoomSettings(
   roomId: string,
-  params: Partial<Pick<Room, 'description' | 'visibility' | 'accent_color' | 'category' | 'members_can_post'>>,
+  params: Partial<
+    Pick<
+      Room,
+      'description' | 'visibility' | 'accent_color' | 'avatar_url' | 'banner_url' | 'category' | 'members_can_post' | 'required_email_domain'
+    >
+  >,
 ) {
   const { error } = await supabase.from('rooms').update(params).eq('id', roomId);
   if (error) throw error;
