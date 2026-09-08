@@ -1,11 +1,15 @@
 import { BlurTargetView } from 'expo-blur';
+import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
@@ -21,11 +25,13 @@ import {
   type Room,
   type RoomCategory,
 } from '@/lib/rooms';
+import { signRoomMediaUrls } from '@/lib/roomMedia';
 
 const VISIBILITY_LABEL: Record<Room['visibility'], string> = {
   public: 'Public',
   request: 'Request to join',
   invite: 'Invite only',
+  domain_verified: 'Domain verified',
 };
 
 type CategoryFilter = 'all' | RoomCategory;
@@ -44,6 +50,7 @@ export default function Discover() {
   const [memberships, setMemberships] = useState<Map<string, Membership>>(new Map());
   const [filter, setFilter] = useState<CategoryFilter>('all');
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -52,6 +59,8 @@ export default function Discover() {
       .then(([roomList, membershipMap]) => {
         setRooms(roomList);
         setMemberships(membershipMap);
+        const paths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((p): p is string => !!p);
+        if (paths.length > 0) signRoomMediaUrls(paths).then(setMediaUrls).catch(() => {});
         // Same reasoning as index.tsx's Home list — a row here for a Room
         // you're already in is another way into it besides Home, so it
         // gets the same cache treatment. See lib/room-cache.ts.
@@ -68,6 +77,14 @@ export default function Discover() {
   if (!session) return null;
 
   async function handleJoin(room: Room) {
+    // Domain Verified rooms never go through the ordinary
+    // pending/approved join_state machine — joining means proving
+    // control of a matching email address first (lib/domainVerification.ts).
+    if (room.visibility === 'domain_verified') {
+      router.push({ pathname: '/c/[communityId]/verify-email', params: { communityId: room.slug } });
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setJoiningId(room.id);
     setError(null);
     try {
@@ -78,6 +95,7 @@ export default function Discover() {
         router.push({ pathname: '/c/[communityId]', params: { communityId: room.slug } });
       }
     } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       setError(e instanceof Error ? e.message : 'Could not join that Room.');
     } finally {
       setJoiningId(null);
@@ -118,22 +136,36 @@ export default function Discover() {
         {error && <Text style={styles.error}>{error}</Text>}
 
         {rooms === null ? (
-          <View style={styles.empty}>
-            <ActivityIndicator color={colors.accent.DEFAULT} />
+          <View style={styles.listWrap}>
+            <Skeleton width={120} height={17} radius={6} />
+            <View style={[styles.list, { marginTop: Spacing[4] }]}>
+              {[0, 1].map((i) => (
+                <View key={i} style={styles.card}>
+                  <Skeleton width="100%" height={96} radius={0} />
+                  <View style={styles.cardBody}>
+                    <View style={[styles.cardTopRow, { alignItems: 'center' }]}>
+                      <Skeleton width={64} height={64} radius={999} />
+                    </View>
+                    <Skeleton width={150} height={16} radius={6} />
+                    <View style={{ height: 6 }} />
+                    <Skeleton width="80%" height={12} radius={5} />
+                  </View>
+                </View>
+              ))}
+            </View>
           </View>
         ) : (
           <View style={styles.listWrap}>
             <Text style={styles.sectionLabel}>{filter === 'all' ? 'Featured Rooms' : filter}</Text>
 
             {rooms.length === 0 ? (
-              <View style={styles.emptyInline}>
-                <Text style={styles.emptyHeading}>No Rooms yet</Text>
-                <Text style={styles.body}>Public Rooms will show up here once there are some to join.</Text>
-              </View>
+              <EmptyState
+                icon="globe"
+                heading="No Rooms yet"
+                message="Public Rooms will show up here once there are some to join."
+              />
             ) : filteredRooms && filteredRooms.length === 0 ? (
-              <View style={styles.emptyInline}>
-                <Text style={styles.body}>No Rooms in {filter} yet — try another category.</Text>
-              </View>
+              <EmptyState icon="globe" message={`No Rooms in ${filter} yet — try another category.`} />
             ) : (
               <View style={styles.list}>
                 {filteredRooms?.map((room) => (
@@ -143,6 +175,7 @@ export default function Discover() {
                     membership={memberships.get(room.id)}
                     joining={joiningId === room.id}
                     onJoin={() => handleJoin(room)}
+                    mediaUrls={mediaUrls}
                   />
                 ))}
               </View>
@@ -182,18 +215,22 @@ function RoomCard({
   membership,
   joining,
   onJoin,
+  mediaUrls,
 }: {
   room: Room;
   membership: Membership | undefined;
   joining: boolean;
   onJoin: () => void;
+  mediaUrls: Map<string, string>;
 }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const buttonLabel = !membership
     ? room.visibility === 'public'
       ? 'Join'
-      : 'Request'
+      : room.visibility === 'domain_verified'
+        ? 'Verify'
+        : 'Request'
     : membership.join_state === 'approved'
       ? 'Open'
       : membership.join_state === 'pending'
@@ -201,6 +238,8 @@ function RoomCard({
         : 'Invited';
   const disabled = membership?.join_state === 'pending' || joining;
   const accent = room.accent_color ?? colors.accent.DEFAULT;
+  const bannerUrl = room.banner_url ? mediaUrls.get(room.banner_url) : undefined;
+  const avatarUrl = room.avatar_url ? mediaUrls.get(room.avatar_url) : undefined;
 
   return (
     <Pressable
@@ -208,6 +247,7 @@ function RoomCard({
       onPress={() => router.push({ pathname: '/c/[communityId]', params: { communityId: room.slug } })}
     >
       <View style={[styles.cardBanner, { backgroundColor: accent }]}>
+        {bannerUrl && <Image source={{ uri: bannerUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />}
         <LinearGradient
           colors={['rgba(255,255,255,0.35)', 'rgba(0,0,0,0.25)']}
           start={{ x: 0, y: 0 }}
@@ -218,9 +258,13 @@ function RoomCard({
 
       <View style={styles.cardBody}>
         <View style={styles.cardTopRow}>
-          <View style={[styles.cardLogo, { backgroundColor: accent }]}>
-            <Text style={styles.cardLogoLetter}>{room.name.charAt(0).toUpperCase()}</Text>
-          </View>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.cardLogo} contentFit="cover" />
+          ) : (
+            <View style={[styles.cardLogo, { backgroundColor: accent }]}>
+              <Text style={styles.cardLogoLetter}>{room.name.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
           <Pressable
             style={[styles.joinButton, (membership || joining) && styles.joinButtonSecondary]}
             onPress={onJoin}
@@ -335,32 +379,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: colors.accent.DEFAULT,
+    color: colors.error,
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[3],
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing[2],
-    paddingHorizontal: Spacing[6],
-  },
-  emptyInline: {
-    alignItems: 'center',
-    gap: Spacing[2],
-    paddingVertical: Spacing[6],
-  },
-  emptyHeading: {
-    fontFamily: Fonts.heading,
-    fontSize: 20,
-    color: colors.text,
-  },
-  body: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: colors.neutral[400],
-    textAlign: 'center',
   },
   listWrap: {
     width: '100%',
@@ -413,10 +434,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: -38,
     marginBottom: Spacing[3],
   },
+  // Circular, matching Home's Room icon — this and Search's used to be a
+  // rounded square while Home was circular, a shape inconsistency the
+  // design audit flagged; every surface now agrees on one shape.
   cardLogo: {
     width: 64,
     height: 64,
-    borderRadius: 20,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,

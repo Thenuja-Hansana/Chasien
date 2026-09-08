@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
 import { Fonts, Shadows, Spacing, type ThemeColors } from '@/constants/theme';
+import { useAuth } from '@/lib/auth-context';
 import { useThemeContext } from '@/lib/theme-context';
 
 const DRAWER_WIDTH_RATIO = 0.45;
@@ -20,13 +21,15 @@ const ANIM_MS = 260;
  * through its close animation (`mounted` state) so the slide-out is
  * actually visible instead of the panel just vanishing.
  *
- * Only one setting exists for now (the Dark Mode switch, wired straight to
- * `ThemeProvider`); this is deliberately just a plain scrollless View, not
- * a list component, since one row doesn't need one yet — add a
- * `ScrollView` here if/when more settings land.
+ * Log out lives here now, not in a separate "Account" section further
+ * down the You page's own scroll — every other account-level action
+ * (just Dark Mode, so far) already lives in this one panel, and having
+ * sign-out sit somewhere else on the same screen read like two different
+ * settings surfaces rather than one.
  */
 export default function SettingsDrawer({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { mode, colors, toggleMode } = useThemeContext();
+  const { signOut } = useAuth();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   // useWindowDimensions (not Dimensions.get) so a tablet or foldable that
   // rotates mid-session gets a re-render with the new width immediately,
@@ -90,6 +93,10 @@ export default function SettingsDrawer({ visible, onClose }: { visible: boolean;
                 trackColor={{ false: colors.neutral[300], true: colors.accent.DEFAULT }}
               />
             </View>
+
+            <Pressable style={styles.signOutButton} onPress={() => signOut()}>
+              <Text style={styles.signOutText}>Log out</Text>
+            </Pressable>
           </SafeAreaView>
         </Animated.View>
       </View>
@@ -138,6 +145,21 @@ const makeStyles = (colors: ThemeColors) =>
     rowLabel: {
       fontFamily: Fonts.body,
       fontSize: 14.5,
+      color: colors.text,
+    },
+    signOutButton: {
+      marginTop: Spacing[4],
+      height: 48,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.divider,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    signOutText: {
+      fontFamily: Fonts.body,
+      fontSize: 14,
+      fontWeight: '600',
       color: colors.text,
     },
   });

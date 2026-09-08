@@ -1,21 +1,28 @@
 import { BlurTargetView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import Avatar from '@/components/Avatar';
+import EmptyState from '@/components/EmptyState';
+import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { searchProfiles, type ProfileSearchResult } from '@/lib/profiles';
 import { fetchDiscoverRooms, fetchMyMembershipMap, joinRoom, type Membership, type Room } from '@/lib/rooms';
+import { useUserPreview } from '@/lib/user-preview-context';
 
 const VISIBILITY_LABEL: Record<Room['visibility'], string> = {
   public: 'Public',
   request: 'Request to join',
   invite: 'Invite only',
+  domain_verified: 'Domain verified',
 };
 
 /**
@@ -42,6 +49,7 @@ export default function Search() {
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const [memberships, setMemberships] = useState<Map<string, Membership>>(new Map());
   const [joiningId, setJoiningId] = useState<string | null>(null);
+  const [people, setPeople] = useState<ProfileSearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -61,9 +69,27 @@ export default function Search() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load Rooms.'));
   }, [userId]);
 
+  // Debounced, unlike Rooms above — that's one full fetch of a small,
+  // stable list filtered client-side (fetchDiscoverRooms's own comment),
+  // but People is a real round trip per keystroke otherwise.
+  useEffect(() => {
+    // searchProfiles() itself resolves an empty/whitespace query to [] —
+    // no separate early-return branch needed here, which would otherwise
+    // mean a synchronous setState in the effect body for that case.
+    const timeout = setTimeout(() => {
+      searchProfiles(query).then(setPeople).catch(() => {});
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
   if (!session) return null;
 
   async function handleJoin(room: Room) {
+    if (room.visibility === 'domain_verified') {
+      router.push({ pathname: '/c/[communityId]/verify-email', params: { communityId: room.slug } });
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setJoiningId(room.id);
     setError(null);
     try {
@@ -74,6 +100,7 @@ export default function Search() {
         router.push({ pathname: '/c/[communityId]', params: { communityId: room.slug } });
       }
     } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       setError(e instanceof Error ? e.message : 'Could not join that Room.');
     } finally {
       setJoiningId(null);
@@ -92,7 +119,7 @@ export default function Search() {
           onChangeText={setQuery}
           onFocus={searchFocus.onFocus}
           onBlur={searchFocus.onBlur}
-          placeholder="Search Rooms"
+          placeholder="Search Rooms or people"
           placeholderTextColor={colors.neutral[500]}
           autoFocus={!q}
           returnKeyType="search"
@@ -105,28 +132,45 @@ export default function Search() {
       {error && <Text style={styles.error}>{error}</Text>}
 
       {rooms === null ? (
-        <View style={styles.empty}>
-          <ActivityIndicator color={colors.accent.DEFAULT} />
+        <View style={styles.list}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={styles.row}>
+              <Skeleton width={44} height={44} radius={999} />
+              <View style={[styles.rowContent, { gap: 6 }]}>
+                <Skeleton width={130} height={13} radius={6} />
+                <Skeleton width={90} height={10} radius={5} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : query.trim().length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.body}>Search for a Room by name, category, or what it&apos;s about.</Text>
-        </View>
-      ) : results.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.body}>No results for &quot;{query}&quot;</Text>
-        </View>
+        <EmptyState icon="search" message="Search for a Room by name, category, or what it's about — or find someone by handle or name." />
+      ) : results.length === 0 && people.length === 0 ? (
+        <EmptyState icon="search" message={`No results for "${query}"`} />
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: clearance }]}>
-          {results.map((room) => (
-            <ResultRow
-              key={room.id}
-              room={room}
-              membership={memberships.get(room.id)}
-              joining={joiningId === room.id}
-              onJoin={() => handleJoin(room)}
-            />
-          ))}
+          {people.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>People</Text>
+              {people.map((person) => (
+                <PersonRow key={person.id} person={person} />
+              ))}
+            </>
+          )}
+          {results.length > 0 && (
+            <>
+              {people.length > 0 && <Text style={styles.sectionLabel}>Rooms</Text>}
+              {results.map((room) => (
+                <ResultRow
+                  key={room.id}
+                  room={room}
+                  membership={memberships.get(room.id)}
+                  joining={joiningId === room.id}
+                  onJoin={() => handleJoin(room)}
+                />
+              ))}
+            </>
+          )}
         </ScrollView>
       )}
       </BlurTargetView>
@@ -152,7 +196,9 @@ function ResultRow({
   const buttonLabel = !membership
     ? room.visibility === 'public'
       ? 'Join'
-      : 'Request'
+      : room.visibility === 'domain_verified'
+        ? 'Verify'
+        : 'Request'
     : membership.join_state === 'approved'
       ? 'Open'
       : membership.join_state === 'pending'
@@ -188,6 +234,22 @@ function ResultRow({
           </Text>
         )}
       </Pressable>
+    </Pressable>
+  );
+}
+
+function PersonRow({ person }: { person: ProfileSearchResult }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { open: openUserPreview } = useUserPreview();
+
+  return (
+    <Pressable style={styles.row} onPress={() => openUserPreview(person.id)}>
+      <Avatar gradient={person.id} letter={person.name.charAt(0).toUpperCase() || '?'} size={44} />
+      <View style={styles.rowContent}>
+        <Text style={styles.roomName}>{person.name}</Text>
+        <Text style={styles.roomMeta}>@{person.handle}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -233,27 +295,24 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: colors.accent.DEFAULT,
+    color: colors.error,
     paddingHorizontal: Spacing[6],
     paddingBottom: Spacing[2],
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing[6],
-  },
-  body: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: colors.neutral[400],
-    textAlign: 'center',
   },
   list: {
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[2],
     paddingBottom: Spacing[8],
     gap: Spacing[3],
+  },
+  sectionLabel: {
+    fontFamily: Fonts.body,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: colors.neutral[500],
+    marginTop: Spacing[1],
   },
   row: {
     flexDirection: 'row',
@@ -268,7 +327,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   roomIcon: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
   },

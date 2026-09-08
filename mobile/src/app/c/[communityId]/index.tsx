@@ -1,4 +1,5 @@
 import { BlurTargetView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -143,12 +144,18 @@ export default function RoomHome() {
   if (!session) return null;
 
   async function handleJoin(room: Room) {
+    if (room.visibility === 'domain_verified') {
+      router.push({ pathname: '/c/[communityId]/verify-email', params: { communityId } });
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setBusy(true);
     setError(null);
     try {
       await joinRoom(room.id);
       await load();
     } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       setError(e instanceof Error ? e.message : 'Could not join.');
     } finally {
       setBusy(false);
@@ -156,6 +163,7 @@ export default function RoomHome() {
   }
 
   async function handleInviteResponse(room: Room, accept: boolean) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setBusy(true);
     setError(null);
     try {
@@ -263,7 +271,9 @@ export default function RoomHome() {
           {busy ? (
             <ActivityIndicator color={colors.bg} />
           ) : (
-            <Text style={styles.ctaText}>{room.visibility === 'public' ? 'Join' : 'Request to join'}</Text>
+            <Text style={styles.ctaText}>
+              {room.visibility === 'public' ? 'Join' : room.visibility === 'domain_verified' ? 'Verify your email to join' : 'Request to join'}
+            </Text>
           )}
         </Pressable>
       </SafeAreaView>

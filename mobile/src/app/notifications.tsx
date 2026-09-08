@@ -1,11 +1,14 @@
 import { BlurTargetView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
@@ -18,6 +21,7 @@ import {
   subscribeToNotifications,
   type AppNotification,
 } from '@/lib/notifications';
+import { acceptFriendRequest, removeFriendship } from '@/lib/friends';
 import { relativeTime } from '@/lib/posts';
 import { respondToRequest } from '@/lib/rooms';
 
@@ -62,6 +66,10 @@ function textFor(n: AppNotification): { line: string; highlight?: string } {
       return { line: `${n.actorName} posted in`, highlight: n.roomName ?? undefined };
     case 'new_story':
       return { line: `${n.actorName} added a story in`, highlight: n.roomName ?? undefined };
+    case 'friend_request':
+      return { line: `${n.actorName} sent you a friend request` };
+    case 'friend_accept':
+      return { line: `${n.actorName} accepted your friend request` };
     default:
       return { line: 'New activity' };
   }
@@ -115,14 +123,21 @@ export default function Notifications() {
   }
 
   async function respond(n: AppNotification, approve: boolean) {
-    const targetUserId = typeof n.data.targetUserId === 'string' ? n.data.targetUserId : null;
-    if (!n.room_id || !targetUserId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setBusyId(n.id);
     try {
-      await respondToRequest(n.room_id, targetUserId, approve);
+      if (n.type === 'friend_request') {
+        if (!n.actor_id || !userId) return;
+        await (approve ? acceptFriendRequest(userId, n.actor_id) : removeFriendship(userId, n.actor_id));
+      } else {
+        const targetUserId = typeof n.data.targetUserId === 'string' ? n.data.targetUserId : null;
+        if (!n.room_id || !targetUserId) return;
+        await respondToRequest(n.room_id, targetUserId, approve);
+      }
       await deleteNotification(n.id);
       load();
     } catch (e) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       setError(e instanceof Error ? e.message : 'Could not respond to that request.');
     } finally {
       setBusyId(null);
@@ -144,13 +159,22 @@ export default function Notifications() {
       {error && <Text style={styles.error}>{error}</Text>}
 
       {items === null ? (
-        <View style={styles.empty}>
-          <ActivityIndicator color={colors.accent.DEFAULT} />
+        <View style={styles.list}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.row}>
+              <Skeleton width={42} height={42} radius={999} />
+              <View style={[styles.rowContent, { gap: 6 }]}>
+                <Skeleton width={i % 2 === 0 ? 210 : 170} height={12} radius={6} />
+                <Skeleton width={70} height={10} radius={5} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : items.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.body}>{roomId ? 'No activity in this Room yet.' : 'Nothing here yet.'}</Text>
-        </View>
+        <EmptyState
+          icon="bell"
+          message={roomId ? 'No activity in this Room yet.' : 'Nothing here yet.'}
+        />
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: clearance }]}>
           {GROUPS.map((group) => {
@@ -181,7 +205,7 @@ export default function Notifications() {
                         </Text>
                         <Text style={styles.time}>{relativeTime(n.created_at)}</Text>
                       </View>
-                      {n.type === 'join_request' ? (
+                      {n.type === 'join_request' || n.type === 'friend_request' ? (
                         <View style={styles.actions}>
                           {busyId === n.id ? (
                             <ActivityIndicator color={colors.accent.DEFAULT} />
@@ -191,7 +215,7 @@ export default function Notifications() {
                                 <Text style={styles.acceptText}>Accept</Text>
                               </Pressable>
                               <Pressable style={styles.skipBtn} onPress={() => respond(n, false)} hitSlop={4}>
-                                <Text style={styles.skipText}>Skip</Text>
+                                <Text style={styles.skipText}>{n.type === 'friend_request' ? 'Decline' : 'Skip'}</Text>
                               </Pressable>
                             </>
                           )}
@@ -236,20 +260,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 22,
     color: colors.text,
   },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: colors.neutral[400],
-  },
   error: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: colors.accent.DEFAULT,
+    color: colors.error,
     textAlign: 'center',
     paddingHorizontal: Spacing[6],
     paddingBottom: Spacing[2],
