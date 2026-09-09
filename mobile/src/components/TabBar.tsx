@@ -77,15 +77,27 @@ export default function TabBar({ active, communityId, userId, blurTarget }: TabB
       {/* A flat blur alone can't be told apart from a plain translucent
           box once whatever's behind it is a single flat colour — which is
           exactly what sat behind this bar on Home/Chats/You and in dark
-          mode generally, reading as "just gray" instead of glass. Apple's
-          own Liquid Glass reads as glass largely because of a specular
-          highlight and a lit rim that stay visible regardless of what's
-          behind the material — this gradient and the hairline border
-          below are a static stand-in for that, so the bar looks the same
-          material on every screen instead of only where it happens to
-          have colourful content to blur. */}
+          mode generally, reading as "just gray" instead of glass. This
+          gradient is a static stand-in for the specular highlight real
+          glass would have, so the bar looks the same material on every
+          screen instead of only where it happens to have colourful
+          content to blur. (An outlining rim used to sit here too — removed,
+          it read as an unwanted border rather than part of the glass.) */}
+      {/* Light mode's real problem: blurring an all-white screen with a
+          light tint just produces more white, and a `backgroundColor` on
+          the BlurView itself is a background-layer property Android
+          paints *underneath* its native blur (see `bar`'s own comment,
+          confirmed on-device) — so no fill on the BlurView can ever fix
+          this. A sibling child like this one can actually paint on top.
+          Dark mode already reads clearly (a dark blur against dark
+          screens has real contrast on its own), so this stays a no-op
+          there. */}
+      <View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { backgroundColor: mode === 'dark' ? 'transparent' : 'rgba(17,17,17,0.11)' }]}
+      />
       <LinearGradient
-        colors={mode === 'dark' ? ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.65)', 'rgba(255,255,255,0.08)']}
+        colors={mode === 'dark' ? ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.35)', 'rgba(255,255,255,0.05)']}
         locations={[0, 0.7]}
         pointerEvents="none"
         style={StyleSheet.absoluteFill}
@@ -100,19 +112,13 @@ export default function TabBar({ active, communityId, userId, blurTarget }: TabB
           <Link key={tab.label} href={tab.href} asChild style={styles.tab}>
             <Pressable>
               <View style={styles.tabContent}>
-                <Icon name={iconName} size={22} color={color} />
+                <Icon name={iconName} size={25} color={color} />
                 <Text style={[styles.label, { color }]}>{tab.label}</Text>
               </View>
             </Pressable>
           </Link>
         );
       })}
-      {/* The rim itself: a hairline border painted as a sibling on top of
-          the native blur child, not as this View's own `borderColor` —
-          same reasoning as the `backgroundColor` note below, a border set
-          directly on the BlurView is a background-layer property and gets
-          painted underneath NativeBlurView on Android too. */}
-      <View pointerEvents="none" style={[styles.rim, { borderColor: mode === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.7)' }]} />
     </BlurView>
   );
 }
@@ -140,9 +146,13 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) => StyleSheet.crea
     alignItems: 'flex-start',
     justifyContent: 'center',
     gap: 6,
-    paddingTop: Spacing[2],
+    // Nudged up from Spacing[2]/6 — a modest bump (not the old chunky
+    // icon-28/label-9.5 bar this was sized down from, see
+    // TabBarContentHeight's own comment) asked for specifically to make
+    // the bar easier to tap and read for older/less tech-savvy users.
+    paddingTop: 10,
     paddingHorizontal: Spacing[3],
-    paddingBottom: 6,
+    paddingBottom: 8,
     borderRadius: Radius.pill,
     overflow: 'hidden',
     // Only matters as a fallback fill for the rare case blurMethod ends
@@ -156,28 +166,23 @@ const makeStyles = (colors: ThemeColors, bottomInset: number) => StyleSheet.crea
     backgroundColor: `${colors.surface}66`,
     ...Shadows.md,
   },
-  rim: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-  },
   tab: {
     // Fixed, not flex:1 — a flex tab stretches to fill the bar's full
     // width, spreading its icon out to wherever that slot's center lands.
     // A fixed width lets `bar`'s justifyContent:'center' cluster all four
     // tabs together in the middle instead.
-    width: 58,
+    width: 62,
     alignItems: 'center',
   },
   tabContent: {
     alignItems: 'center',
-    gap: 3,
-    paddingTop: 4,
+    gap: 4,
+    paddingTop: 5,
   },
   label: {
     fontFamily: Fonts?.bodyBold,
-    fontSize: 8.5,
-    letterSpacing: 0.3,
+    fontSize: 9.5,
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
 });

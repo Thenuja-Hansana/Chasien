@@ -183,14 +183,17 @@ export const MaxContentWidth = 800;
 /**
  * TabBar's own rendered height, excluding the device's bottom safe-area
  * inset (TabBar adds that separately via `useSafeAreaInsets`) — paddingTop
- * (Spacing[2]) + tabContent (paddingTop 4 + icon 22 + a 3px gap + an
- * ~11px label) + paddingBottom (6). Sized down from an earlier, chunkier
- * bar (icon 28/label 9.5) that read as too large for this app's actual
- * scale. Exists so `PostFab` can float its pill so it straddles the bar's
- * top edge without either file having to read the other's internals —
- * keep this in sync if TabBar's own layout constants change.
+ * (10) + tabContent (paddingTop 5 + icon 25 + a 4px gap + an ~12px label)
+ * + paddingBottom (8). Nudged up from an earlier, smaller bar (icon
+ * 22/label 8.5, height 56) that read as too small next to the rest of the
+ * app's controls — sized deliberately short of the even-chunkier bar this
+ * was originally cut down from (icon 28/label 9.5), per the same "not
+ * really big, just a little bit larger" ask this size came from. Exists
+ * so `PostFab` can float its pill so it straddles the bar's top edge
+ * without either file having to read the other's internals — keep this in
+ * sync if TabBar's own layout constants change.
  */
-export const TabBarContentHeight = 56;
+export const TabBarContentHeight = 64;
 
 /**
  * The gap between TabBar's own floating pill and the device's safe-area
