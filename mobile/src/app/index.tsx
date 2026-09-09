@@ -1,6 +1,5 @@
 import { BlurTargetView } from 'expo-blur';
 import { Link, router, useFocusEffect } from 'expo-router';
-import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +12,6 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
-import { signMediaUrls } from '@/lib/media';
 import { fetchRoomUnreadCounts, fetchUnreadCount, subscribeToNotifications } from '@/lib/notifications';
 import { fetchLatestPostPreview, type RoomActivityPreview } from '@/lib/posts';
 import { cacheJoinedRoom } from '@/lib/room-cache';
@@ -59,7 +57,6 @@ export default function Index() {
   const [unreadByRoom, setUnreadByRoom] = useState<Map<string, number>>(new Map());
   /** The Telegram-style "Name: content" line + timestamp under each Room's name. Absent (not just null) while still loading a given Room's preview, so a row can tell "not fetched yet" apart from "genuinely no posts". */
   const [previewByRoom, setPreviewByRoom] = useState<Map<string, RoomActivityPreview | null>>(new Map());
-  const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
   /** What TabBar's blur actually blurs on Android — see TabBar's own blurTarget doc comment. */
   const blurTargetRef = useRef<View>(null);
   const clearance = useTabBarClearance();
@@ -86,18 +83,6 @@ export default function Index() {
         .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load your Rooms.'));
     }, [session]),
   );
-
-  useEffect(() => {
-    const paths = [...previewByRoom.values()].map((p) => p?.imagePath).filter((p): p is string => !!p);
-    const unsigned = paths.filter((p) => !mediaUrls.has(p));
-    if (unsigned.length === 0) return;
-    signMediaUrls(unsigned)
-      .then((signed) => setMediaUrls((prev) => new Map([...prev, ...signed])))
-      .catch(() => {});
-    // mediaUrls intentionally excluded — it's the thing this effect grows,
-    // not something a change to it should re-run the effect for.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewByRoom]);
 
   const loadNotificationState = useCallback(() => {
     if (!userId) return;
@@ -188,7 +173,6 @@ export default function Index() {
                   room={room}
                   unreadCount={unreadByRoom.get(room.id) ?? 0}
                   preview={previewByRoom.get(room.id)}
-                  mediaUrls={mediaUrls}
                 />
               ))}
             </View>
@@ -205,13 +189,11 @@ function RoomRow({
   room,
   unreadCount,
   preview,
-  mediaUrls,
 }: {
   room: JoinedRoom;
   unreadCount: number;
   /** undefined = preview still loading; null = Room genuinely has no posts yet. */
   preview: RoomActivityPreview | null | undefined;
-  mediaUrls: Map<string, string>;
 }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -236,9 +218,6 @@ function RoomRow({
           {preview && <Text style={styles.roomTime}>{formatRoomTimestamp(preview.createdAt)}</Text>}
         </View>
         <View style={styles.roomRowLine}>
-          {preview?.imagePath && mediaUrls.get(preview.imagePath) && (
-            <Image source={{ uri: mediaUrls.get(preview.imagePath) }} style={styles.previewThumb} contentFit="cover" />
-          )}
           <Text style={styles.roomPreview} numberOfLines={1}>
             {preview ? `${preview.authorName}: ${preview.summary}` : preview === null ? 'No posts yet' : ''}
           </Text>
@@ -380,12 +359,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 12,
     color: colors.neutral[400],
-  },
-  previewThumb: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    backgroundColor: colors.divider,
   },
   roomPreview: {
     flex: 1,
