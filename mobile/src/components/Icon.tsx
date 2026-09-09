@@ -126,6 +126,54 @@ const ICONS: Record<string, Shape[]> = {
       d: 'M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-3-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9h-.2a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-3l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5v-.2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 3 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 3h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z',
     },
   ],
+  // Added for the "You" tab's Settings and activity screen (a full page
+  // now, not the old drawer — see that screen's own comment) and the
+  // hamburger trigger that opens it.
+  menu: [{ t: 'path', d: 'M4 7h16M4 12h16M4 17h16' }],
+  moon: [{ t: 'path', d: 'M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z' }],
+  history: [
+    { t: 'path', d: 'M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z' },
+    { t: 'path', d: 'M2.5 8 5 3.5h14L21.5 8' },
+    { t: 'path', d: 'M9.5 12.5h5' },
+  ],
+  chartLine: [
+    { t: 'rect', x: 4, y: 13, width: 4, height: 7, rx: 1 },
+    { t: 'rect', x: 10, y: 8, width: 4, height: 12, rx: 1 },
+    { t: 'rect', x: 16, y: 4, width: 4, height: 16, rx: 1 },
+  ],
+  star: [{ t: 'path', d: 'M12 3.3l2.7 5.5 6 .9-4.3 4.2 1 6-5.4-2.8-5.4 2.8 1-6-4.3-4.2 6-.9z' }],
+  tag: [
+    { t: 'path', d: 'M11.5 3H4v7.5L14 20.5l7-7z' },
+    { t: 'circle', cx: 7.6, cy: 7.6, r: 1.5 },
+  ],
+  noEntry: [
+    { t: 'circle', cx: 12, cy: 12, r: 9 },
+    { t: 'path', d: 'M6 6l12 12' },
+  ],
+  textLines: [{ t: 'path', d: 'M4 6h16M4 12h11M4 18h7' }],
+  device: [
+    { t: 'rect', x: 7, y: 2.5, width: 10, height: 19, rx: 2 },
+    { t: 'path', d: 'M10.5 18.5h3' },
+  ],
+  download: [
+    { t: 'path', d: 'M12 3v12m0 0-4-4m4 4 4-4' },
+    { t: 'path', d: 'M5 19h14' },
+  ],
+  receipt: [
+    { t: 'rect', x: 5.5, y: 3, width: 13, height: 18, rx: 2 },
+    { t: 'path', d: 'M9 8h6M9 12h6M9 16h3.5' },
+  ],
+  help: [
+    { t: 'circle', cx: 12, cy: 12, r: 9 },
+    { t: 'path', d: 'M9.5 9.3a2.6 2.6 0 1 1 3.6 2.4c-.9.5-1.1.9-1.1 1.8' },
+    { t: 'circle', cx: 12, cy: 17, r: 0.9 },
+  ],
+  shield: [{ t: 'path', d: 'M12 3.2 19 6v5.5c0 4.8-3 7.9-7 9.3-4-1.4-7-4.5-7-9.3V6z' }],
+  info: [
+    { t: 'circle', cx: 12, cy: 12, r: 9 },
+    { t: 'path', d: 'M12 11v6' },
+    { t: 'circle', cx: 12, cy: 7.7, r: 0.9 },
+  ],
 };
 
 type IconProps = {

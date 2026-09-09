@@ -7,7 +7,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
-import SettingsDrawer from '@/components/SettingsDrawer';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
@@ -40,7 +39,6 @@ export default function ProfileScreen() {
   const [postMediaUrls, setPostMediaUrls] = useState<Map<string, string>>(new Map());
   const [messaging, setMessaging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>('none');
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [friendActionBusy, setFriendActionBusy] = useState(false);
@@ -171,8 +169,12 @@ export default function ProfileScreen() {
                 <View style={styles.bannerEmpty} />
               )}
               {isOwnProfile && (
-                <Pressable style={styles.settingsButton} hitSlop={8} onPress={() => setSettingsOpen(true)}>
-                  <Icon name="settings" size={20} color="#ffffff" />
+                <Pressable
+                  style={styles.settingsButton}
+                  hitSlop={8}
+                  onPress={() => router.push({ pathname: '/u/[userId]/settings', params: { userId } })}
+                >
+                  <Icon name="menu" size={20} color="#ffffff" />
                 </Pressable>
               )}
             </View>
@@ -335,8 +337,6 @@ export default function ProfileScreen() {
       </BlurTargetView>
 
       <TabBar active="You" userId={session.user.id} blurTarget={blurTargetRef} />
-
-      {isOwnProfile && <SettingsDrawer visible={settingsOpen} onClose={() => setSettingsOpen(false)} />}
     </SafeAreaView>
   );
 }

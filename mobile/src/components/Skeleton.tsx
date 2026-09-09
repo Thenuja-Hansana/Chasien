@@ -27,7 +27,7 @@ export default function Skeleton({
   const colors = useTheme();
   const { mode } = useThemeContext();
   const [blockWidth, setBlockWidth] = useState(0);
-  // eslint-disable-next-line react-hooks/refs -- read via .interpolate() during render, same as SettingsDrawer's progress Animated.Value.
+  // eslint-disable-next-line react-hooks/refs -- read via .interpolate() during render, the standard idiomatic use of an Animated.Value.
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
