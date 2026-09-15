@@ -158,7 +158,7 @@ export default function StoryViewer() {
   if (stories === null) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
-        <ActivityIndicator color={colors.accent.DEFAULT} />
+        <ActivityIndicator color="rgba(242,230,212,.9)" />
       </SafeAreaView>
     );
   }
@@ -171,7 +171,7 @@ export default function StoryViewer() {
             {communityId}
           </Text>
           <Pressable onPress={goHome} hitSlop={12}>
-            <Icon name="close" size={22} color={colors.text} />
+            <Icon name="close" size={22} color="rgba(242,230,212,.9)" />
           </Pressable>
         </View>
         <View style={styles.empty}>
@@ -303,10 +303,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: Spacing[4],
     paddingBottom: Spacing[4],
   },
+  // Fixed light-on-dark colors below, not `colors.*` — this whole screen
+  // is a permanently-dark surface regardless of the app's own Light/Dark
+  // mode (like every other story-viewer UI), so a theme-driven color
+  // would go near-invisible in Light mode. Matches the cream established
+  // elsewhere in this file (the real story view's own close icon/caption/
+  // header-meta), found and fixed during the loading/empty/error-state
+  // audit, 2026-09-15 — nothing here had been checked against Light mode
+  // on a real device before.
   headingText: {
     fontFamily: Fonts.heading,
     fontSize: 17,
-    color: colors.text,
+    color: 'rgba(242,230,212,.9)',
   },
   empty: {
     flex: 1,
@@ -316,7 +324,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   body: {
     fontFamily: Fonts.body,
     fontSize: 14,
-    color: colors.neutral[400],
+    color: 'rgba(242,230,212,.6)',
   },
   topShade: {
     position: 'absolute',
@@ -376,7 +384,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   authorName: {
     fontFamily: Fonts.bodyBold,
     fontSize: 14,
-    color: colors.text,
+    color: 'rgba(242,230,212,.9)',
   },
   headerMeta: {
     fontFamily: Fonts.body,
@@ -413,7 +421,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 14.5,
     lineHeight: 20,
-    color: colors.text,
+    color: 'rgba(242,230,212,.9)',
     maxWidth: 270,
   },
 });

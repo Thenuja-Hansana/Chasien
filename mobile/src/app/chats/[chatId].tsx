@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import MessageBubble from '@/components/MessageBubble';
+import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -38,7 +39,12 @@ export default function ChatView() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [summary, setSummary] = useState<InboxItem | null | 'loading'>('loading');
-  const [messages, setMessages] = useState<Message[]>([]);
+  // null = not fetched yet (still loading), distinct from `[]` (a real
+  // conversation with no messages) — before this, a realtime insert or
+  // the send handlers could also arrive before fetchMessages() resolved,
+  // so the two states need to stay tellable apart everywhere `messages`
+  // is touched below, not just at the initial fetch.
+  const [messages, setMessages] = useState<Message[] | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
   const [draft, setDraft] = useState('');
   const draftFocus = useFocusHighlight();
@@ -76,7 +82,7 @@ export default function ChatView() {
   // messages reference, whenever the message list changes — new sends
   // included, since sendMessage()'s own result needs a URL too.
   useEffect(() => {
-    const paths = messages.flatMap((m) => [m.image_url, m.voice_url].filter((p): p is string => !!p));
+    const paths = (messages ?? []).flatMap((m) => [m.image_url, m.voice_url].filter((p): p is string => !!p));
     const unsigned = paths.filter((p) => !mediaUrls.has(p));
     if (unsigned.length === 0) return;
     signMessageMediaUrls(unsigned)
@@ -92,10 +98,10 @@ export default function ChatView() {
 
     const unsubscribeMessages = subscribeToMessages(chatId, {
       onInsert: (message) => {
-        setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [message, ...prev]));
+        setMessages((prev) => (prev?.some((m) => m.id === message.id) ? prev : [message, ...(prev ?? [])]));
         if (message.author_id !== userId) markConversationRead(chatId, userId).catch(() => {});
       },
-      onUpdate: (message) => setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m))),
+      onUpdate: (message) => setMessages((prev) => prev && prev.map((m) => (m.id === message.id ? message : m))),
       onReactionChange: () => fetchMessages(chatId).then(setMessages).catch(() => {}),
     });
 
@@ -140,7 +146,7 @@ export default function ChatView() {
     setError(null);
     try {
       const sent = await sendMessage({ conversationId: chatId, authorId: userId, text, replyToId: pendingReply?.id });
-      setMessages((prev) => [sent, ...prev]);
+      setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send that message.');
       setDraft(text);
@@ -158,7 +164,7 @@ export default function ChatView() {
     try {
       const path = await uploadMessageImage(image, chatId, userId);
       const sent = await sendMessage({ conversationId: chatId, authorId: userId, imageUrl: path });
-      setMessages((prev) => [sent, ...prev]);
+      setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send that photo.');
     } finally {
@@ -189,7 +195,7 @@ export default function ChatView() {
     try {
       const path = await uploadMessageVoice(uri, chatId, userId);
       const sent = await sendMessage({ conversationId: chatId, authorId: userId, voiceUrl: path });
-      setMessages((prev) => [sent, ...prev]);
+      setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send that voice message.');
     } finally {
@@ -233,7 +239,7 @@ export default function ChatView() {
           ? (summary.dm_user_a === summary.otherUserId ? summary.dm_user_a_handle : summary.dm_user_b_handle)
           : null);
 
-  const messagesById = new Map(messages.map((m) => [m.id, m]));
+  const messagesById = new Map((messages ?? []).map((m) => [m.id, m]));
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -261,6 +267,20 @@ export default function ChatView() {
           (which is what this behavior mode is) rather than relying on the
           OS to shrink the window. */}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={8}>
+        {messages === null ? (
+          <View style={[styles.flex, styles.messageList, styles.messageSkeletonList]}>
+            {[
+              { mine: false, width: 160 },
+              { mine: true, width: 120 },
+              { mine: true, width: 190 },
+              { mine: false, width: 140 },
+            ].map((bubble, i) => (
+              <View key={i} style={bubble.mine ? styles.messageSkeletonMine : styles.messageSkeletonTheirs}>
+                <Skeleton width={bubble.width} height={36} radius={16} />
+              </View>
+            ))}
+          </View>
+        ) : (
         <FlatList
           style={styles.flex}
           contentContainerStyle={styles.messageList}
@@ -300,6 +320,7 @@ export default function ChatView() {
             </View>
           }
         />
+        )}
 
         {typingUser && <Text style={styles.typingText}>Typing...</Text>}
         {error && <Text style={styles.errorText}>{error}</Text>}
@@ -393,6 +414,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     color: colors.neutral[400],
     textAlign: 'center',
+  },
+  messageSkeletonList: {
+    gap: Spacing[2],
+  },
+  messageSkeletonMine: {
+    alignSelf: 'flex-end',
+  },
+  messageSkeletonTheirs: {
+    alignSelf: 'flex-start',
   },
   messageList: {
     padding: Spacing[4],

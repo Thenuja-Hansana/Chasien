@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
@@ -90,7 +91,7 @@ export default function VerifyEmail() {
         {room === 'loading' ? (
           <ActivityIndicator color={colors.accent.DEFAULT} style={styles.loading} />
         ) : !room ? (
-          <Text style={styles.body}>Room not found.</Text>
+          <EmptyState icon="alertCircle" message="Room not found." />
         ) : status && !status.verifiedAt ? (
           <View style={styles.sentState}>
             <View style={styles.iconCircle}>

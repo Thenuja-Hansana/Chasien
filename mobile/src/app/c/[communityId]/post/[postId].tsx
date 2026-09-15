@@ -15,8 +15,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
+import PostCardSkeleton from '@/components/PostCardSkeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
@@ -151,8 +153,8 @@ export default function PostDetail() {
 
   if (post === 'loading') {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
-        <ActivityIndicator color={colors.accent.DEFAULT} />
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <PostCardSkeleton bodyHeight={280} />
       </SafeAreaView>
     );
   }
@@ -160,10 +162,12 @@ export default function PostDetail() {
   if (!post) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
-        <Text style={styles.body}>This post isn&apos;t available.</Text>
-        <Pressable style={styles.backCta} onPress={() => router.back()}>
-          <Text style={styles.backCtaText}>Go back</Text>
-        </Pressable>
+        <EmptyState
+          icon="alertCircle"
+          message="This post isn't available."
+          actionLabel="Go back"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
@@ -265,7 +269,7 @@ export default function PostDetail() {
             <View style={styles.rule} />
 
             {topLevel.length === 0 ? (
-              <Text style={styles.noComments}>No comments yet.</Text>
+              <EmptyState icon="comment" message="No comments yet." />
             ) : (
               <View style={styles.comments}>
                 {topLevel.map((comment) => (
@@ -460,11 +464,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.divider,
     marginVertical: Spacing[4],
   },
-  noComments: {
-    fontFamily: Fonts.body,
-    fontSize: 13.5,
-    color: colors.neutral[500],
-  },
   comments: {
     gap: Spacing[4],
   },
@@ -511,20 +510,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 13,
     color: colors.accent.DEFAULT,
     marginTop: Spacing[3],
-  },
-  backCta: {
-    height: 44,
-    paddingHorizontal: Spacing[6],
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: colors.divider,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backCtaText: {
-    fontFamily: Fonts.heading,
-    fontSize: 15,
-    color: colors.text,
   },
   composerWrap: {
     borderTopWidth: 1,

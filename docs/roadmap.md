@@ -528,13 +528,31 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       upload, extra storage object per image) — a real feature, not a
       client-side polish tweak, and out of scope for this pass. See
       decision-log, 2026-09-15
-- [ ] Loading / empty / error states audited on every screen, not just
-      the happy path. **Partial** — real `Skeleton`/`EmptyState`
-      components exist and are wired into 5 screens (Home, Discover,
-      Search, Notifications, Settings); the Room feed, chat list/thread,
-      post detail, story viewer, profile, friends, room settings/
-      subgroups, and the auth screens still use ad hoc
-      `ActivityIndicator`/plain-text states
+- [x] Loading / empty / error states audited on every screen, not just
+      the happy path. **2026-09-15:** every remaining screen this
+      checklist item named — Room feed, Chats inbox, chat thread, post
+      detail, story viewer, profile, friends, the "View All Rooms" list,
+      Room Settings, and a Room's own chat/sub-group list — now uses
+      `Skeleton`-shaped loading states (a new `PostCardSkeleton`,
+      reused across the Room feed and post detail, plus per-screen row/
+      field skeletons matching each screen's real layout) and `EmptyState`
+      instead of a bare `ActivityIndicator` or ad hoc text. Auth screens
+      (`login.tsx`/`signup.tsx`) turned out to need nothing — their only
+      `ActivityIndicator` was already the correct thing, a submit-button
+      spinner, not a content gate; same for `_layout.tsx`'s one-time
+      session-check spinner, a true app-boot gate with no list shape to
+      skeleton. Two real bugs found and fixed along the way, not just
+      polish: the chat thread's `messages` state used `[]` for both
+      "still loading" and "genuinely empty," so a conversation with real
+      history could flash "No messages yet" for a moment before its
+      messages arrived — now `null` means loading, distinct from a real
+      empty array, threaded through every `setMessages` call site. And
+      the story viewer (`story.tsx`) had several text/icon colors reading
+      from the app's Light/Dark theme despite sitting on a screen that's
+      always dark by design — invisible-on-light-background territory,
+      never caught because nothing here had been checked against Light
+      mode on a real device before; fixed to the fixed cream palette the
+      rest of that screen already uses. See decision-log, 2026-09-15
 - [ ] Animation and transition polish (`react-native-reanimated`) —
       screen transitions, tab switches, modal/sheet presentations.
       **Barely started** — `app/_layout.tsx` sets the four tab

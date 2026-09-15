@@ -1,11 +1,13 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
-import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
+import Skeleton from '@/components/Skeleton';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchMyRooms, type Room, type RoomRole } from '@/lib/rooms';
@@ -55,13 +57,19 @@ export default function AllRooms() {
       {error && <Text style={styles.error}>{error}</Text>}
 
       {rooms === null ? (
-        <View style={styles.empty}>
-          <ActivityIndicator color={colors.accent.DEFAULT} />
+        <View style={styles.list}>
+          {[130, 100, 150].map((width, i) => (
+            <View key={i} style={styles.row}>
+              <Skeleton width={48} height={48} radius={Radius.sm} />
+              <View style={[styles.rowContent, { gap: 5 }]}>
+                <Skeleton width={width} height={14} radius={6} />
+                <Skeleton width={70} height={12} radius={5} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : rooms.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.body}>No Rooms yet.</Text>
-        </View>
+        <EmptyState icon="globe" heading="No Rooms yet" message="Rooms you join will show up here." />
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {rooms.map((room) => {
@@ -123,16 +131,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 13,
     color: colors.accent.DEFAULT,
     paddingHorizontal: Spacing[6],
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: colors.neutral[400],
   },
   list: {
     paddingBottom: Spacing[8],

@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -110,8 +111,18 @@ export default function CommunitySettings() {
 
   if (room === 'loading' || (room && isModerator === null)) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
-        <ActivityIndicator color={colors.accent.DEFAULT} />
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={[styles.content, styles.settingsSkeletonTop]}>
+          <Skeleton width="100%" height={140} radius={Radius.lg} />
+          <View style={styles.settingsSkeletonFields}>
+            <Skeleton width={90} height={11} radius={5} />
+            <Skeleton width="100%" height={44} radius={Radius.md} />
+            <Skeleton width={90} height={11} radius={5} />
+            <Skeleton width="100%" height={80} radius={Radius.md} />
+            <Skeleton width={130} height={11} radius={5} />
+            <Skeleton width="100%" height={44} radius={Radius.md} />
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -605,6 +616,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing[6],
+  },
+  settingsSkeletonTop: {
+    paddingTop: Spacing[4],
+  },
+  settingsSkeletonFields: {
+    gap: Spacing[3],
+    marginTop: Spacing[6],
   },
   header: {
     flexDirection: 'row',

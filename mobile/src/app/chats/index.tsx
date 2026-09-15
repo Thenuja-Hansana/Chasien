@@ -2,11 +2,13 @@ import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
@@ -217,13 +219,19 @@ export default function Chats() {
       {error && <Text style={styles.error}>{error}</Text>}
 
       {items === null ? (
-        <View style={styles.empty}>
-          <ActivityIndicator color={colors.accent.DEFAULT} />
+        <View style={styles.list}>
+          {[128, 96, 150, 110, 134, 100].map((nameWidth, i) => (
+            <View key={i} style={styles.row}>
+              <Skeleton width={50} height={50} radius={999} />
+              <View style={[styles.rowContent, { gap: 6 }]}>
+                <Skeleton width={nameWidth} height={13} radius={6} />
+                <Skeleton width={nameWidth + 60} height={11} radius={5} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : visible.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.body}>No chats here yet.</Text>
-        </View>
+        <EmptyState icon="comment" heading="No chats here yet" message="Messages with people and Rooms you join will show up here." />
       ) : (
         <ScrollView contentContainerStyle={[styles.list, { paddingBottom: clearance }]}>
           {pinned.length > 0 && (
@@ -457,16 +465,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 13,
     color: colors.accent.DEFAULT,
     paddingHorizontal: Spacing[6],
-  },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  body: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: colors.neutral[400],
   },
   list: {
     paddingBottom: Spacing[8],

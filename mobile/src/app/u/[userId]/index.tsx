@@ -6,7 +6,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
@@ -157,8 +159,18 @@ export default function ProfileScreen() {
       <BlurTargetView ref={blurTargetRef} style={styles.flex}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: clearance }]}>
         {profile === 'loading' ? (
-          <View style={styles.loading}>
-            <ActivityIndicator color={colors.accent.DEFAULT} />
+          <View>
+            <Skeleton width="100%" height={BANNER_HEIGHT} radius={0} />
+            <View style={styles.avatarRing}>
+              <Skeleton width={AVATAR_SIZE} height={AVATAR_SIZE} radius={999} />
+            </View>
+            <View style={styles.contentBody}>
+              <View style={styles.identity}>
+                <Skeleton width={160} height={20} radius={8} />
+                <Skeleton width={100} height={14} radius={6} />
+                <Skeleton width={220} height={13} radius={6} />
+              </View>
+            </View>
           </View>
         ) : (
           <>
@@ -252,9 +264,22 @@ export default function ProfileScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Rooms</Text>
                 {rooms === null ? (
-                  <ActivityIndicator color={colors.accent.DEFAULT} />
+                  <View style={styles.roomList}>
+                    {[130, 100].map((width, i) => (
+                      <View key={i} style={styles.roomRow}>
+                        <Skeleton width={48} height={48} radius={Radius.sm} />
+                        <View style={styles.roomText}>
+                          <Skeleton width={width} height={14} radius={6} />
+                          <Skeleton width={70} height={12} radius={5} />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
                 ) : rooms.length === 0 ? (
-                  <Text style={styles.emptyText}>{isOwnProfile ? "You haven't joined any Rooms yet." : 'No Rooms in common.'}</Text>
+                  <EmptyState
+                    icon="globe"
+                    message={isOwnProfile ? "You haven't joined any Rooms yet." : 'No Rooms in common.'}
+                  />
                 ) : (
                   <>
                     <View style={styles.roomList}>
@@ -302,9 +327,18 @@ export default function ProfileScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Posts</Text>
                 {posts === null ? (
-                  <ActivityIndicator color={colors.accent.DEFAULT} />
+                  <View style={styles.postGrid}>
+                    {/* Plain colors.surface boxes, not shimmering Skeletons
+                        — postThumb's own resting background already reads
+                        as a placeholder, and Skeleton's height prop is a
+                        fixed number, not the aspectRatio: 1 these tiles
+                        actually need. */}
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                      <View key={i} style={styles.postThumb} />
+                    ))}
+                  </View>
                 ) : posts.length === 0 ? (
-                  <Text style={styles.emptyText}>No posts yet.</Text>
+                  <EmptyState icon="textLines" message="No posts yet." />
                 ) : (
                   <View style={styles.postGrid}>
                     {posts.map((post) => {
@@ -361,11 +395,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   content: {
     paddingBottom: Spacing[8],
-  },
-  loading: {
-    height: 300,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   bannerWrap: {
     height: BANNER_HEIGHT,
@@ -518,11 +547,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sectionLabel: {
     ...Typography.label,
     color: colors.neutral[500],
-  },
-  emptyText: {
-    fontFamily: Fonts.body,
-    fontSize: 15,
-    color: colors.neutral[400],
   },
   roomList: {
     gap: Spacing[4],

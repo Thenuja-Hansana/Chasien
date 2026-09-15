@@ -5,7 +5,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
@@ -108,8 +110,18 @@ export default function RoomChat() {
 
   if (room === 'loading' || subgroups === null) {
     return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <ActivityIndicator color={colors.accent.DEFAULT} />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.list}>
+          {[100, 130].map((width, i) => (
+            <View key={i} style={styles.row}>
+              <Skeleton width={48} height={48} radius={Radius.sm} />
+              <View style={[styles.rowContent, { gap: 5 }]}>
+                <Skeleton width={width} height={14} radius={6} />
+                <Skeleton width={width + 40} height={12} radius={5} />
+              </View>
+            </View>
+          ))}
+        </View>
       </SafeAreaView>
     );
   }
@@ -117,7 +129,7 @@ export default function RoomChat() {
   if (!room) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <Text style={styles.body}>Room not found.</Text>
+        <EmptyState icon="alertCircle" message="Room not found." />
       </SafeAreaView>
     );
   }
@@ -153,7 +165,7 @@ export default function RoomChat() {
 
           <Text style={styles.sectionLabel}>Sub-groups</Text>
           {subgroups.length === 0 ? (
-            <Text style={styles.emptyNote}>No sub-groups in this Room yet.</Text>
+            <EmptyState icon="comment" message="No sub-groups in this Room yet." />
           ) : (
             subgroups.map((s) => {
               const participation = participations.get(s.id);
@@ -295,11 +307,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.accent.DEFAULT,
     paddingHorizontal: Spacing[6],
   },
-  body: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    color: colors.neutral[400],
-  },
   list: {
     width: '100%',
     maxWidth: MaxContentWidth,
@@ -312,13 +319,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[4],
     paddingBottom: Spacing[1],
-  },
-  emptyNote: {
-    fontFamily: Fonts.body,
-    fontSize: 13.5,
-    color: colors.neutral[400],
-    paddingHorizontal: Spacing[6],
-    paddingBottom: Spacing[2],
   },
   row: {
     flexDirection: 'row',

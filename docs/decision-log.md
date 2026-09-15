@@ -7,6 +7,107 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Bones Phase loading/empty/error-state audit
+
+**What happened:** worked through every screen the Bones Phase checklist's
+loading/empty/error item still named as ad hoc — Room feed, Chats inbox,
+chat thread, post detail, story viewer, profile, friends, "View All
+Rooms," Room Settings, and a Room's own chat/sub-group list — replacing
+bare `ActivityIndicator`s and plain-text empty states with the existing
+`Skeleton`/`EmptyState` components (already used on Home, Discover,
+Search, Notifications, Settings). Added one new shared component,
+`PostCardSkeleton` (`components/PostCardSkeleton.tsx`), shaped after
+`PostCard.tsx`'s own layout (38px avatar, name/time lines, a body block)
+— reused on both the Room feed (three, varied `bodyHeight`) and post
+detail (one, taller, for the single post) rather than duplicating the
+same shape twice.
+
+**Per-screen skeleton shapes**, each matching the screen's real content
+rather than a generic spinner: Chats inbox and Friends both reuse the
+`[width, i] => <Skeleton avatar + two lines>` row pattern Home's Room
+list originated; profile gets a banner rectangle + overlapping avatar
+circle + three identity-text lines (matching `BANNER_HEIGHT`/
+`AVATAR_SIZE`); profile's own Rooms/Posts sections get smaller inline
+skeletons (room rows; for the post grid, plain `colors.surface`-background
+tiles rather than `Skeleton` — the grid's `aspectRatio: 1` tiles don't
+have a fixed pixel height the way `Skeleton`'s `height: number` prop
+needs, and the tile's own resting background was already placeholder-
+enough without adding a shimmer for a 3-column grid); the chat thread
+gets four alternating left/right bubble-shaped skeletons; Room Settings
+gets a banner rectangle plus a handful of field-shaped blocks.
+
+**Empty states**, converted to `EmptyState` for the genuinely-empty case
+in each of the same screens — some with a heading (Room feed's "No posts
+yet," Friends' "No friends yet"), some without, matching `EmptyState`'s
+own documented distinction: a screen-defining empty state gets the full
+heading+message+icon treatment, while a narrower one — a section that's
+empty inside a screen that already has content elsewhere, like post
+detail's comment list or profile's Rooms/Posts sections — gets just the
+icon and a reason, no heading, per the component's own doc comment on
+exactly this case.
+
+**Two real bugs found and fixed, not just polish** — this is why the
+item says "audited," not "reskinned":
+
+1. **Chat thread's loading/empty conflation.** `chats/[chatId].tsx`'s
+   `messages` state was `useState<Message[]>([])` — `[]` meant both
+   "haven't fetched yet" and "genuinely no messages," and `fetchMessages()`
+   resolves *after* the screen already knows which conversation it's
+   showing (summary resolves first, in the same `load()` callback, then
+   `await fetchMessages(chatId)` a moment later). In that window, the
+   `FlatList`'s `ListEmptyComponent` ("No messages yet — say something")
+   could render for a real conversation with real history, purely because
+   messages hadn't arrived yet. Fixed by changing the state to
+   `Message[] | null` (`null` = still loading), threading the distinction
+   through every touch point — the media-signing effect, the realtime
+   `onInsert`/`onUpdate` handlers, the three optimistic-send call sites,
+   `messagesById`, and the `FlatList` itself, which now only renders once
+   `messages !== null` (a bubble-shaped skeleton renders in its place
+   until then). Caught by actually tracing the load sequence, not by
+   noticing anything visually broken.
+2. **Story viewer's theme-color leak onto an always-dark screen.**
+   `story.tsx` renders full-bleed over a hardcoded dark background
+   (`#0c0a08`) regardless of the app's own Light/Dark mode — same as
+   every other story-viewer UI (Instagram, Snapchat) — and most of its
+   own text/icons already use a fixed cream (`rgba(242,230,212,*)`
+   family) for exactly that reason: the close icon, the header-meta line,
+   the progress track. But six other spots — the loading spinner, the
+   empty-state close icon and heading, the empty-state message, the
+   real story view's author-name text, and the caption text — read
+   `colors.text`/`colors.neutral[400]`/`colors.accent.DEFAULT` from the
+   *app's* current theme instead. In Light mode, that's near-black text
+   and a near-black spinner on a near-black background: unreadable.
+   Found while auditing this screen's empty state (about to convert it to
+   `EmptyState`, which is itself theme-aware — stopped and checked
+   whether that would even render correctly here first, which is what
+   surfaced the pre-existing bug independent of that conversion). Fixed
+   all six to the same fixed cream values the rest of the screen already
+   uses, and deliberately did *not* convert the empty state to the
+   `EmptyState` component itself — that component is theme-aware by
+   design, which is correct for every other screen but wrong for this
+   one's deliberately fixed-dark surface, so the hand-rolled `Text`/
+   `Icon` stayed, just recolored.
+
+**Screens that needed nothing:** `login.tsx`/`signup.tsx` — their only
+`ActivityIndicator` is already a submit-button spinner, the right thing
+for a form. `_layout.tsx`'s one-time auth-session-check spinner — a true
+app-boot gate, not a content list, with nothing to skeleton.
+
+**Verified:** typecheck and lint clean throughout. Re-screenshotted at a
+mobile viewport (Expo web + headless Chromium) with Supabase REST/RPC
+calls artificially delayed 2.5s (`page.route()`), since the local stack
+resolves too fast to naturally observe a loading state — confirmed the
+Room feed, profile, and Chats inbox skeletons render correctly mid-load,
+and Friends' real empty state (Mara has zero friends in the seed data)
+renders correctly too.
+
+**Revisit when:** a new list/detail screen is added — reach for
+`Skeleton`/`EmptyState`/`PostCardSkeleton` from the start rather than a
+bare spinner, the same way this pass had to retrofit ten screens that
+predated those components existing.
+
+---
+
 ## 2026-09-15 — Bones Phase image loading/caching pass (partial: variants blocked)
 
 **What happened:** worked through the Bones Phase checklist's three-part

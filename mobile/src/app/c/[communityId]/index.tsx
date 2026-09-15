@@ -6,8 +6,10 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Tex
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
 import PostCard from '@/components/PostCard';
+import PostCardSkeleton from '@/components/PostCardSkeleton';
 import PostFab, { FAB_SIZE } from '@/components/PostFab';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
@@ -252,11 +254,13 @@ export default function RoomHome() {
   if (!room) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <Text style={styles.emptyHeading}>Room not found</Text>
-        <Text style={styles.body}>It may not exist, or you don&apos;t have access to it.</Text>
-        <Pressable style={styles.cta} onPress={() => router.replace('/discover')}>
-          <Text style={styles.ctaText}>Back to Discover</Text>
-        </Pressable>
+        <EmptyState
+          icon="alertCircle"
+          heading="Room not found"
+          message="It may not exist, or you don't have access to it."
+          actionLabel="Back to Discover"
+          onAction={() => router.replace('/discover')}
+        />
       </SafeAreaView>
     );
   }
@@ -390,8 +394,10 @@ export default function RoomHome() {
       {error && <Text style={styles.error}>{error}</Text>}
 
       {posts === null ? (
-        <View style={styles.centered}>
-          <ActivityIndicator color={colors.accent.DEFAULT} />
+        <View>
+          <PostCardSkeleton />
+          <PostCardSkeleton bodyHeight={220} />
+          <PostCardSkeleton bodyHeight={100} />
         </View>
       ) : (
         <FlatList
@@ -420,12 +426,11 @@ export default function RoomHome() {
             ) : null
           }
           ListEmptyComponent={
-            <View style={styles.emptyFeed}>
-              <Text style={styles.emptyHeading}>No posts yet</Text>
-              <Text style={styles.body}>
-                {canPost ? 'Be the first to post in this Room.' : 'Only mods can post in this Room.'}
-              </Text>
-            </View>
+            <EmptyState
+              icon="textLines"
+              heading="No posts yet"
+              message={canPost ? 'Be the first to post in this Room.' : 'Only mods can post in this Room.'}
+            />
           }
           ListFooterComponent={
             loadingMore ? <ActivityIndicator style={styles.footerSpinner} color={colors.accent.DEFAULT} /> : null
@@ -554,13 +559,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     height: 1,
     backgroundColor: colors.divider,
-  },
-  emptyFeed: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing[2],
-    paddingTop: Spacing[8],
-    paddingHorizontal: Spacing[6],
   },
   emptyHeading: {
     fontFamily: Fonts.heading,
