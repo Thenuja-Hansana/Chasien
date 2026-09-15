@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import PostCard from '@/components/PostCard';
-import PostFab from '@/components/PostFab';
+import PostFab, { FAB_SIZE } from '@/components/PostFab';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
@@ -387,7 +387,10 @@ export default function RoomHome() {
         <FlatList
           data={posts}
           keyExtractor={(post) => post.id}
-          contentContainerStyle={[styles.feedContent, { paddingBottom: clearance }]}
+          contentContainerStyle={[
+            styles.feedContent,
+            { paddingBottom: canPost ? clearance + FAB_SIZE + Spacing[3] : clearance },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

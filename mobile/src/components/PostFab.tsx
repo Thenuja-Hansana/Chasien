@@ -7,7 +7,7 @@ import { Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 
-const FAB_SIZE = 54;
+export const FAB_SIZE = 54;
 
 /**
  * "Post" no longer lives in the main tab bar (Home/Explore/Chats/You

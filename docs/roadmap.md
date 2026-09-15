@@ -433,10 +433,33 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       other everywhere, just aren't sourced from a named token, so nothing
       needed fixing there. Every sub-audit above (color, radius,
       type-scale, spacing) is now genuinely done
-- [ ] Small-screen audit: verify every screen on a small form factor
+- [x] Small-screen audit: verify every screen on a small form factor
       (compact Android width, e.g. an iPhone-SE-class 375px-equivalent)
       — check for truncation, overflow, tab bar / keyboard collisions.
-      **Not started** — no compact-width testing recorded anywhere
+      **2026-09-15:** driven live at a 375px viewport (Expo web + a
+      headless browser, not just code review) across login/signup, Home,
+      Discover, Search, Chats, Notifications, a Room feed, a chat thread
+      with the composer filled, Room Settings, Create Room, create-post,
+      and Profile — each checked both at initial scroll position and
+      scrolled to the true bottom, since a floating tab bar/FAB always
+      overlaps whatever's currently at the bottom of an *unscrolled* list,
+      which isn't itself a bug. Found and fixed one real one: a Room feed
+      with few posts (shorter than the viewport) let the floating
+      `PostFab` "+" button permanently cover the last post's like/comment
+      row with no amount of scrolling able to clear it, because the
+      feed's bottom padding only reserved space for the tab bar
+      (`useTabBarClearance()`), not the FAB's own 54px on top of that.
+      Fixed in `app/c/[communityId]/index.tsx` by reserving
+      `clearance + FAB_SIZE + Spacing[3]` at the feed's bottom instead of
+      just `clearance`, whenever `canPost` (i.e. whenever the FAB actually
+      renders) — `FAB_SIZE` now exported from `PostFab.tsx` rather than
+      re-guessed. Everything else checked (category pill wrapping, member
+      rows, poll inputs, chat composer growing to multiple lines, name/
+      title truncation) held up cleanly — no other overflow, truncation,
+      or collision found. See decision-log, 2026-09-15, for the full walk
+      and what was and wasn't covered (native keyboard behavior on a real
+      device is out of scope for a web-driven check — bug-fix.md #7
+      already covers that separately)
 - [ ] List virtualization pass: tune `FlatList` (or migrate hot lists to
       `FlashList`) — `windowSize`, `removeClippedSubviews`,
       `getItemLayout` where row height is knowable — for the feed, chat

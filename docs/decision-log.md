@@ -7,6 +7,73 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Bones Phase small-screen audit, driven live at 375px
+
+**What happened:** the Bones Phase checklist's small-screen audit item had
+sat unstarted since 2026-09-02. Rather than reason about it from the
+stylesheets, drove the actual app at a 375px-wide viewport (iPhone-SE
+class) — Expo web (`expo start --web`) on a spare port plus a headless
+Playwright Chromium session logged in as a seeded test account
+(`mara@example.com`), since that's the fastest way to get a real rendered
+layout without needing the physical Galaxy A14 for a check that isn't
+device-specific (unlike the cold-start/memory/keyboard items further down
+this same checklist, which do need the real device and stay untouched).
+
+**Screens checked:** login, signup (redirects when already authenticated,
+so effectively covered by login's layout), Home, Discover, Search, Chats,
+Notifications, a Room feed (Grit Club), a chat thread with the composer
+filled with multi-line text, Room Settings, Create Room, create-post, and
+Profile — each screenshotted both at its initial scroll position and
+scrolled all the way to the bottom. The two-screenshot approach mattered:
+every list screen with a floating tab bar visually "overlaps" whatever's
+last on screen *before* scrolling — that's just how an absolutely-
+positioned bottom bar looks over content, not a bug, and three separate
+screens (Home, Discover, Profile) looked broken in the unscrolled shot but
+turned out fine once actually scrolled to the end.
+
+**The one real bug found:** a Room feed short enough to fit within the
+viewport (Grit Club, 2 posts) let the floating `PostFab` "+" button
+(`components/PostFab.tsx`, 54px, bottom-right, sits `clearance` above the
+tab bar) permanently cover the last post's like/comment row — and unlike
+the false alarms above, no amount of scrolling cleared it, because the
+feed already couldn't scroll any further. Root cause: the feed's
+`FlatList` only reserved `clearance` (the tab-bar height) at its bottom,
+never accounting for the FAB's own additional height sitting on top of
+that. Fixed by exporting `FAB_SIZE` from `PostFab.tsx` and reserving
+`clearance + FAB_SIZE + Spacing[3]` at the bottom of
+`app/c/[communityId]/index.tsx`'s feed whenever `canPost` is true (i.e.
+whenever the FAB actually renders) instead of just `clearance`.
+
+**What held up cleanly, no fix needed:** Discover's category-pill row
+being visually cut off at the screen edge is a horizontal `ScrollView`,
+not a bug — confirmed in the source before treating it as one. Chats'
+row layout (`rowContent` with `flex: 1, minWidth: 0` plus
+`numberOfLines={1}` on the title) already handles long names/last-message
+previews correctly — this pattern was clearly written with narrow
+screens in mind already. Room Settings' category pills wrap onto multiple
+lines correctly at 375px; member rows don't truncate or overlap their
+Member/Manage controls. create-post's photo/poll option rows fit cleanly.
+The chat composer grows to multiple lines without clipping or pushing
+other elements off-screen.
+
+**What this pass does not cover:** actual on-device soft-keyboard
+behavior (a browser has no real keyboard to collide with) — that's
+already handled separately by bug-fix.md #7 (verified on the real Galaxy
+A14). System font-scale survival is also out of scope here — that's the
+Bones Phase's separate "touch target and accessibility" checklist item,
+still not started.
+
+**Verified:** typecheck clean after the `PostFab`/feed-padding fix; the
+fix was re-screenshotted at 375px, scrolled to the bottom, confirming the
+last post's like/comment row now clears the FAB with visible margin.
+
+**Revisit when:** a screen gains a new floating FAB/action button — reserve
+its height in the scrollable content's bottom padding from the start,
+the same way this fix does, rather than assuming the tab-bar clearance
+alone is enough.
+
+---
+
 ## 2026-09-11 — UI consistency audit, part three: corner radius and a real type-scale token
 
 **What happened:** continued the same day's audit into the two pieces the
