@@ -58,18 +58,16 @@ change. Numbering below matches the user's own list (they numbered 1-5, then
       create-post, create-story) — previously only iOS got a `behavior` at
       all.
 
-- [ ] **8. Odd spacing inside a Room feed** — investigated directly against
-      the live local database rather than guessing from the stylesheet:
-      Spiderman Club's one post is poll-only (`text: ''`, 0 media, 1 poll),
-      which in `PostCard.tsx` renders as author row → poll card
-      (`marginTop: Spacing[2]`, 8.8px) with no body text in between — that
-      matches the intended compact layout, not an obvious CSS bug. Couldn't
-      find a margin/padding issue in `storyRow`/`newestRow`/`PostCard`
-      that would produce a *large* gap, and the phone was locked
-      (passcode) so I couldn't screenshot the actual rendered result to
-      compare. **Needs a screenshot or a re-check on-device** — see note
-      below; several of today's other fixes (header margin, `PostFab`
-      replacing the old FAB) may also have changed what this looks like.
+- [x] **8. Odd spacing inside a Room feed** — initial investigation (against
+      the live local database) ruled out `PostCard`'s poll-only layout as
+      the cause but couldn't reproduce the actual gap without a device
+      screenshot. **Resolved** by the "Story row huge gap" follow-up below:
+      the real cause was the horizontal story-row `ScrollView` not sizing
+      itself to content on Android and stretching to fill free vertical
+      space. Fixed by wrapping it in a `storyScroll` `View` with a hard
+      `height: 92` (`app/c/[communityId]/index.tsx`) — confirmed in place
+      and verified against both Spiderman Club (one post) and Grit Club
+      (three posts), no regression.
 
 - [x] **9. Create-post button in the wrong place** — this turned out to be
       a real, separate bug, not just #5's tab icon: `c/[communityId]/index.tsx`
@@ -86,13 +84,6 @@ change. Numbering below matches the user's own list (they numbered 1-5, then
       plain horizontal rule with even spacing above/below, no label text.
       Also directly touches the area #8 flagged — worth re-checking
       whether that spacing complaint still stands after this.
-
-## Notes for the user
-
-**#8** — a screenshot of Spiderman Club's feed (or confirming whether the gap
-is still there after today's other changes) would save a lot of guessing.
-
----
 
 ## Follow-ups found and fixed while verifying the above (2026-09-02)
 
