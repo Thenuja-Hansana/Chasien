@@ -124,6 +124,27 @@ function AppShell() {
             <Stack.Screen name="discover" options={{ animation: 'none' }} />
             <Stack.Screen name="chats/index" options={{ animation: 'none' }} />
             <Stack.Screen name="u/[userId]/index" options={{ animation: 'none' }} />
+
+            {/* These four are all the same shape — Cancel/X, a centered
+                title, a primary action on the right, a full-screen form —
+                the exact "compose something new" pattern every major app
+                presents as a sheet rising over what you were just looking
+                at, not as another layer drilled into. The default push
+                (slide in from the right, same as opening a Room or a
+                post) gave them no visual distinction from "going deeper"
+                even though dismissing one with Cancel/X clearly reads as
+                "back out to where I was," not "go back." Animation
+                polish pass, 2026-09-15. */}
+            <Stack.Screen name="create-community" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="c/[communityId]/create-post" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="c/[communityId]/create-story" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="c/[communityId]/chat/create" options={{ presentation: 'modal' }} />
+
+            {/* Full-bleed media, X to close — reads as "step into this
+                media, then step back out," the same beat Instagram/
+                Snapchat's own story viewers use a cross-fade for, not a
+                sheet rising over the Room feed underneath it. */}
+            <Stack.Screen name="c/[communityId]/story" options={{ animation: 'fade' }} />
           </Stack>
           </UserPreviewProvider>
         </AuthGate>

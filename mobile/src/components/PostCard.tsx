@@ -2,6 +2,7 @@ import { Image, type ImageLoadEventData } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
@@ -49,6 +50,16 @@ export default function PostCard({
   const [aspectRatio, setAspectRatio] = useState(1);
   const handleImageLoad = (event: ImageLoadEventData) => setAspectRatio(event.source.width / event.source.height);
   const maxImageHeight = useCappedMediaHeight(MAX_IMAGE_HEIGHT_FRACTION);
+
+  // A quick pop on the heart itself when a like lands, on top of the
+  // existing haptic — set directly on press rather than watched via an
+  // effect on post.likedByMe, so it fires immediately instead of a frame
+  // behind the tap, and only for *this* like (not a like arriving from a
+  // realtime update to someone else's tap). Animation polish pass,
+  // 2026-09-15 — react-native-reanimated was already a dependency but had
+  // no real call site anywhere in the app until this one.
+  const likeScale = useSharedValue(1);
+  const likeAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: likeScale.value }] }));
 
   return (
     <View style={styles.container}>
@@ -101,16 +112,22 @@ export default function PostCard({
           style={styles.action}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            if (!post.likedByMe) {
+              // eslint-disable-next-line react-hooks/immutability -- a Reanimated shared value's .value is deliberately mutable, the same escape hatch Skeleton.tsx's Animated.Value ref already needs — the compiler's static analysis has no way to know that.
+              likeScale.value = withSequence(withTiming(1.3, { duration: 100 }), withTiming(1, { duration: 120 }));
+            }
             onToggleLike();
           }}
           hitSlop={6}
         >
-          <Icon
-            name="heart"
-            size={21}
-            filled={post.likedByMe}
-            color={post.likedByMe ? colors.accent.DEFAULT : colors.text}
-          />
+          <Animated.View style={likeAnimatedStyle}>
+            <Icon
+              name="heart"
+              size={21}
+              filled={post.likedByMe}
+              color={post.likedByMe ? colors.accent.DEFAULT : colors.text}
+            />
+          </Animated.View>
           <Text style={styles.actionCount}>{post.likeCount}</Text>
         </Pressable>
         <Pressable style={styles.action} onPress={onPress} hitSlop={6}>

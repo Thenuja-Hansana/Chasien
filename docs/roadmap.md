@@ -553,13 +553,41 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       never caught because nothing here had been checked against Light
       mode on a real device before; fixed to the fixed cream palette the
       rest of that screen already uses. See decision-log, 2026-09-15
-- [ ] Animation and transition polish (`react-native-reanimated`) —
+- [x] Animation and transition polish (`react-native-reanimated`) —
       screen transitions, tab switches, modal/sheet presentations.
-      **Barely started** — `app/_layout.tsx` sets the four tab
-      destinations (Home/Discover/Chats/You) to `animation: 'none'` so
-      switching tabs doesn't feel like drilling into a new screen; nothing
-      else has been touched (no modal/sheet polish, no screen-transition
-      work beyond React Navigation's defaults)
+      **2026-09-15:** tab switches were already done (`animation: 'none'`
+      on the four tab destinations, from the earlier bug-fix pass).
+      Modal/sheet presentations: the four screens shaped like a compose
+      sheet — Cancel/X, centered title, primary action on the right, full-
+      screen form (`create-community`, `create-post`, `create-story`,
+      sub-group `chat/create`) — animated with the same slide-from-right
+      push as "going deeper" into a Room or a post, despite reading as
+      "back out to where I was" when dismissed. Now
+      `presentation: 'modal'` in `_layout.tsx`. The story viewer (full-
+      bleed media, X to close) got `animation: 'fade'` instead — a modal
+      sheet's peek-of-the-screen-behind look is wrong for a full-bleed
+      viewer; a cross-fade is the same beat Instagram/Snapchat's own story
+      viewers use. Screen transitions elsewhere deliberately left on React
+      Navigation's default slide — already a considered decision (bug-fix
+      #4), not an oversight; revisiting it isn't part of this pass.
+      `react-native-reanimated` itself: was a dependency with zero real
+      call sites anywhere in the app (Skeleton's shimmer and the story
+      progress bars, both misattributed to it in an earlier decision-log
+      entry, actually use React Native's own core `Animated` API) — added
+      two real, tasteful micro-interactions: a heart-pop bounce on
+      `PostCard`'s like button, and a press-squish on `PostFab`. Hit one
+      real compatibility snag: this project's React Compiler flags
+      Reanimated's idiomatic `sharedValue.value = ...` mutation as
+      "cannot be modified" (`react-hooks/immutability`) — the compiler's
+      static analysis has no way to know a shared value's `.value` is
+      deliberately mutable, the same class of false positive
+      `Skeleton.tsx`'s `Animated.Value` ref already needed a suppression
+      comment for. Suppressed the same way, not worked around. Further
+      "polish" (more micro-interactions, custom screen transitions) has
+      no natural finish line and isn't pursued further here — this item's
+      three named things (screen transitions, tab switches, modal/sheet
+      presentations) are each genuinely addressed. See decision-log,
+      2026-09-15
 - [ ] Cold start time measured and reduced (font loading sequence, bundle
       size) — measured on the Galaxy A14 itself, not an emulator or a
       faster dev machine. **Not started** — no measurement recorded

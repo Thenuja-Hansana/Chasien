@@ -1,6 +1,7 @@
 import { Link } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import Icon from '@/components/Icon';
 import { Radius, Spacing, type ThemeColors } from '@/constants/theme';
@@ -23,13 +24,37 @@ export default function PostFab({ communityId }: { communityId: string }) {
   const clearance = useTabBarClearance();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  // A small press-down squish, released on lift/cancel either way — lives
+  // on the inner circle, not the outer Pressable Link's <Slot> clones (see
+  // that Pressable's own comment on why its style has to stay one flat
+  // object). Animation polish pass, 2026-09-15.
+  const scale = useSharedValue(1);
+  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const pressIn = () => {
+    // eslint-disable-next-line react-hooks/immutability -- a Reanimated shared value's .value is deliberately mutable, the same escape hatch Skeleton.tsx's Animated.Value ref already needs — the compiler's static analysis has no way to know that.
+    scale.value = withTiming(0.88, { duration: 80 });
+  };
+  const pressOut = () => {
+    // eslint-disable-next-line react-hooks/immutability
+    scale.value = withTiming(1, { duration: 120 });
+  };
+
   return (
     <Link href={{ pathname: '/c/[communityId]/create-post', params: { communityId } }} asChild>
       {/* A single flattened style object, not an array — expo-router's
           <Link asChild> clones this Pressable through its own <Slot>,
-          which (unlike a plain RN element) warns/errors on an array style. */}
-      <Pressable style={StyleSheet.flatten([styles.fab, { bottom: clearance }])}>
-        <Icon name="plus" size={24} color={colors.bg} />
+          which (unlike a plain RN element) warns/errors on an array style.
+          Only a hit-target here now; the visible circle moved to the
+          Animated.View child below so it's free to carry its own
+          (array-valued) animated style. */}
+      <Pressable
+        style={StyleSheet.flatten([styles.fabHit, { bottom: clearance }])}
+        onPressIn={pressIn}
+        onPressOut={pressOut}
+      >
+        <Animated.View style={[styles.fab, scaleStyle]}>
+          <Icon name="plus" size={24} color={colors.bg} />
+        </Animated.View>
       </Pressable>
     </Link>
   );
@@ -37,11 +62,15 @@ export default function PostFab({ communityId }: { communityId: string }) {
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    fab: {
+    fabHit: {
       position: 'absolute',
       right: Spacing[4],
       width: FAB_SIZE,
       height: FAB_SIZE,
+    },
+    fab: {
+      width: '100%',
+      height: '100%',
       borderRadius: Radius.pill,
       backgroundColor: colors.accent.DEFAULT,
       alignItems: 'center',

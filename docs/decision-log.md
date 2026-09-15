@@ -7,6 +7,99 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Bones Phase animation and transition polish
+
+**What happened:** closed out the Bones Phase checklist's last non-
+device-dependent item, scoped to the three things it actually names:
+screen transitions, tab switches, and modal/sheet presentations — not an
+open-ended pass over every animation in the app.
+
+**Modal/sheet presentations.** Four screens share the exact same shape —
+Cancel/X on the left, a centered title, a primary action on the right, a
+full-screen form — the universal "compose something new" pattern every
+major app presents as a sheet rising over whatever you were just looking
+at: `create-community.tsx` ("New Room"), `c/[communityId]/create-post.tsx`
+("New post"), `c/[communityId]/create-story.tsx` ("New story"), and
+`c/[communityId]/chat/create.tsx` ("New Sub-group"). All four were
+animating with the plain default push (slide in from the right) — the
+same transition as opening a Room or a post, i.e. "going deeper" — even
+though dismissing one with Cancel/X clearly reads as "back out to where I
+was." Added `presentation: 'modal'` to each in `_layout.tsx`'s `Stack`.
+The story viewer (`c/[communityId]/story.tsx`, full-bleed media with an X
+to close) is shaped differently — a modal sheet's characteristic peek of
+the screen behind it would look wrong for a full-bleed viewer — so it got
+`animation: 'fade'` instead, the same cross-fade beat Instagram/
+Snapchat's own story viewers use for "step into this media, step back
+out."
+
+**Tab switches** were already done, from the earlier bug-fix pass
+(`animation: 'none'` on the four tab-destination screens) — nothing to
+add.
+
+**Screen transitions elsewhere** — opening a Room, a post, settings, a
+chat thread — stay on React Navigation's default slide. That's not an
+oversight; it's the considered decision from bug-fix.md #4 (the "right
+cue for going deeper"), and revisiting it isn't in scope for a polish
+pass whose own checklist item explicitly frames tab switches and modals
+as the exceptions to that default, not the default itself.
+
+**`react-native-reanimated` had zero real call sites in the app**, despite
+being a dependency the checklist item names directly. Worth stating
+plainly because the 2026-09-10 audit entry claimed otherwise — it
+attributed `Skeleton.tsx`'s shimmer and `story.tsx`'s progress-bar fill to
+Reanimated, but both actually import `Animated`/`Easing` from React
+Native's own core, not from `react-native-reanimated` at all. Correcting
+the record here rather than letting the error propagate. Added two real,
+tasteful uses of the actual library: `PostCard.tsx`'s like button now
+does a quick pop (`withSequence`/`withTiming` scaling the heart icon
+1 → 1.3 → 1) the moment a like lands, set directly in the press handler
+rather than watched via an effect on `post.likedByMe` — so it fires
+immediately for *this* tap, not a frame late, and doesn't also fire for a
+like arriving from someone else's realtime update. `PostFab.tsx` gets a
+press-squish (scale to 0.88 on press-in, spring back on release) — moved
+the visible circle from the outer `Pressable` (which expo-router's
+`<Link asChild>` clones through its own `<Slot>`, and that component
+already has its own comment about why its `style` has to stay one flat
+object, not an array) onto an inner `Animated.View` child instead, so the
+animated style — which *is* array-valued (`[styles.fab, scaleStyle]`) —
+never touches the element `<Slot>` is cloning.
+
+**A real compatibility snag, not a bug in the animation itself:** this
+project has React Compiler enabled (`app.json`), and its
+`eslint-plugin-react-hooks` integration flags
+`sharedValue.value = withTiming(...)` — Reanimated's own idiomatic
+mutation API — as `react-hooks/immutability`, "this value cannot be
+modified." The compiler's static analysis has no way to know a shared
+value's `.value` is a deliberate, safe mutable escape hatch (it runs on
+the UI thread, outside React's own render/commit cycle entirely) — this
+is the exact same class of false positive `Skeleton.tsx`'s
+`useRef(new Animated.Value(0)).current` already needed an
+`eslint-disable-next-line react-hooks/refs` for, just a different
+specific rule. Suppressed the same way (`eslint-disable-next-line
+react-hooks/immutability`, with an explanatory comment), not worked
+around with some more convoluted pattern — this is genuinely what the
+library's API looks like when used correctly.
+
+**Verified:** typecheck and lint clean (the immutability errors were
+real lint failures, not something assumed — caught by actually running
+`expo lint`, fixed, and re-run). Visually confirmed on Expo web + headless
+Chromium: the like button toggles correctly with no console/page errors,
+and the "New post" screen opens and renders correctly through the new
+modal-presented route. Web can't show the actual slide-up/fade transition
+frame-by-frame the way a real device build would, so the *transition
+feel* itself (not just "does it render without crashing") still wants a
+look on the Galaxy A14 — noted, not blocking, since the transition
+options themselves are standard React Navigation/native-stack behavior,
+not custom-built.
+
+**Revisit when:** a new "compose something new" screen is added — reach
+for `presentation: 'modal'` from the start, the same way new lists should
+reach for `Skeleton`/`EmptyState`. Not a candidate for more scope right
+now: more micro-interactions or custom screen transitions have no natural
+stopping point, and this item's own three named things are each done.
+
+---
+
 ## 2026-09-15 — Bones Phase loading/empty/error-state audit
 
 **What happened:** worked through every screen the Bones Phase checklist's
