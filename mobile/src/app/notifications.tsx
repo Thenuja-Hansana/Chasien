@@ -2,7 +2,7 @@ import { BlurTargetView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
@@ -108,6 +108,17 @@ export default function Notifications() {
     return subscribeToNotifications(userId, load);
   }, [userId, load]);
 
+  // Grouped once here instead of inline in the list's `data` prop — a
+  // SectionList needs its `sections` array to be stable-ish, not
+  // recomputed by filtering `items` three times on every render.
+  const sections = useMemo(
+    () =>
+      GROUPS.map((group) => ({ title: group, data: items?.filter((n) => groupFor(n.created_at) === group) ?? [] })).filter(
+        (section) => section.data.length > 0,
+      ),
+    [items],
+  );
+
   if (!session) return null;
 
   function openNotification(n: AppNotification) {
@@ -176,58 +187,53 @@ export default function Notifications() {
           message={roomId ? 'No activity in this Room yet.' : 'Nothing here yet.'}
         />
       ) : (
-        <ScrollView contentContainerStyle={[styles.list, { paddingBottom: clearance }]}>
-          {GROUPS.map((group) => {
-            const groupItems = items.filter((n) => groupFor(n.created_at) === group);
-            if (groupItems.length === 0) return null;
+        <SectionList
+          sections={sections}
+          keyExtractor={(n) => n.id}
+          contentContainerStyle={[styles.list, { paddingBottom: clearance }]}
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={9}
+          renderSectionHeader={({ section }) => <Text style={styles.groupLabel}>{section.title}</Text>}
+          renderItem={({ item: n }) => {
+            const { line, highlight } = textFor(n);
             return (
-              <View key={group}>
-                <Text style={styles.groupLabel}>{group}</Text>
-                {groupItems.map((n) => {
-                  const { line, highlight } = textFor(n);
-                  return (
-                    <Pressable
-                      key={n.id}
-                      style={[styles.row, !n.read_at && styles.rowUnread]}
-                      onPress={() => openNotification(n)}
-                    >
-                      {n.actor_id ? (
-                        <Avatar gradient={n.actor_id} letter={n.actorName.charAt(0).toUpperCase()} size={42} />
-                      ) : (
-                        <View style={styles.systemIcon}>
-                          <Icon name="bell" size={18} color={colors.accent[300]} />
-                        </View>
-                      )}
-                      <View style={styles.rowContent}>
-                        <Text style={styles.rowText}>
-                          {line}
-                          {highlight ? <Text style={styles.highlight}> {highlight}</Text> : null}
-                        </Text>
-                        <Text style={styles.time}>{relativeTime(n.created_at)}</Text>
-                      </View>
-                      {n.type === 'join_request' || n.type === 'friend_request' ? (
-                        <View style={styles.actions}>
-                          {busyId === n.id ? (
-                            <ActivityIndicator color={colors.accent.DEFAULT} />
-                          ) : (
-                            <>
-                              <Pressable style={styles.acceptBtn} onPress={() => respond(n, true)} hitSlop={4}>
-                                <Text style={styles.acceptText}>Accept</Text>
-                              </Pressable>
-                              <Pressable style={styles.skipBtn} onPress={() => respond(n, false)} hitSlop={4}>
-                                <Text style={styles.skipText}>{n.type === 'friend_request' ? 'Decline' : 'Skip'}</Text>
-                              </Pressable>
-                            </>
-                          )}
-                        </View>
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <Pressable style={[styles.row, !n.read_at && styles.rowUnread]} onPress={() => openNotification(n)}>
+                {n.actor_id ? (
+                  <Avatar gradient={n.actor_id} letter={n.actorName.charAt(0).toUpperCase()} size={42} />
+                ) : (
+                  <View style={styles.systemIcon}>
+                    <Icon name="bell" size={18} color={colors.accent[300]} />
+                  </View>
+                )}
+                <View style={styles.rowContent}>
+                  <Text style={styles.rowText}>
+                    {line}
+                    {highlight ? <Text style={styles.highlight}> {highlight}</Text> : null}
+                  </Text>
+                  <Text style={styles.time}>{relativeTime(n.created_at)}</Text>
+                </View>
+                {n.type === 'join_request' || n.type === 'friend_request' ? (
+                  <View style={styles.actions}>
+                    {busyId === n.id ? (
+                      <ActivityIndicator color={colors.accent.DEFAULT} />
+                    ) : (
+                      <>
+                        <Pressable style={styles.acceptBtn} onPress={() => respond(n, true)} hitSlop={4}>
+                          <Text style={styles.acceptText}>Accept</Text>
+                        </Pressable>
+                        <Pressable style={styles.skipBtn} onPress={() => respond(n, false)} hitSlop={4}>
+                          <Text style={styles.skipText}>{n.type === 'friend_request' ? 'Decline' : 'Skip'}</Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                ) : null}
+              </Pressable>
             );
-          })}
-        </ScrollView>
+          }}
+        />
       )}
       </BlurTargetView>
 

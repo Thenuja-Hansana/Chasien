@@ -460,14 +460,34 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       and what was and wasn't covered (native keyboard behavior on a real
       device is out of scope for a web-driven check — bug-fix.md #7
       already covers that separately)
-- [ ] List virtualization pass: tune `FlatList` (or migrate hot lists to
+- [x] List virtualization pass: tune `FlatList` (or migrate hot lists to
       `FlashList`) — `windowSize`, `removeClippedSubviews`,
       `getItemLayout` where row height is knowable — for the feed, chat
       message lists, notifications feed, and the story-ring row.
-      **Not started** — the Room feed and chat thread use plain, untuned
-      `FlatList`; Home's Room list, the notifications feed, and the
-      story-ring row all use a plain `ScrollView` + `.map()`, not even
-      `FlatList`. No `FlashList` dependency installed
+      **2026-09-15:** all four named lists done, `FlatList` throughout
+      (no `FlashList` needed). Room feed and chat thread already used
+      `FlatList` — added `removeClippedSubviews`/`windowSize`/
+      `maxToRenderPerBatch`/`initialNumToRender` to both (no
+      `getItemLayout` on either — post/message height varies with
+      text/media/polls, so it isn't knowable). The notifications feed
+      (grouped Today/This week/Older) was a `ScrollView` with three
+      nested `.map()`s — rebuilt as a `SectionList`, the correct
+      virtualized primitive for grouped data, with the same tuning props.
+      The story-ring row was a horizontal `ScrollView` + `.map()` —
+      converted to a horizontal `FlatList` (skipped `getItemLayout` here
+      specifically: item width is fixed, but the list also has a
+      `ListHeaderComponent` ("Your story"), and hand-computing offsets
+      around a header adds a fragile magic-number risk for a list that's
+      normally only a handful of items — not worth it for this one).
+      Deliberately **not** touched: Home's Room list and the Chats
+      inbox list are the same untuned `ScrollView` + `.map()` pattern
+      but weren't named in this checklist item's own scope (the feed/
+      chat/notifications/story-row four) — flagged as a follow-up
+      candidate, not silently folded in. Chat message pagination (the
+      thread currently loads a whole conversation's history at once, no
+      `onEndReached`) is a separate, larger concern than this item's
+      literal scope (windowing an existing list) and wasn't touched
+      either. See decision-log, 2026-09-15
 - [ ] Image loading/caching pass: `expo-image` cache policy, placeholders
       (blurhash or solid-color), and right-sized variants for thumbnails
       vs. full-screen views instead of always loading the full asset.

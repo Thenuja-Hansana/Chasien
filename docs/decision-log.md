@@ -7,6 +7,91 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Bones Phase list virtualization pass
+
+**What happened:** tuned or converted the four lists the Bones Phase
+checklist names by name — "the feed, chat message lists, notifications
+feed, and the story-ring row" — rather than sweeping every `ScrollView` +
+`.map()` in the app, since two more (Home's Room list, the Chats inbox
+list) use the same untuned pattern but were never actually named in this
+checklist item's scope.
+
+**Room feed (`app/c/[communityId]/index.tsx`) and chat thread
+(`app/chats/[chatId].tsx`):** both already used `FlatList` (with
+pagination on the feed via `onEndReached`; the chat thread has none —
+see below), just with no rendering-performance props at all. Added
+`removeClippedSubviews`, `windowSize`, `maxToRenderPerBatch`, and
+`initialNumToRender` to both, sized for what each actually renders: the
+feed's rows can carry full-size images/polls, so smaller batches
+(`initialNumToRender={4}`, `maxToRenderPerBatch={4}`, `windowSize={7}`);
+the chat thread's bubbles are lighter (mostly text), so larger ones
+(`initialNumToRender={15}`, `maxToRenderPerBatch={10}`, `windowSize={10}`).
+Neither got `getItemLayout` — row height isn't knowable on either list
+(post height varies with text length/media/poll presence; message height
+varies with text length/media/voice).
+
+**Notifications feed (`app/notifications.tsx`):** this one wasn't just
+untuned, it wasn't virtualized at all — a `ScrollView` with three levels
+of `.map()` (groups, then each group's items). Rebuilt as a `SectionList`
+(React Native's virtualized primitive for exactly this "grouped rows with
+headers" shape) rather than flattening groups into a single `FlatList`
+with fake header rows — `sections` is a `useMemo` over `items` grouped by
+`groupFor()`, `renderSectionHeader` replaces the old inline `<Text
+style={styles.groupLabel}>`, and `renderItem` is the same row JSX as
+before, just moved out of the nested `.map()`. Same tuning props as
+above, sized for this list's density (`initialNumToRender={10}`,
+`maxToRenderPerBatch={8}`, `windowSize={9}`).
+
+**Story-ring row** (inside the Room feed screen, the horizontal "Your
+story" + active-stories row): also a `ScrollView` + `.map()`, converted
+to a horizontal `FlatList` with the "Your story" button moved to
+`ListHeaderComponent` and the active stories as `data`. Kept the existing
+`storyScroll` wrapper `View` with its hard `height: 92` completely
+unchanged — that's the fix for a real Android bug (a horizontal
+`ScrollView` not sizing itself to content, see the 2026-09-02 entry and
+bug-fix.md #8) that applies just as much to a horizontal `FlatList`,
+since `FlatList` renders a `ScrollView` internally on that axis too.
+Deliberately skipped `getItemLayout` here even though each item's width
+is fixed (64px + a `Spacing[4]` gap) — the list also renders a
+`ListHeaderComponent`, and hand-computing every item's scroll offset
+around a header's own width adds a fragile magic number that would
+silently drift if the header or item styles ever changed, for a list
+that in practice only ever holds a handful of items — not a good
+trade for this one.
+
+**Explicitly not touched, and why:** Home's Room list
+(`app/index.tsx`) and the Chats inbox list (`app/chats/index.tsx`) are
+the identical `ScrollView` + `.map()` pattern the three fixes above
+replaced, and the 2026-09-10 audit entry did flag both by name — but
+neither is one of the four lists this checklist item's own text names
+("the feed, chat message lists, notifications feed, and the story-ring
+row"). Left alone rather than silently expanding scope; noted here as a
+follow-up candidate for whoever picks this up next. Also not touched:
+chat message pagination — `fetchMessages(chatId)` loads a whole
+conversation's history in one call, no `onEndReached`/cursor, unlike the
+Room feed which already paginates via `FEED_PAGE_SIZE`. That's a real
+scaling concern for a long-running DM or Room channel, but it's a
+data-fetching change (cursor state, a paginated query), not what this
+checklist item asks for (windowing an already-fetched list) — flagging
+it rather than fixing it under this item's banner.
+
+**Verified:** typecheck and lint clean. Visually re-checked at a mobile
+viewport (Expo web + headless Chromium, same approach as the 2026-09-15
+small-screen audit): the story row still renders "Your story" plus the
+first active story correctly, the Room feed's FAB-clearance fix from
+earlier today still holds, and the notifications SectionList renders its
+section headers ("This week", "Older") and unread-highlighted rows
+correctly, including after scrolling. The chat thread's structural change
+was additive props only (no JSX change), and the one open DM available
+locally had no seeded messages to screenshot against — lower-risk change,
+not independently re-screenshotted.
+
+**Revisit when:** Home's Room list or the Chats inbox list actually shows
+symptoms (dropped frames with a large Room count), or when chat/DM
+history genuinely needs pagination — don't do either preemptively.
+
+---
+
 ## 2026-09-15 — Bones Phase small-screen audit, driven live at 375px
 
 **What happened:** the Bones Phase checklist's small-screen audit item had

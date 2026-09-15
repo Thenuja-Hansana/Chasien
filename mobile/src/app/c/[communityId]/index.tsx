@@ -2,7 +2,7 @@ import { BlurTargetView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
@@ -340,26 +340,36 @@ export default function RoomHome() {
         </View>
       </View>
 
-      {/* Hard height on a plain View wrapper, not on the ScrollView's own
-          `style` — a horizontal ScrollView on Android doesn't reliably
-          respect a height set that way and was stretching to fill
-          whatever vertical space happened to be free (visible as a huge
-          gap before the first post whenever that free space was large,
-          e.g. a Room with just one short post). A plain View's height is
-          a hard Yoga constraint the ScrollView is then measured within. */}
+      {/* Hard height on a plain View wrapper, not on the FlatList's own
+          `style` — a horizontal ScrollView on Android (which a horizontal
+          FlatList renders internally, same as the plain ScrollView this
+          used to be) doesn't reliably respect a height set that way and
+          was stretching to fill whatever vertical space happened to be
+          free (visible as a huge gap before the first post whenever that
+          free space was large, e.g. a Room with just one short post). A
+          plain View's height is a hard Yoga constraint the list is then
+          measured within. */}
       <View style={styles.storyScroll}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
-          <Link href={{ pathname: '/c/[communityId]/create-story', params: { communityId } }} asChild>
-            <Pressable style={styles.storyItem}>
-              <View style={styles.storyAddCircle}>
-                <Icon name="plus" size={22} color={colors.accent.DEFAULT} />
-              </View>
-              <Text style={styles.storyLabel}>Your story</Text>
-            </Pressable>
-          </Link>
-          {dedupeStoryAuthors(activeStories).map((s) => (
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.storyRow}
+          removeClippedSubviews
+          windowSize={5}
+          data={dedupeStoryAuthors(activeStories)}
+          keyExtractor={(s) => s.author_id ?? s.id}
+          ListHeaderComponent={
+            <Link href={{ pathname: '/c/[communityId]/create-story', params: { communityId } }} asChild>
+              <Pressable style={styles.storyItem}>
+                <View style={styles.storyAddCircle}>
+                  <Icon name="plus" size={22} color={colors.accent.DEFAULT} />
+                </View>
+                <Text style={styles.storyLabel}>Your story</Text>
+              </Pressable>
+            </Link>
+          }
+          renderItem={({ item: s }) => (
             <Pressable
-              key={s.author_id ?? s.id}
               style={styles.storyItem}
               onPress={() =>
                 router.push({
@@ -373,8 +383,8 @@ export default function RoomHome() {
                 {s.authorHandle || s.authorName}
               </Text>
             </Pressable>
-          ))}
-        </ScrollView>
+          )}
+        />
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -391,6 +401,10 @@ export default function RoomHome() {
             styles.feedContent,
             { paddingBottom: canPost ? clearance + FAB_SIZE + Spacing[3] : clearance },
           ]}
+          removeClippedSubviews
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={7}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

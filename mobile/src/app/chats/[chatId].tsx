@@ -266,6 +266,10 @@ export default function ChatView() {
           contentContainerStyle={styles.messageList}
           data={messages}
           inverted
+          removeClippedSubviews
+          initialNumToRender={15}
+          maxToRenderPerBatch={10}
+          windowSize={10}
           keyExtractor={(m) => m.id}
           renderItem={({ item }) => {
             const mine = item.author_id === userId;
