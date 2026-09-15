@@ -51,7 +51,7 @@ export default function CreateSubgroup() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable hitSlop={8} onPress={() => router.back()}>
+        <Pressable hitSlop={8} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Cancel">
           <Icon name="close" size={22} color={colors.text} strokeWidth={2.4} />
         </Pressable>
         <Text style={styles.headerTitle}>New Sub-group</Text>
@@ -87,7 +87,13 @@ export default function CreateSubgroup() {
 
         <Text style={styles.label}>Who can join</Text>
         {VISIBILITY_OPTIONS.map((option) => (
-          <Pressable key={option.value} style={styles.visibilityOption} onPress={() => setVisibility(option.value)}>
+          <Pressable
+            key={option.value}
+            style={styles.visibilityOption}
+            onPress={() => setVisibility(option.value)}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: visibility === option.value }}
+          >
             <View style={[styles.radio, visibility === option.value && styles.radioActive]} />
             <View style={styles.visibilityTextWrap}>
               <Text style={styles.visibilityLabel}>{option.label}</Text>

@@ -7,6 +7,88 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Bones Phase touch target & accessibility pass (labeling + tap sizes; font-scale still needs the device)
+
+**What happened:** worked through the Bones Phase checklist's last item
+that doesn't strictly require the Galaxy A14 — screen-reader labeling and
+minimum tap sizes — across every screen and shared component. Used a
+research-only pass first (an Explore agent inventory, not code changes)
+to get a complete, file-and-line list before touching anything, since
+guessing which of ~28 files had gaps would have meant re-reading half of
+them anyway.
+
+**Icon-only buttons.** Every back/close chevron, the search/bell/settings-
+gear icons, send/attach buttons, `PostFab`, and the camera/`addPhoto`
+photo-picker badges on every Room/profile banner-and-avatar editor now
+carry `accessibilityRole="button"` plus a real `accessibilityLabel` —
+previously a screen reader had nothing to announce for any of them
+except the two password-visibility eye icons and the story viewer's
+invisible tap zones (the whole 4-usage baseline this checklist item's
+own text cited). Avatar-wrapped `Pressable`s that open a profile preview
+(post author, commenter) get a name-specific label ("View {name}'s
+profile"), not a generic one, since the destination differs per row.
+
+**Custom toggle/radio/checkbox primitives.** This app hand-rolls its own
+switch/radio/checkbox visuals in several places instead of using RN's
+`Switch`/a real radio group — Room visibility choices (3 separate
+implementations: `create-community.tsx`, `c/[communityId]/settings.tsx`,
+`chat/create.tsx`), category chips (2), the mute-notifications and
+members-can-post toggle pills, the sign-up age checkbox, poll options,
+`TabBar`'s own tabs, Discover/Chats' filter chips, and the sub-group
+expand/collapse chevron. None of these had ever carried
+`accessibilityRole`/`accessibilityState`, so a screen reader read them as
+plain, contentless `View`s regardless of how obviously toggle-shaped they
+look sighted. All now have the matching role (`radio`/`switch`/
+`checkbox`/`tab`) and `accessibilityState` reflecting whether they're
+checked/selected/expanded.
+
+**Undersized tap targets.** Fixed the ones the inventory actually found
+under ~44px with no `hitSlop` at all: the chat composer's attach button
+(previously had no explicit width, so its tappable area was just the
+22px icon) and send button, the post-detail composer's send button and
+its two avatar-preview taps, and `create-community.tsx`'s 36px theme-
+color swatches. Left the two 54×54 FABs and the 62px-wide tab bar items
+alone — already comfortably over the guideline, `hitSlop` would be pure
+redundancy there.
+
+**A recurring theme worth flagging for later:** three separate files
+reimplement the exact same "Room visibility" radio group
+(`create-community.tsx`, `settings.tsx`, `chat/create.tsx`) and two
+reimplement the same toggle-pill switch — each got fixed individually
+rather than factored into one shared component during this pass, since
+that's a bigger refactor than "add accessibility props" and wasn't asked
+for. Worth doing if a fourth copy of either ever shows up.
+
+**Deliberately not attempted: font-scale survival.** The checklist item's
+other half — "confirm layouts survive larger system font-scale settings
+without breaking" — needs an actual device with its system font size
+cranked up, the same way the small-screen audit needed a real viewport;
+reading the code can't tell you whether a `numberOfLines={1}` heading
+clips unacceptably at 200% scale or a button's text wraps and breaks its
+layout. No `allowFontScaling`/`maxFontSizeMultiplier` were added
+anywhere either — adding them blind, without seeing which specific
+layouts actually break, would be guessing at a fix for a problem that
+hasn't been located yet. This stays open until the Galaxy A14 is
+available.
+
+**Verified:** typecheck and lint clean throughout (accessibility props
+are inert for layout, so risk was mostly "did every edit compile" — `tsc`
+confirmed it did). Screenshotted 9 screens (Home, Discover, Chats,
+Notifications, Create Room, Signup, Room feed, Room Settings, Profile) on
+Expo web after the full pass with zero console/page errors, and diffed
+Create Room and Room Settings specifically against pre-pass screenshots
+— pixel-identical, confirming the accessibility props changed nothing
+visible, as expected.
+
+**Revisit when:** the Galaxy A14 is available — that session should (a)
+crank the system font scale and walk every screen for clipping/overlap,
+adding `allowFontScaling={false}`/`maxFontSizeMultiplier` only where a
+specific layout is found to actually break, not preemptively everywhere,
+and (b) do a real-finger pass over the touch targets this one could only
+reason about from `hitSlop`/pixel values in the stylesheet.
+
+---
+
 ## 2026-09-15 — Discover white strip, round two: the first fix wasn't enough
 
 **What happened:** the user confirmed on a real device (screenshot,

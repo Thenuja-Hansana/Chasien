@@ -190,7 +190,7 @@ export default function PostDetail() {
           JS-driven keyboard-height adjustment too. */}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Go back">
             <Icon name="back" size={22} color={colors.text} />
           </Pressable>
           <View style={styles.headerText}>
@@ -200,7 +200,14 @@ export default function PostDetail() {
             </Text>
           </View>
           {isModerator ? (
-            <Pressable onPress={handleTogglePin} hitSlop={12} disabled={pinning}>
+            <Pressable
+              onPress={handleTogglePin}
+              hitSlop={12}
+              disabled={pinning}
+              accessibilityRole="button"
+              accessibilityLabel={post.pinned ? 'Unpin post' : 'Pin post'}
+              accessibilityState={{ selected: post.pinned }}
+            >
               {pinning ? (
                 <ActivityIndicator size="small" color={colors.accent.DEFAULT} />
               ) : (
@@ -226,7 +233,14 @@ export default function PostDetail() {
 
           <View style={styles.section}>
             <View style={styles.actions}>
-              <Pressable style={styles.action} onPress={handleToggleLike} hitSlop={6}>
+              <Pressable
+                style={styles.action}
+                onPress={handleToggleLike}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`Like, ${post.likeCount} like${post.likeCount === 1 ? '' : 's'}`}
+                accessibilityState={{ selected: post.likedByMe }}
+              >
                 <Icon
                   name="heart"
                   size={23}
@@ -242,7 +256,13 @@ export default function PostDetail() {
             </View>
 
             <View style={styles.authorRow}>
-              <Pressable disabled={!post.authorId} onPress={() => openUserPreview(post.authorId as string)}>
+              <Pressable
+                disabled={!post.authorId}
+                onPress={() => openUserPreview(post.authorId as string)}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${post.authorName}'s profile`}
+              >
                 <Avatar
                   gradient={post.authorId ?? 'mara'}
                   letter={post.authorName.charAt(0).toUpperCase() || '?'}
@@ -295,7 +315,7 @@ export default function PostDetail() {
               <Text style={styles.replyingText} numberOfLines={1}>
                 Replying to {replyTo.authorHandle}
               </Text>
-              <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
+              <Pressable onPress={() => setReplyTo(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel reply">
                 <Icon name="close" size={14} color={colors.neutral[400]} />
               </Pressable>
             </View>
@@ -315,6 +335,9 @@ export default function PostDetail() {
               style={[styles.sendButton, !draft.trim() && styles.sendButtonDisabled]}
               onPress={handleSend}
               disabled={!draft.trim() || sending}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={replyTo ? 'Send reply' : 'Post comment'}
             >
               {sending ? <ActivityIndicator size="small" color={colors.bg} /> : <Icon name="send" size={18} color={colors.bg} />}
             </Pressable>
@@ -339,7 +362,13 @@ function CommentRow({
   const { open: openUserPreview } = useUserPreview();
   return (
     <View style={styles.commentRow}>
-      <Pressable disabled={!comment.authorId} onPress={() => openUserPreview(comment.authorId as string)}>
+      <Pressable
+        disabled={!comment.authorId}
+        onPress={() => openUserPreview(comment.authorId as string)}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${comment.authorName}'s profile`}
+      >
         <Avatar
           gradient={comment.authorId ?? 'mara'}
           letter={comment.authorName.charAt(0).toUpperCase() || '?'}

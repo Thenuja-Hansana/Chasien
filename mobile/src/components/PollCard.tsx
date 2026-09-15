@@ -60,7 +60,15 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
           const isMine = option.id === current.myOptionId;
           const pct = current.totalVotes > 0 ? Math.round((option.votes / current.totalVotes) * 100) : 0;
           return (
-            <Pressable key={option.id} style={styles.option} onPress={() => handleVote(option.id)} disabled={busy}>
+            <Pressable
+              key={option.id}
+              style={styles.option}
+              onPress={() => handleVote(option.id)}
+              disabled={busy}
+              accessibilityRole="radio"
+              accessibilityLabel={`${option.label}, ${option.votes} vote${option.votes === 1 ? '' : 's'}`}
+              accessibilityState={{ checked: isMine }}
+            >
               <View style={[styles.fill, { width: `${pct}%` }, isMine && styles.fillMine]} />
               <View style={styles.optionRow}>
                 <Text style={styles.optionLabel} numberOfLines={1}>

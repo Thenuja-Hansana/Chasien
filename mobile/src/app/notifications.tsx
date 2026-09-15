@@ -160,7 +160,13 @@ export default function Notifications() {
       <BlurTargetView ref={blurTargetRef} style={styles.flex}>
       <View style={styles.header}>
         {roomId && (
-          <Pressable hitSlop={8} onPress={() => router.back()} style={styles.backButton}>
+          <Pressable
+            hitSlop={8}
+            onPress={() => router.back()}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <Icon name="back" size={22} color={colors.text} strokeWidth={2.4} />
           </Pressable>
         )}

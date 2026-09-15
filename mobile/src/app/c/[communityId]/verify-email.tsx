@@ -80,7 +80,7 @@ export default function VerifyEmail() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Go back">
           <Icon name="back" size={22} color={colors.text} strokeWidth={2.4} />
         </Pressable>
         <Text style={styles.headingText}>Verify to join</Text>

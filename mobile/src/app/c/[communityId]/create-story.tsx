@@ -112,7 +112,14 @@ export default function CreateStory() {
             ) : (
               <Image source={{ uri: media.uri }} style={styles.media} contentFit="cover" />
             )}
-            <Pressable style={styles.changeMedia} onPress={() => setMedia(null)} disabled={submitting} hitSlop={8}>
+            <Pressable
+              style={styles.changeMedia}
+              onPress={() => setMedia(null)}
+              disabled={submitting}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Remove media"
+            >
               <Icon name="close" size={16} color={colors.text} />
             </Pressable>
           </View>

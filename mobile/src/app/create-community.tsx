@@ -151,7 +151,7 @@ export default function CreateCommunity() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={handleClose} hitSlop={12}>
+        <Pressable onPress={handleClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Cancel">
           <Icon name="close" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headingText}>New Room</Text>
@@ -165,7 +165,12 @@ export default function CreateCommunity() {
               photo" prompt so there's no guessing where to tap; once set,
               a clearly-sized (not tiny) edit button stays in the corner
               instead of covering the photo. */}
-          <Pressable onPress={handlePickBanner} style={styles.previewBannerWrap}>
+          <Pressable
+            onPress={handlePickBanner}
+            style={styles.previewBannerWrap}
+            accessibilityRole="button"
+            accessibilityLabel={bannerImage ? 'Change cover photo' : 'Add cover photo'}
+          >
             {bannerImage ? (
               <>
                 <Image source={{ uri: bannerImage.uri }} style={styles.previewBannerImage} contentFit="cover" />
@@ -197,7 +202,12 @@ export default function CreateCommunity() {
                 the cover photo, half over the border, left-aligned,
                 the same "cover photo + overlapping avatar" header every
                 major app uses. */}
-            <Pressable onPress={handlePickAvatar} style={styles.avatarRing}>
+            <Pressable
+              onPress={handlePickAvatar}
+              style={styles.avatarRing}
+              accessibilityRole="button"
+              accessibilityLabel="Change Room icon"
+            >
               {avatarImage ? (
                 <Image source={{ uri: avatarImage.uri }} style={styles.previewAvatar} contentFit="cover" />
               ) : (
@@ -256,6 +266,10 @@ export default function CreateCommunity() {
               key={i}
               onPress={() => setAccent(c)}
               style={[styles.swatch, { backgroundColor: c }, accent === c && styles.swatchActive]}
+              hitSlop={6}
+              accessibilityRole="radio"
+              accessibilityLabel={`Theme color ${i + 1}`}
+              accessibilityState={{ checked: accent === c }}
             />
           ))}
         </View>
@@ -269,6 +283,8 @@ export default function CreateCommunity() {
                 key={c}
                 onPress={() => setCategory(c)}
                 style={[styles.categoryChip, active && styles.categoryChipActive]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: active }}
               >
                 <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{c}</Text>
               </Pressable>
@@ -281,6 +297,8 @@ export default function CreateCommunity() {
           <Pressable
             onPress={() => handleTopChoice('public')}
             style={[styles.joinTypeRow, !isPrivate && styles.joinTypeRowActive]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: !isPrivate }}
           >
             <Icon name={PUBLIC_OPTION.icon} size={19} color={!isPrivate ? colors.accent.DEFAULT : colors.neutral[400]} />
             <View style={styles.joinTypeText}>
@@ -295,6 +313,8 @@ export default function CreateCommunity() {
           <Pressable
             onPress={() => handleTopChoice('private')}
             style={[styles.joinTypeRow, isPrivate && styles.joinTypeRowActive]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: isPrivate }}
           >
             <Icon name="lock" size={19} color={isPrivate ? colors.accent.DEFAULT : colors.neutral[400]} />
             <View style={styles.joinTypeText}>
@@ -319,6 +339,8 @@ export default function CreateCommunity() {
                     key={j.key}
                     onPress={() => setVisibility(j.key)}
                     style={[styles.joinTypeRow, styles.joinTypeRowNested, active && styles.joinTypeRowActive]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: active }}
                   >
                     <Icon name={j.icon} size={17} color={active ? colors.accent.DEFAULT : colors.neutral[400]} />
                     <View style={styles.joinTypeText}>

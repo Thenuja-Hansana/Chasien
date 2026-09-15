@@ -24,6 +24,8 @@ function VoicePlayer({ uri, mine }: { uri: string; mine: boolean }) {
       style={styles.voiceRow}
       onPress={() => (status.playing ? player.pause() : player.play())}
       hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={status.playing ? 'Pause voice message' : 'Play voice message'}
     >
       <View style={[styles.voicePlayButton, mine && styles.voicePlayButtonMine]}>
         <Icon name={status.playing ? 'pause' : 'play'} size={14} color={mine ? colors.bg : colors.text} filled />

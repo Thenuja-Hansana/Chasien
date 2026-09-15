@@ -119,6 +119,9 @@ export default function PostCard({
             onToggleLike();
           }}
           hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`Like, ${post.likeCount} like${post.likeCount === 1 ? '' : 's'}`}
+          accessibilityState={{ selected: post.likedByMe }}
         >
           <Animated.View style={likeAnimatedStyle}>
             <Icon
@@ -130,7 +133,13 @@ export default function PostCard({
           </Animated.View>
           <Text style={styles.actionCount}>{post.likeCount}</Text>
         </Pressable>
-        <Pressable style={styles.action} onPress={onPress} hitSlop={6}>
+        <Pressable
+          style={styles.action}
+          onPress={onPress}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`Comment, ${post.commentCount} comment${post.commentCount === 1 ? '' : 's'}`}
+        >
           <Icon name="comment" size={21} color={colors.text} />
           <Text style={styles.actionCount}>{post.commentCount}</Text>
         </Pressable>

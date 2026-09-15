@@ -92,6 +92,7 @@ export default function Login() {
                   onPress={() => setPasswordVisible((v) => !v)}
                   hitSlop={10}
                   style={styles.eyeButton}
+                  accessibilityRole="button"
                   accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
                 >
                   <Icon name={passwordVisible ? 'eyeOff' : 'eye'} size={19} color={colors.neutral[500]} />

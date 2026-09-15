@@ -45,7 +45,13 @@ export default function AllRooms() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable style={styles.headerSide} hitSlop={8} onPress={() => router.back()}>
+        <Pressable
+          style={styles.headerSide}
+          hitSlop={8}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Icon name="back" size={22} color={colors.text} strokeWidth={2.4} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>

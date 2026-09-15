@@ -110,7 +110,7 @@ export default function TabBar({ active, communityId, userId, blurTarget }: TabB
         const iconName = isActive ? (`${tab.icon}Filled` as const) : tab.icon;
         return (
           <Link key={tab.label} href={tab.href} asChild style={styles.tab}>
-            <Pressable>
+            <Pressable accessibilityRole="tab" accessibilityState={{ selected: isActive }}>
               <View style={styles.tabContent}>
                 <Icon name={iconName} size={25} color={color} />
                 <Text style={[styles.label, { color }]}>{tab.label}</Text>

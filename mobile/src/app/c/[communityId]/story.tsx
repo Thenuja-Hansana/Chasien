@@ -170,7 +170,7 @@ export default function StoryViewer() {
           <Text style={styles.headingText} numberOfLines={1}>
             {communityId}
           </Text>
-          <Pressable onPress={goHome} hitSlop={12}>
+          <Pressable onPress={goHome} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
             <Icon name="close" size={22} color="rgba(242,230,212,.9)" />
           </Pressable>
         </View>
@@ -224,7 +224,7 @@ export default function StoryViewer() {
               {roomName} · {relativeTime(story.created_at)}
             </Text>
           </View>
-          <Pressable onPress={goHome} hitSlop={12}>
+          <Pressable onPress={goHome} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
             <Icon name="close" size={21} color="rgba(242,230,212,.9)" />
           </Pressable>
         </View>

@@ -205,7 +205,13 @@ export default function Chats() {
           {FILTERS.map((f) => {
             const active = filter === f;
             return (
-              <Pressable key={f} style={[styles.chip, active && styles.chipActive]} onPress={() => setFilter(f)}>
+              <Pressable
+                key={f}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => setFilter(f)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: active }}
+              >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
                   {f}
                   {f === 'Unread' && unreadCount > 0 ? ` ${unreadCount}` : ''}
@@ -371,7 +377,13 @@ function GroupRow({
           )}
           <View style={styles.timeChevronRow}>
             <Text style={styles.rowTime}>{formatTime(previewSource.last_message_created_at)}</Text>
-            <Pressable hitSlop={10} onPress={onToggle}>
+            <Pressable
+              hitSlop={10}
+              onPress={onToggle}
+              accessibilityRole="button"
+              accessibilityLabel={`${main.title} sub-groups`}
+              accessibilityState={{ expanded }}
+            >
               <Icon name={expanded ? 'chevronDown' : 'chevronLeft'} size={16} color={colors.neutral[400]} />
             </Pressable>
           </View>

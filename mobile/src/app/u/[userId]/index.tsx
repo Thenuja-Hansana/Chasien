@@ -194,6 +194,8 @@ export default function ProfileScreen() {
                   style={styles.settingsButton}
                   hitSlop={8}
                   onPress={() => router.push({ pathname: '/u/[userId]/settings', params: { userId } })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Settings and activity"
                 >
                   <Icon name="menu" size={20} color="#ffffff" />
                 </Pressable>

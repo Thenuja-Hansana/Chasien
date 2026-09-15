@@ -138,7 +138,13 @@ export default function RoomChat() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <BlurTargetView ref={blurTargetRef} style={styles.flex}>
         <View style={styles.header}>
-          <Pressable style={styles.headerSide} hitSlop={8} onPress={() => router.back()}>
+          <Pressable
+            style={styles.headerSide}
+            hitSlop={8}
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <Icon name="back" size={22} color={colors.text} strokeWidth={2.4} />
           </Pressable>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -149,6 +155,8 @@ export default function RoomChat() {
               style={[styles.headerSide, styles.headerSideEnd]}
               hitSlop={8}
               onPress={() => router.push({ pathname: '/c/[communityId]/chat/create', params: { communityId } })}
+              accessibilityRole="button"
+              accessibilityLabel="Create a sub-group"
             >
               <Icon name="plus" size={22} color={colors.text} strokeWidth={2.4} />
             </Pressable>

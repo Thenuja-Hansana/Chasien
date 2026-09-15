@@ -51,6 +51,8 @@ export default function PostFab({ communityId }: { communityId: string }) {
         style={StyleSheet.flatten([styles.fabHit, { bottom: clearance }])}
         onPressIn={pressIn}
         onPressOut={pressOut}
+        accessibilityRole="button"
+        accessibilityLabel="New post"
       >
         <Animated.View style={[styles.fab, scaleStyle]}>
           <Icon name="plus" size={24} color={colors.bg} />

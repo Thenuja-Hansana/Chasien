@@ -244,7 +244,7 @@ export default function ChatView() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Go back">
           <Icon name="back" size={22} color={colors.text} />
         </Pressable>
         <Avatar gradient={avatarKey} letter={summary.title.charAt(0).toUpperCase()} shape={summary.kind === 'room_channel' ? 'square' : 'circle'} size={38} />
@@ -330,14 +330,21 @@ export default function ChatView() {
             <Text style={styles.replyBannerText} numberOfLines={1}>
               Replying to {replyTo.author?.name ?? 'message'}
             </Text>
-            <Pressable onPress={() => setReplyTo(null)} hitSlop={8}>
+            <Pressable onPress={() => setReplyTo(null)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel reply">
               <Icon name="close" size={16} color={colors.neutral[400]} />
             </Pressable>
           </View>
         )}
 
         <View style={styles.inputBar}>
-          <Pressable style={styles.iconButton} onPress={handleAttachImage} disabled={sending}>
+          <Pressable
+            style={styles.iconButton}
+            onPress={handleAttachImage}
+            disabled={sending}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Attach a photo"
+          >
             <Icon name="attach" size={22} color={colors.neutral[400]} />
           </Pressable>
           <View style={[styles.inputWrap, draftFocus.focused && styles.inputWrapFocused]}>
@@ -357,6 +364,9 @@ export default function ChatView() {
             style={[styles.sendButton, recording && styles.sendButtonRecording]}
             onPress={draft.trim() ? handleSendText : handleMicPress}
             disabled={sending && !recording}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={draft.trim() ? 'Send message' : recording ? 'Stop recording' : 'Record a voice message'}
           >
             {sending && !recording ? (
               <ActivityIndicator size="small" color={colors.bg} />

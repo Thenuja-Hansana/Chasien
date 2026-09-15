@@ -107,7 +107,7 @@ export default function EditProfile() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Go back">
           <Icon name="back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headingText}>Edit Profile</Text>
@@ -125,7 +125,12 @@ export default function EditProfile() {
           {/* Same banner + overlapping-avatar preview as Room creation
               (create-community.tsx) — the same "large, unmissable tap
               target" reasoning applies here too. */}
-          <Pressable onPress={handlePickBanner} style={styles.bannerWrap}>
+          <Pressable
+            onPress={handlePickBanner}
+            style={styles.bannerWrap}
+            accessibilityRole="button"
+            accessibilityLabel={bannerUri ? 'Change cover photo' : 'Add cover photo'}
+          >
             {bannerUri ? (
               <>
                 <Image source={{ uri: bannerUri }} style={styles.bannerImage} contentFit="cover" cachePolicy="memory-disk" />
@@ -143,7 +148,12 @@ export default function EditProfile() {
             )}
           </Pressable>
 
-          <Pressable onPress={handlePickAvatar} style={styles.avatarRing}>
+          <Pressable
+            onPress={handlePickAvatar}
+            style={styles.avatarRing}
+            accessibilityRole="button"
+            accessibilityLabel="Change profile photo"
+          >
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={styles.avatarImage} contentFit="cover" cachePolicy="memory-disk" />
             ) : (

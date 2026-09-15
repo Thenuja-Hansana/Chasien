@@ -130,7 +130,13 @@ export default function SettingsAndActivity() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable hitSlop={8} onPress={() => router.back()} style={styles.backButton}>
+        <Pressable
+          hitSlop={8}
+          onPress={() => router.back()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Icon name="back" size={22} color={colors.text} strokeWidth={2.4} />
         </Pressable>
         <Text style={styles.heading}>Settings and activity</Text>

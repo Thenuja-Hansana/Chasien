@@ -599,12 +599,30 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       session recorded anywhere
 - [ ] Touch target and accessibility pass: minimum tap sizes, and
       confirm layouts survive larger system font-scale settings without
-      breaking. **Barely started** — the tab bar itself was deliberately
-      enlarged for tap comfort (`theme.ts`'s own comment: sized up
-      specifically for older/less tech-savvy users); beyond that, only 4
-      `accessibilityLabel`s exist in the whole app and zero
-      `accessibilityRole`/`allowFontScaling`/`maxFontSizeMultiplier` — no
-      systematic tap-size or font-scale audit has happened
+      breaking. **Partial — 2026-09-15:** screen-reader labeling and tap-
+      size gaps fixed everywhere they could be found by reading the code;
+      font-scale survival is untouched and can't be closed without the
+      device. `accessibilityLabel` went from 4 usages to 56 across 27
+      files, `accessibilityRole` and `accessibilityState` from 0 to 66 and
+      22 — every icon-only button (back/close chevrons, camera/addPhoto
+      photo-picker badges, search, bell, settings gear, send/attach,
+      PostFab, avatar-preview taps that open a profile) now has a real
+      label instead of announcing nothing, and every custom toggle/radio/
+      checkbox this app hand-rolls instead of using RN's own primitives
+      (Room visibility choices in 3 places, category chips in 2, the
+      mute/members-can-post toggle pills, the sign-up age checkbox, poll
+      options, tab bar tabs, filter chips, the sub-group expand chevron)
+      now carries `accessibilityRole`/`accessibilityState` so a screen
+      reader announces it as the control it actually is, not a bare
+      `View`. Undersized (<44px, no `hitSlop`) targets found during the
+      same pass got one: the chat composer's attach/send buttons, the
+      post-detail composer's send button and two avatar-preview taps, and
+      the theme-color swatch picker. **Not done, and needs the Galaxy
+      A14 specifically:** no `allowFontScaling`/`maxFontSizeMultiplier`
+      anywhere, and no screen has actually been checked at a larger
+      system font-scale setting — that's not something reading the code
+      can verify, unlike the labeling/tap-size work above. See decision-
+      log, 2026-09-15
 
 **Exit condition:** the app feels smooth (no dropped-frame scrolling on
 feed/chat/notifications, no layout breakage) on the Galaxy A14 specifically,

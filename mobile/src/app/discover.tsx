@@ -140,13 +140,21 @@ export default function Discover() {
                     key={f.key}
                     onPress={() => setFilter(f.key)}
                     style={[styles.filterChip, active && styles.filterChipActive]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: active }}
                   >
                     <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{f.label}</Text>
                   </Pressable>
                 );
               })}
             </ScrollView>
-            <Pressable style={styles.searchButton} onPress={() => router.push('/search')} hitSlop={10}>
+            <Pressable
+              style={styles.searchButton}
+              onPress={() => router.push('/search')}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+            >
               <Icon name="search" size={20} color={colors.text} />
             </Pressable>
           </View>
@@ -223,7 +231,12 @@ function StartRoomFab() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <Pressable style={[styles.fab, { bottom: clearance }]} onPress={() => router.push('/create-community')}>
+    <Pressable
+      style={[styles.fab, { bottom: clearance }]}
+      onPress={() => router.push('/create-community')}
+      accessibilityRole="button"
+      accessibilityLabel="Start a new Room"
+    >
       <Icon name="edit" size={22} color={colors.bg} />
     </Pressable>
   );

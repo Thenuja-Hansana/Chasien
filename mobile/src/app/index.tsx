@@ -124,7 +124,12 @@ export default function Index() {
         <View style={styles.header}>
           <Text style={styles.brand}>chasien</Text>
           <Link href="/notifications" asChild>
-            <Pressable hitSlop={8} style={styles.bellWrap}>
+            <Pressable
+              hitSlop={8}
+              style={styles.bellWrap}
+              accessibilityRole="button"
+              accessibilityLabel={unreadCount > 0 ? `Activity, ${unreadCount} unread` : 'Activity'}
+            >
               <Icon name="bell" size={22} color={colors.text} />
               {unreadCount > 0 && (
                 <View style={styles.bellBadge}>

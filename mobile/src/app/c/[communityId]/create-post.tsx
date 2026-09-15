@@ -155,7 +155,14 @@ export default function CreatePost() {
               ]}
             >
               <Image source={{ uri: image.uri }} style={styles.image} contentFit="contain" />
-              <Pressable style={styles.removeImage} onPress={() => setImage(null)} disabled={submitting} hitSlop={8}>
+              <Pressable
+                style={styles.removeImage}
+                onPress={() => setImage(null)}
+                disabled={submitting}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Remove photo"
+              >
                 <Icon name="close" size={16} color={colors.text} />
               </Pressable>
             </View>

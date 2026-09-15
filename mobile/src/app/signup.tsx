@@ -169,6 +169,7 @@ export default function SignUp() {
                     onPress={() => setPasswordVisible((v) => !v)}
                     hitSlop={10}
                     style={styles.eyeButton}
+                    accessibilityRole="button"
                     accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
                   >
                     <Icon name={passwordVisible ? 'eyeOff' : 'eye'} size={19} color={colors.neutral[500]} />
@@ -185,7 +186,12 @@ export default function SignUp() {
               </View>
             </View>
 
-            <Pressable style={styles.agreeRow} onPress={() => setAgree((v) => !v)}>
+            <Pressable
+              style={styles.agreeRow}
+              onPress={() => setAgree((v) => !v)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: agree }}
+            >
               <View style={[styles.checkbox, agree && styles.checkboxChecked]}>
                 {agree && <Text style={styles.checkboxMark}>✓</Text>}
               </View>

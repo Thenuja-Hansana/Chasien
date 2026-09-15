@@ -171,7 +171,7 @@ export default function CommunitySettings() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Go back">
             <Icon name="back" size={22} color={colors.text} />
           </Pressable>
           <Text style={styles.headingText} numberOfLines={1}>
@@ -180,7 +180,13 @@ export default function CommunitySettings() {
           <View style={{ width: 22 }} />
         </View>
         <ScrollView contentContainerStyle={styles.content}>
-          <Pressable style={styles.toggleRow} onPress={handleToggleMute}>
+          <Pressable
+            style={styles.toggleRow}
+            onPress={handleToggleMute}
+            accessibilityRole="switch"
+            accessibilityLabel="Mute notifications"
+            accessibilityState={{ checked: notificationsMuted }}
+          >
             <View style={styles.toggleText}>
               <Text style={styles.toggleTitle}>Mute notifications</Text>
               <Text style={styles.toggleDesc}>Stop activity from this Room notifying you</Text>
@@ -298,7 +304,7 @@ export default function CommunitySettings() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Go back">
           <Icon name="back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headingText} numberOfLines={1}>
@@ -311,7 +317,12 @@ export default function CommunitySettings() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.previewCard}>
-          <Pressable onPress={handlePickBanner} style={styles.previewBannerWrap}>
+          <Pressable
+            onPress={handlePickBanner}
+            style={styles.previewBannerWrap}
+            accessibilityRole="button"
+            accessibilityLabel={bannerImage || existingBannerUrl ? 'Change cover photo' : 'Add cover photo'}
+          >
             {bannerImage || existingBannerUrl ? (
               <>
                 <Image
@@ -335,7 +346,12 @@ export default function CommunitySettings() {
           </Pressable>
 
           <View style={styles.previewRow}>
-            <Pressable onPress={handlePickAvatar} style={styles.avatarRing}>
+            <Pressable
+              onPress={handlePickAvatar}
+              style={styles.avatarRing}
+              accessibilityRole="button"
+              accessibilityLabel="Change Room icon"
+            >
               {avatarImage || existingAvatarUrl ? (
                 <Image
                   source={{ uri: avatarImage?.uri ?? existingAvatarUrl! }}
@@ -380,6 +396,8 @@ export default function CommunitySettings() {
           <Pressable
             onPress={() => handleTopChoice('public')}
             style={[styles.joinTypeRow, !isPrivate && styles.joinTypeRowActive]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: !isPrivate }}
           >
             <Icon name={PUBLIC_OPTION.icon} size={19} color={!isPrivate ? colors.accent.DEFAULT : colors.neutral[400]} />
             <View style={styles.joinTypeText}>
@@ -394,6 +412,8 @@ export default function CommunitySettings() {
           <Pressable
             onPress={() => handleTopChoice('private')}
             style={[styles.joinTypeRow, isPrivate && styles.joinTypeRowActive]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: isPrivate }}
           >
             <Icon name="lock" size={19} color={isPrivate ? colors.accent.DEFAULT : colors.neutral[400]} />
             <View style={styles.joinTypeText}>
@@ -414,6 +434,8 @@ export default function CommunitySettings() {
                     key={j.key}
                     onPress={() => setVisibility(j.key)}
                     style={[styles.joinTypeRow, styles.joinTypeRowNested, active && styles.joinTypeRowActive]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: active }}
                   >
                     <Icon name={j.icon} size={17} color={active ? colors.accent.DEFAULT : colors.neutral[400]} />
                     <View style={styles.joinTypeText}>
@@ -461,6 +483,8 @@ export default function CommunitySettings() {
                 key={c}
                 onPress={() => setCategory(c)}
                 style={[styles.categoryChip, active && styles.categoryChipActive]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: active }}
               >
                 <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{c}</Text>
               </Pressable>
@@ -468,7 +492,13 @@ export default function CommunitySettings() {
           })}
         </View>
 
-        <Pressable style={styles.toggleRow} onPress={() => setMembersCanPost((v) => !v)}>
+        <Pressable
+          style={styles.toggleRow}
+          onPress={() => setMembersCanPost((v) => !v)}
+          accessibilityRole="switch"
+          accessibilityLabel="Members can post"
+          accessibilityState={{ checked: membersCanPost }}
+        >
           <View style={styles.toggleText}>
             <Text style={styles.toggleTitle}>Members can post</Text>
             <Text style={styles.toggleDesc}>Off = only mods post</Text>
@@ -478,7 +508,13 @@ export default function CommunitySettings() {
           </View>
         </Pressable>
 
-        <Pressable style={styles.toggleRow} onPress={handleToggleMute}>
+        <Pressable
+          style={styles.toggleRow}
+          onPress={handleToggleMute}
+          accessibilityRole="switch"
+          accessibilityLabel="Mute notifications"
+          accessibilityState={{ checked: notificationsMuted }}
+        >
           <View style={styles.toggleText}>
             <Text style={styles.toggleTitle}>Mute notifications</Text>
             <Text style={styles.toggleDesc}>Stop activity from this Room notifying you</Text>

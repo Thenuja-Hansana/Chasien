@@ -326,18 +326,23 @@ export default function RoomHome() {
         </Text>
         <View style={styles.headerActions}>
           <Link href={{ pathname: '/c/[communityId]/chat', params: { communityId } }} asChild>
-            <Pressable hitSlop={8}>
+            <Pressable hitSlop={8} accessibilityRole="button" accessibilityLabel="Open chat">
               <Icon name="comment" size={24} color={colors.text} />
             </Pressable>
           </Link>
           <Link href={{ pathname: '/notifications', params: { roomId: room.id, roomName: room.name } }} asChild>
-            <Pressable hitSlop={8} style={styles.bellWrap}>
+            <Pressable
+              hitSlop={8}
+              style={styles.bellWrap}
+              accessibilityRole="button"
+              accessibilityLabel={unreadCount > 0 ? 'Activity, unread' : 'Activity'}
+            >
               <Icon name="bell" size={24} color={colors.text} />
               {unreadCount > 0 && <View style={styles.unreadDot} />}
             </Pressable>
           </Link>
           <Link href={{ pathname: '/c/[communityId]/settings', params: { communityId } }} asChild>
-            <Pressable hitSlop={8}>
+            <Pressable hitSlop={8} accessibilityRole="button" accessibilityLabel="Room settings">
               <Icon name="settings" size={24} color={colors.text} />
             </Pressable>
           </Link>
