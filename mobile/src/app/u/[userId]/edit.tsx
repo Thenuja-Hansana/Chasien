@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
-import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -13,10 +13,12 @@ import { pickImage, type PickedImage } from '@/lib/media';
 import { signProfileMediaUrls, uploadProfileAvatar, uploadProfileBanner } from '@/lib/profileMedia';
 import { fetchProfile, updateProfile } from '@/lib/profiles';
 
-/** Only ever linked from the "You" page's own "Edit Profile" button, but
- * guarded against a direct deep link to someone else's edit URL anyway —
- * the update itself would be rejected by profiles' own RLS regardless
- * (auth.uid() = id), this just avoids showing the form at all in that case. */
+/** Linked from Settings and activity's "Account Centre" card (the You
+ * page's own "Edit Profile" button was removed in favor of that single
+ * entry point), but guarded against a direct deep link to someone else's
+ * edit URL anyway — the update itself would be rejected by profiles' own
+ * RLS regardless (auth.uid() = id), this just avoids showing the form at
+ * all in that case. */
 export default function EditProfile() {
   const { session } = useAuth();
   const { userId } = useLocalSearchParams<{ userId: string }>();
@@ -318,11 +320,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignSelf: 'center',
   },
   label: {
-    fontFamily: Fonts.body,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
     marginBottom: Spacing[2],
   },

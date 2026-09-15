@@ -47,6 +47,19 @@ export type ThemeColors = {
    * accent as everything else and carried no visual urgency of its own.
    */
   error: string;
+  /**
+   * Text/icon color for content sitting on an arbitrary, non-palette
+   * background — a Room or user avatar's flat `accent_color` fill, or a
+   * gradient badge — where neither `text` nor `bg` can be assumed to
+   * contrast, the way they're guaranteed to against `surface`. Fixed
+   * across both modes on purpose: the surface it sits on isn't
+   * theme-driven either, so there's nothing for it to adapt to. Was
+   * previously three separately hand-typed hex literals (`#f6e7d2` in
+   * three screens, a near-miss `#f2e6d4` as `Icon`'s own unused default)
+   * that had drifted apart since the Bones Phase repaint — see
+   * decision-log, 2026-09-10.
+   */
+  onAccent: string;
 };
 
 export type ThemeMode = 'light' | 'dark';
@@ -80,6 +93,8 @@ export const LightColors: ThemeColors = {
   accent2: flatScale('#111111'),
 
   error: '#B3473C',
+
+  onAccent: '#f6e7d2',
 };
 
 export const DarkColors: ThemeColors = {
@@ -108,6 +123,9 @@ export const DarkColors: ThemeColors = {
   // Lighter than Light mode's error so it still reads at AA contrast
   // against the #121212 background.
   error: '#E2685C',
+
+  // Same literal as Light mode's — see `onAccent`'s own doc comment.
+  onAccent: '#f6e7d2',
 };
 
 /**
@@ -123,6 +141,34 @@ export const Fonts = {
   body: 'Figtree_400Regular',
   bodySemibold: 'Figtree_600SemiBold',
   bodyBold: 'Figtree_700Bold',
+} as const;
+
+/**
+ * Shared text roles that recurred across screens as copy-pasted, silently
+ * drifting inline styles rather than one definition — found during the
+ * 2026-09-11 type-scale audit (see decision-log). `label` is the small
+ * bold uppercase field/section label (e.g. "NAME", "DESCRIPTION", "WHO
+ * CAN JOIN") that 11 screens each hand-rolled separately: most agreed on
+ * `fontSize: 11, letterSpacing: 1`, but Notifications and the Chats list
+ * used 10, a Room's own chat/sub-group list used a 0.6 letter-spacing, and
+ * the sub-group creation screen used 12.5/0.4. Nine of those eleven also
+ * paired `fontWeight: '700'` with `Fonts.body` (the *regular*-weight font
+ * file) rather than `Fonts.bodyBold` — `expo-font` registers each weight
+ * as its own distinctly-named family, so `fontWeight` has nothing to
+ * select between under a family that's only ever one weight, and likely
+ * silently no-ops. This token uses the real bold file instead, so "bold"
+ * doesn't depend on the platform faking it. Not the same thing as
+ * Settings and activity's own `sectionLabel` (sentence-case, semibold, no
+ * letter-spacing) — that's a deliberately different, non-uppercase style
+ * ported from Instagram's settings screen, not a small-caps field label.
+ */
+export const Typography = {
+  label: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 11,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
 } as const;
 
 /** --space-* custom properties in tokens.css, kept as the same numbers for 1:1 traceability. */

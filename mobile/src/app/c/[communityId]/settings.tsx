@@ -5,7 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
-import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -175,7 +175,7 @@ export default function CommunitySettings() {
               <Text style={styles.toggleDesc}>Stop activity from this Room notifying you</Text>
             </View>
             <View style={[styles.toggle, notificationsMuted && styles.toggleOn]}>
-              <View style={[styles.toggleThumb, notificationsMuted && styles.toggleThumbOn]} />
+              <View style={styles.toggleThumb} />
             </View>
           </Pressable>
           <Pressable style={styles.leaveRow} onPress={handleLeave} disabled={leaving}>
@@ -453,7 +453,7 @@ export default function CommunitySettings() {
             <Text style={styles.toggleDesc}>Off = only mods post</Text>
           </View>
           <View style={[styles.toggle, membersCanPost && styles.toggleOn]}>
-            <View style={[styles.toggleThumb, membersCanPost && styles.toggleThumbOn]} />
+            <View style={styles.toggleThumb} />
           </View>
         </Pressable>
 
@@ -463,7 +463,7 @@ export default function CommunitySettings() {
             <Text style={styles.toggleDesc}>Stop activity from this Room notifying you</Text>
           </View>
           <View style={[styles.toggle, notificationsMuted && styles.toggleOn]}>
-            <View style={[styles.toggleThumb, notificationsMuted && styles.toggleThumbOn]} />
+            <View style={styles.toggleThumb} />
           </View>
         </Pressable>
 
@@ -631,11 +631,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     textAlign: 'center',
   },
   label: {
-    fontFamily: Fonts.body,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
     marginBottom: Spacing[2],
     marginTop: Spacing[6],
@@ -693,19 +689,22 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: Spacing[2],
     paddingBottom: Spacing[4],
   },
+  // `Radius.lg`, not a hand-picked literal — matches `create-community.tsx`'s
+  // own fix for the identical block; see that file's comment and
+  // decision-log, 2026-09-11.
   avatarRing: {
     position: 'absolute',
     left: Spacing[4],
     top: -46,
     padding: 4,
-    borderRadius: 22,
+    borderRadius: Radius.lg + 4,
     backgroundColor: colors.surface,
     zIndex: 2,
   },
   previewAvatar: {
     width: 84,
     height: 84,
-    borderRadius: 18,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -903,14 +902,23 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.accent.DEFAULT,
     alignItems: 'flex-end',
   },
+  // Same `colors.bg` regardless of on/off — `toggle`'s own track already
+  // changes color (`colors.divider` off, `colors.accent.DEFAULT` on), and
+  // bg/accent are always each other's inverse in this palette
+  // (black-on-white in Light, near-white-on-near-black in Dark), so a
+  // fixed bg-colored thumb contrasts against either track for free.
+  // Previously `colors.neutral[300]` when off — invisible in Light mode
+  // specifically, since `colors.divider` (rgba(17,17,17,0.12)) composites
+  // to the exact same `#E0E0E0` over a white screen that `neutral[300]`
+  // already is, so the "off" thumb was a same-color circle on a
+  // same-color track. Found by actually looking at the unmuted state on a
+  // real device, not by re-deriving it from the color values — see
+  // decision-log, 2026-09-10.
   toggleThumb: {
     width: 20,
     height: 20,
     borderRadius: 999,
-    backgroundColor: colors.neutral[300],
-  },
-  toggleThumbOn: {
-    backgroundColor: '#f6e7d2',
+    backgroundColor: colors.bg,
   },
   memberList: {
     gap: Spacing[3],

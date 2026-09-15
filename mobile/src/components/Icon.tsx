@@ -3,7 +3,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 // Ported 1:1 from app_reference/src/components/Icon.jsx — same shape data,
 // SVG primitives swapped for react-native-svg's.
 type Shape =
-  | { t: 'path'; d: string; fill?: true }
+  | { t: 'path'; d: string; fill?: true; fillRule?: 'evenodd' }
   | { t: 'circle'; cx: number; cy: number; r: number }
   | { t: 'rect'; x: number; y: number; width: number; height: number; rx: number };
 
@@ -105,11 +105,17 @@ const ICONS: Record<string, Shape[]> = {
   // an outline-vs-filled distinction (Instagram/Twitter's convention)
   // instead of color alone. homeTab/chatsTab/youTab's own outline paths
   // already close into a single well-formed silhouette, so they're reused
-  // as-is with `fill: true`; exploreTab's compass needle doesn't survive a
-  // single-color fill legibly, so its filled state is a plain solid disc
-  // rather than repeating the needle in the same flat color.
+  // as-is with `fill: true`. exploreTab's needle used to be dropped
+  // entirely for a plain solid disc — filling it in the same flat color
+  // as the disc made it invisible, so the active Explore tab just read as
+  // a blank black circle instead of a compass (found on a real device,
+  // not by re-reading the SVG). Reusing the exact same circle+needle `d`
+  // string with `fillRule: 'evenodd'` instead punches the needle out as a
+  // true transparent cutout — parity-based, so it doesn't need to know or
+  // match whatever's behind the icon (the tab bar's frosted glass isn't
+  // one flat color to match anyway).
   homeTabFilled: [{ t: 'path', fill: true, d: 'M3 10.6 12 3.2l9 7.4V20a1 1 0 0 1-1 1h-4.6v-6H8.6v6H4a1 1 0 0 1-1-1z' }],
-  exploreTabFilled: [{ t: 'path', fill: true, d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z' }],
+  exploreTabFilled: [{ t: 'path', fill: true, fillRule: 'evenodd', d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18m4 5-2.2 6.2L7.6 16l2.2-6.2z' }],
   chatsTabFilled: [{ t: 'path', fill: true, d: 'M21 12a8 8 0 0 1-11.7 7.1L3.2 21l1.9-6.2A8 8 0 1 1 21 12z' }],
   youTabFilled: [{ t: 'path', fill: true, d: 'M12 4.6a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2M4.9 20a7.1 7.1 0 0 1 14.2 0' }],
   alertCircle: [
@@ -179,12 +185,12 @@ const ICONS: Record<string, Shape[]> = {
 type IconProps = {
   name: keyof typeof ICONS;
   size?: number;
-  color?: string;
+  color: string;
   filled?: boolean;
   strokeWidth?: number;
 };
 
-export default function Icon({ name, size = 20, color = '#f2e6d4', filled = false, strokeWidth = 2.75 }: IconProps) {
+export default function Icon({ name, size = 20, color, filled = false, strokeWidth = 2.75 }: IconProps) {
   const shapes = ICONS[name];
   if (!shapes) return null;
   const fillOnly = shapes.some((s) => s.t === 'path' && s.fill);
@@ -195,7 +201,7 @@ export default function Icon({ name, size = 20, color = '#f2e6d4', filled = fals
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
       {shapes.map((s, i) => {
-        if (s.t === 'path') return <Path key={i} d={s.d} />;
+        if (s.t === 'path') return <Path key={i} d={s.d} fillRule={s.fillRule} />;
         if (s.t === 'circle') return <Circle key={i} cx={s.cx} cy={s.cy} r={s.r} />;
         if (s.t === 'rect') return <Rect key={i} x={s.x} y={s.y} width={s.width} height={s.height} rx={s.rx} />;
         return null;

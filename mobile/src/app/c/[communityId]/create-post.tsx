@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
-import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -331,10 +331,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   label: {
-    fontFamily: Fonts.bodyBold,
-    fontSize: 11,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
   },
   removePoll: {

@@ -449,7 +449,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   cardLogoLetter: {
     fontFamily: Fonts.heading,
     fontSize: 26,
-    color: '#f6e7d2',
+    color: colors.onAccent,
   },
   cardTitle: {
     fontFamily: Fonts.heading,

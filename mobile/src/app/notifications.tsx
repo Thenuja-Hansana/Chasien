@@ -10,7 +10,7 @@ import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
-import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -275,10 +275,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignSelf: 'center',
   },
   groupLabel: {
-    fontFamily: Fonts.bodyBold,
-    fontSize: 10,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[4],

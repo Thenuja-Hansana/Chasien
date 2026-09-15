@@ -337,7 +337,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   roomIconLetter: {
     fontFamily: Fonts.heading,
     fontSize: 19,
-    color: '#f6e7d2',
+    color: colors.onAccent,
   },
   roomRowBody: {
     flex: 1,

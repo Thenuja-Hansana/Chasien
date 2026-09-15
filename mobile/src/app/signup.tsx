@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
-import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -259,11 +259,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: Spacing[4],
   },
   label: {
-    fontFamily: Fonts?.body,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
     marginBottom: Spacing[2],
   },

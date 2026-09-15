@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
-import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchRoomBySlug } from '@/lib/rooms';
@@ -135,11 +135,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: Spacing[2],
   },
   label: {
-    fontFamily: Fonts.body,
-    fontSize: 12.5,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
     marginTop: Spacing[4],
   },

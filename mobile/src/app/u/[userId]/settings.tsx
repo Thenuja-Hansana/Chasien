@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState, type ComponentProps } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import EmptyState from '@/components/EmptyState';
@@ -8,7 +8,6 @@ import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
-import { useThemeContext } from '@/lib/theme-context';
 
 type IconName = ComponentProps<typeof Icon>['name'];
 type Row = { icon: IconName; label: string; value?: string; subtitle?: string };
@@ -26,17 +25,20 @@ type Section = { title: string; rows: Row[] };
  * built yet" instead of doing nothing (a button that does nothing on tap
  * reads as broken; this app's own standard elsewhere, e.g. Login's
  * dropped Apple/Google buttons, has always been to say so instead).
- * Dark Mode and Log out are the two exceptions — real, already-working
- * features carried over from the drawer this screen replaces
- * (SettingsDrawer, now deleted), kept outside the search filter below
- * since burying your only working toggle or your way out of the app
- * behind a search box would be a step backward from the old drawer.
+ * Account Centre and Log out are the exceptions — real, already-working
+ * features kept outside the search filter below, since burying your
+ * profile editor or your way out of the app behind a search box would be
+ * a step backward. Account Centre used to be a plain placeholder row here
+ * and profile editing lived behind a separate "Edit Profile" button on
+ * the You page; both are gone now — this card *is* the profile editor's
+ * entry point, sized to match, which is also why it renders above
+ * everything else rather than inside "Your account" alongside placeholder
+ * rows. Accessibility (in "Your app and media" below) is real too, but
+ * ordinary-sized and left inside the search filter like any other row —
+ * it just happens to open a real screen (`accessibility.tsx`, Dark Mode)
+ * instead of this file's usual "not wired up yet" alert.
  */
 const SECTIONS: Section[] = [
-  {
-    title: 'Your account',
-    rows: [{ icon: 'youTab', label: 'Account Centre', subtitle: 'Password, security, personal details, and more' }],
-  },
   {
     title: 'How you use Chasien',
     rows: [
@@ -103,7 +105,7 @@ const SECTIONS: Section[] = [
 
 export default function SettingsAndActivity() {
   const colors = useTheme();
-  const { mode, toggleMode } = useThemeContext();
+  const { userId } = useLocalSearchParams<{ userId: string }>();
   const { signOut } = useAuth();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [query, setQuery] = useState('');
@@ -117,8 +119,12 @@ export default function SettingsAndActivity() {
     })).filter((section) => section.rows.length > 0);
   }, [query]);
 
-  function handleRowPress(label: string) {
-    Alert.alert(label, "This isn't wired up yet — the front end came first.");
+  function handleRowPress(row: Row) {
+    if (row.label === 'Accessibility') {
+      router.push({ pathname: '/u/[userId]/accessibility', params: { userId } });
+      return;
+    }
+    Alert.alert(row.label, "This isn't wired up yet — the front end came first.");
   }
 
   return (
@@ -144,25 +150,29 @@ export default function SettingsAndActivity() {
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Appearance</Text>
-          <View style={styles.row}>
-            <View style={styles.rowIcon}>
-              <Icon name="moon" size={20} color={colors.text} strokeWidth={1.8} />
+          <Text style={styles.sectionLabel}>Your account</Text>
+          <Pressable
+            style={styles.accountCentreCard}
+            onPress={() => router.push({ pathname: '/u/[userId]/edit', params: { userId } })}
+          >
+            <View style={styles.accountCentreIcon}>
+              <Icon name="youTab" size={24} color={colors.text} strokeWidth={1.8} />
             </View>
-            <Text style={styles.rowLabel}>Dark Mode</Text>
-            <Switch
-              value={mode === 'dark'}
-              onValueChange={toggleMode}
-              trackColor={{ false: colors.neutral[300], true: colors.accent.DEFAULT }}
-            />
-          </View>
+            <View style={styles.rowTextWrap}>
+              <Text style={styles.accountCentreLabel}>Account Centre</Text>
+              <Text style={styles.accountCentreSubtitle} numberOfLines={2}>
+                Edit your name, photo, bio, and cover — plus password, security, and more
+              </Text>
+            </View>
+            <Icon name="chevronRight" size={18} color={colors.neutral[400]} strokeWidth={2.2} />
+          </Pressable>
         </View>
 
         {filteredSections.map((section) => (
           <View key={section.title} style={styles.section}>
             <Text style={styles.sectionLabel}>{section.title}</Text>
             {section.rows.map((row) => (
-              <Pressable key={row.label} style={styles.row} onPress={() => handleRowPress(row.label)}>
+              <Pressable key={row.label} style={styles.row} onPress={() => handleRowPress(row)}>
                 <View style={styles.rowIcon}>
                   <Icon name={row.icon} size={20} color={colors.text} strokeWidth={1.8} />
                 </View>
@@ -266,6 +276,41 @@ const makeStyles = (colors: ThemeColors) =>
       gap: Spacing[3],
       paddingVertical: 11,
     },
+    // Bigger than a plain `row` on every axis (padding, icon, type) and
+    // raised on its own surface + border — the one entry point left for
+    // editing your profile now that the You page's "Edit Profile" button
+    // is gone, so it has to read as more important than a placeholder
+    // list item, not just be one with real navigation wired up.
+    accountCentreCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing[4],
+      padding: Spacing[4],
+      borderRadius: Radius.md,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.divider,
+    },
+    accountCentreIcon: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.neutral[200],
+    },
+    accountCentreLabel: {
+      fontFamily: Fonts.bodyBold,
+      fontSize: 17,
+      color: colors.text,
+    },
+    accountCentreSubtitle: {
+      fontFamily: Fonts.body,
+      fontSize: 13.5,
+      lineHeight: 18,
+      color: colors.neutral[400],
+      marginTop: 2,
+    },
     rowIcon: {
       width: 26,
       alignItems: 'center',
@@ -275,9 +320,10 @@ const makeStyles = (colors: ThemeColors) =>
       minWidth: 0,
       gap: 2,
     },
-    // flex: 1 matters for the Dark Mode row above, where this Text is a
-    // direct `row` child (no rowTextWrap) that needs to push the Switch to
-    // the end; a no-op inside rowTextWrap's own already-flexed column.
+    // flex: 1 is a no-op inside rowTextWrap's own already-flexed column
+    // here, but matters wherever this style is reused directly as a `row`
+    // child with a trailing control (e.g. accessibility.tsx's Dark Mode
+    // switch), where it needs to push that control to the row's end.
     rowLabel: {
       flex: 1,
       fontFamily: Fonts.body,

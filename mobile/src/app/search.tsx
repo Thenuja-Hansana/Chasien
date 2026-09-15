@@ -9,7 +9,7 @@ import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
-import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
@@ -306,11 +306,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: Spacing[3],
   },
   sectionLabel: {
-    fontFamily: Fonts.body,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
     marginTop: Spacing[1],
   },
@@ -334,7 +330,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   roomIconLetter: {
     fontFamily: Fonts.heading,
     fontSize: 18,
-    color: '#f6e7d2',
+    color: colors.onAccent,
   },
   rowContent: {
     flex: 1,

@@ -5,7 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
-import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -488,19 +488,28 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // the banner/body seam. Negative by half the ring's own size (84px
   // avatar + 4px padding each side = 92) pulls it up so it straddles
   // that seam evenly, rather than sitting entirely below it.
+  // `Radius.lg`, not a hand-picked literal — the shared `Avatar`
+  // component's own square-shape formula (`Math.max(10, size * 0.34)`)
+  // gives ~28.6 for an 84px avatar, i.e. this exact token, so this Room's
+  // icon has the same corners here as it does everywhere else it renders
+  // through `Avatar` (Chats, a Room's own chat list, Profile's Room
+  // list) — previously a hardcoded 22 that didn't match any of them, off
+  // by more than what the 4px ring padding alone explains. Ring radius
+  // stays avatar radius + padding so the ring reads as concentric with
+  // the avatar it wraps — see decision-log, 2026-09-11.
   avatarRing: {
     position: 'absolute',
     left: Spacing[4],
     top: -46,
     padding: 4,
-    borderRadius: 22,
+    borderRadius: Radius.lg + 4,
     backgroundColor: colors.surface,
     zIndex: 2,
   },
   previewAvatar: {
     width: 84,
     height: 84,
-    borderRadius: 18,
+    borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -547,11 +556,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.neutral[400],
   },
   label: {
-    fontFamily: Fonts.body,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
     marginBottom: Spacing[2],
   },
@@ -783,15 +788,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
   },
-  // The one deliberate departure from the app's otherwise monochrome
-  // palette — a destructive action gets the near-universal red
-  // convention (iOS/Android system "delete" red) instead of blending
-  // into the black/white chrome, since this one's irreversible.
+  // `colors.error` — the one deliberate departure from the app's
+  // otherwise monochrome palette, reserved for exactly this (errors and
+  // destructive actions), since this one's irreversible. Previously its
+  // own hand-picked red that didn't match `colors.error` at all and
+  // didn't adjust for Dark mode contrast the way that token does — see
+  // decision-log, 2026-09-10.
   confirmDiscardButton: {
     flex: 1,
     height: 48,
     borderRadius: Radius.pill,
-    backgroundColor: '#E5484D',
+    backgroundColor: colors.error,
     alignItems: 'center',
     justifyContent: 'center',
   },

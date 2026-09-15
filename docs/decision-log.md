@@ -7,6 +7,227 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-11 — UI consistency audit, part three: corner radius and a real type-scale token
+
+**What happened:** continued the same day's audit into the two pieces the
+color pass didn't cover — corner radius and type scale — since "UI
+consistency audit" was checked off on the strength of the token *system*
+existing, not because every screen had actually been walked. This pass
+found two more real, fixable inconsistencies.
+
+**1. Room avatar corner radius didn't match itself.** Create Room and Room
+Settings each render their own live avatar preview (`previewAvatar`, an
+84×84 box) with a hardcoded `borderRadius: 18` — bespoke inline styles,
+not the shared `Avatar` component. Everywhere else a Room's icon renders
+*as* `Avatar` with `shape="square"` (Chats list, a Room's own chat/
+sub-group list, Profile's Room list), and `Avatar`'s own square formula is
+`Math.max(10, size * 0.34)` — 28.6 for an 84px avatar, i.e. `Radius.lg`
+almost exactly. So the Room you're actively creating or editing had
+visibly tighter, more rectangular corners than the same Room's icon shows
+everywhere else. Fixed in both `create-community.tsx` and
+`app/c/[communityId]/settings.tsx` (identical duplicated blocks) —
+`previewAvatar` now uses `Radius.lg`, and the surrounding `avatarRing`
+uses `Radius.lg + 4` to stay concentric with the padding around it (the
+original 22-vs-18 pair already encoded a "+4" relationship; that part was
+correct, just anchored to the wrong base number).
+
+**2. No shared token for the small uppercase field/section label — real
+drift across 11 files.** Labels like "NAME," "DESCRIPTION," "WHO CAN
+JOIN," "ROOMS," "POSTS" are each hand-rolled per screen. Actual values
+found: `fontSize` 10 (Notifications, Chats list), 11 (7 files — the
+majority), 12 (`edit.tsx`, Profile), 12.5 (sub-group creation);
+`letterSpacing` 1 (9 files), 0.6 (a Room's own chat/sub-group list), 0.4
+(sub-group creation). Separately and more seriously: **9 of those 11
+paired `fontWeight: '700'` with `Fonts.body` — the regular-weight font
+file — instead of `Fonts.bodyBold`.** `expo-font` registers each weight
+Chasien uses as its own distinctly-named family (`Figtree_400Regular` vs
+`Figtree_700Bold`); `fontWeight` has nothing to select between under a
+family that's only ever one weight, so those 9 labels most likely never
+actually rendered bold at all, regardless of matching the intended pixel
+size. Only `TabBar.tsx`, `notifications.tsx`, and `create-post.tsx`
+correctly used `Fonts.bodyBold`.
+
+**Decision:** asked the user which size should become canonical rather
+than picking unilaterally — a design call, not a bug-fix call, since
+every option was equally "correct" in isolation. Went with the majority
+(`fontSize: 11, letterSpacing: 1`), paired with `Fonts.bodyBold` since
+that's unambiguously correct regardless of whether the fontWeight-on-
+regular-font issue actually no-ops on every platform or just isn't
+reliable — added as `Typography.label` in `theme.ts`, then every one of
+the 11 call sites' `label`/`sectionLabel`/`groupLabel` style now spreads
+`...Typography.label` instead of repeating the four properties inline.
+`TabBar.tsx`'s own label was deliberately left alone — a different role
+(tiny text under a bottom-nav icon, already-tuned at 9.5px) that happened
+to share `textTransform: 'uppercase'`, not a copy of this one. Settings
+and activity's own `sectionLabel` (sentence-case, semibold, no
+letter-spacing, ported from Instagram's settings screen) was also left
+alone for the same reason — a deliberately different style, not drift.
+
+**Verified:** typecheck and lint clean across all 13 touched files.
+
+**Revisit when:** a future screen needs the same small-caps label role —
+reach for `Typography.label`, don't hand-roll a twelfth variant.
+
+---
+
+## 2026-09-11 — UI consistency audit, part two: colors only, and a real bug found by hand
+
+**What happened:** the 2026-09-10 entry below checked "UI consistency
+audit" off the Bones Phase checklist on the strength of the theme.ts
+redesign — every screen reading from one shared token file counts as
+consistency "by construction." That's true for the *system*, but nobody
+had actually walked the code looking for places that quietly never
+switched over. Doing that turned up real, fixable drift, purely by
+`grep`ping for hardcoded hex colors outside `theme.ts` itself:
+
+1. **A leftover pre-Bones-Phase cream, forked into two slightly different
+   values, in five places.** `#f6e7d2` was still hardcoded as the letter
+   color on every Room/user avatar badge (`Avatar.tsx`, `discover.tsx`,
+   `index.tsx`, `search.tsx`) and as Room Settings' custom toggle's "on"
+   thumb — plus `Icon.tsx`'s own default `color` fallback had drifted to a
+   *different* near-identical hex, `#f2e6d4`, clearly the same color
+   re-typed by hand at some point. Fixed by adding a real token,
+   `onAccent`, to `ThemeColors` (same fixed value in both Light and Dark,
+   since what it sits on — an arbitrary accent/gradient badge — isn't
+   theme-driven either), pointing all four real call sites at it, and
+   making `Icon`'s `color` prop required instead of carrying a stale
+   default — typecheck confirmed every real call site already passes one
+   explicitly, so nothing was relying on it.
+2. **Two competing "destructive action" reds.** `theme.ts` has a
+   dedicated `error` token reserved for exactly this, correctly used for
+   error text in 5 screens — but `create-community.tsx`'s "discard this
+   Room" button hardcoded its own separate red (`#E5484D`) instead, so it
+   never adjusted for Dark mode contrast the way `error` deliberately
+   does. Fixed to use `colors.error`.
+3. **A real bug, found on the physical device, not re-derived from the
+   color values.** Room Settings' custom toggle's *off* thumb
+   (`colors.neutral[300]`) turned out to be the exact same composited
+   color as its own track (`colors.divider`) in Light mode —
+   `rgba(17,17,17,0.12)` over a white screen resolves to precisely the
+   same `#E0E0E0` that `neutral[300]` already is — so the circle was
+   genuinely invisible while unmuted, and only ever looked right once
+   switched on. The user caught this by actually opening the screen after
+   fix #1 above changed the *on* thumb and asked to double check it, not
+   by anyone re-checking the math. Fixed by making the thumb always
+   `colors.bg` regardless of on/off — `bg` and `accent` are always each
+   other's inverse in this palette, so a fixed-bg thumb contrasts against
+   either track color for free — which also let the now-redundant
+   `toggleThumbOn` style and its three conditional call sites be deleted
+   outright instead of patched.
+
+**Why this is its own entry:** the code comments written during this pass
+already say "see decision-log, 2026-09-10" — but that date's entry below
+is about auditing the *checklist*, not about these specific color fixes.
+This entry is the one those comments actually mean to point at.
+
+**What this doesn't cover:** spacing, corner-radius, and type-scale
+consistency were never audited — only colors. `roadmap.md`'s "UI
+consistency audit" line stays checked (the token system genuinely is
+consistent by construction), but that's not the same claim as "every
+screen's spacing/radius/type was manually walked and found to match" —
+nobody's done that pass yet.
+
+**Verified:** typecheck and lint clean throughout. Fix #2 (discard button)
+and the bug in #3 (toggle thumb, both on and off states) were visually
+confirmed live on the Galaxy A14 after relaunching the app; fix #1's four
+`onAccent` call sites were confirmed to render identically to before,
+since the token's value was deliberately kept the same as the leftover
+literal it replaced.
+
+**Revisit when:** the spacing/radius/type-scale half of this same
+checklist item finally gets its own pass — this entry's fixes shouldn't
+need re-touching on their own.
+
+---
+
+## 2026-09-10 — Bones Phase checklist audited against the actual code, not assumed
+
+**What happened:** `roadmap.md`'s Bones Phase checklist had sat with every
+box unticked since it was written on 2026-09-02, even though several real
+commits since then (the black/white/gray theme system, the enlarged tab
+bar, filled tab icons, skeleton loaders, unified empty states, haptics —
+`73dfa51`, `e576107`, `57a43a6`) were plainly Bones Phase work. Rather than
+guess which boxes that covered, each of the nine checklist items was
+checked against the actual code — `grep` for the specific mechanisms each
+one names, not a skim.
+
+**Findings, one item at a time:**
+
+1. **UI consistency audit — done, scope shifted.** `constants/theme.ts`
+   states outright that it replaced `app_reference/`'s single "Organic"
+   dark palette with a new black/white/gray Light/Dark system, rather than
+   auditing every screen against the *original* tokens and fixing drift
+   (the checklist's own wording: "fix drift, don't redesign"). Every
+   screen now reads spacing/type/color from that one shared file via
+   `useTheme()`, so consistency holds by construction. Checked off anyway
+   — the underlying goal (one consistent visual language everywhere) is
+   met, just by a different route than planned.
+2. **Small-screen audit — not started.** No compact-width testing
+   recorded anywhere; nothing in the code branches on screen width beyond
+   the existing `MaxContentWidth` cap (which bounds the *wide* end, not
+   the narrow one).
+3. **List virtualization pass — not started.** `grep`ing for `FlatList`,
+   `windowSize`, `removeClippedSubviews`, and `getItemLayout` across
+   `mobile/src` turns up exactly two plain, untuned `FlatList`s (the Room
+   feed, `app/c/[communityId]/index.tsx`, and the chat thread,
+   `app/chats/[chatId].tsx`) and nothing else. Home's Room list, the
+   notifications feed, and the story-ring row (the other three lists this
+   item names) all render via a plain `ScrollView` + `.map()` — not even
+   `FlatList`, let alone a tuned one. `@shopify/flash-list` isn't a
+   dependency.
+4. **Image loading/caching pass — not started.** Every `expo-image`
+   `<Image>` call site sets `contentFit` and nothing else — no
+   `cachePolicy`, no `placeholder`/blurhash, no separate thumbnail vs.
+   full-resolution variant anywhere in the codebase.
+5. **Loading/empty/error states — partial.** `Skeleton`/`EmptyState`
+   (`mobile/src/components/`) are real and wired into 5 screens: Home,
+   Discover, Search, Notifications, and this Settings screen. Everything
+   else that fetches data — Room feed, chat list/thread, post detail,
+   story viewer, profile, friends, room settings/subgroups, login/signup —
+   still shows a bare `ActivityIndicator` or plain error text, never
+   migrated to the shared components.
+6. **Animation and transition polish — barely started.** One real,
+   deliberate piece: `app/_layout.tsx` sets `animation: 'none'` on the
+   four tab-destination screens (Home/Discover/Chats/You) specifically so
+   switching tabs doesn't play a stack-push slide — the surrounding
+   comment there says as much. Nothing else uses
+   `react-native-reanimated` for transitions; the library's only other two
+   call sites in the app (`Skeleton`'s shimmer, `story.tsx`'s progress
+   bars) predate this phase and aren't transition work.
+7. **Cold start time — not started.** No measurement recorded in `docs/`
+   anywhere.
+8. **Memory profiling — not started.** Same — no profiling session
+   recorded.
+9. **Touch target and accessibility — barely started.** The tab bar was
+   deliberately sized up for tap comfort (`theme.ts`'s own comment on
+   `TabBarContentHeight`: "asked for specifically to make the bar easier
+   to tap and read for older/less tech-savvy users"). Beyond that,
+   `accessibilityLabel` appears exactly 4 times in the whole app (both
+   password-visibility toggles, the two story tap zones), and
+   `accessibilityRole`/`allowFontScaling`/`maxFontSizeMultiplier` appear
+   zero times — no systematic pass has happened.
+
+**Decision:** update `roadmap.md`'s Bones Phase checklist to match this —
+tick the UI consistency audit (with a note on the scope change), and
+annotate the other eight items inline with **Done/Partial/Barely
+started/Not started** and the specific evidence above, rather than leaving
+nine identical unchecked boxes that no longer distinguished "untouched"
+from "most of the way there."
+
+**Why bother, instead of just ticking boxes as convenient:** this
+project's whole verification standard (every phase before this one) is
+"check the real thing, don't assume it's done because it compiles or
+because related work happened nearby." A checklist that's silently 15%
+accurate is worse than one that's honestly still all in progress — it
+would have let list virtualization or image caching get skipped entirely
+under the assumption "Bones Phase already covered that."
+
+**Revisit when:** each remaining item, as it's actually done — replace its
+inline note rather than just flipping the checkbox, so the next audit
+doesn't have to re-derive what "partial" meant here.
+
+---
+
 ## 2026-09-02 — Insert a "Bones Phase" (UI/UX + mobile performance) ahead of Phase 9
 
 **Decision:** Pause the phase-number sequence after Phase 8 and run an

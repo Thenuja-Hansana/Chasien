@@ -63,11 +63,11 @@ export default function Avatar({ gradient, color, imageUrl, letter, size = 40, s
     <Image source={{ uri: imageUrl }} style={[styles.fill, { borderRadius: radius }]} contentFit="cover" />
   ) : color ? (
     <View style={[styles.fill, { borderRadius: radius, backgroundColor: color }]}>
-      {/* Fixed warm off-white, not the theme-derived contrast the gradient
+      {/* colors.onAccent, not the theme-derived contrast the gradient
           branch below uses — matches Home's roomIconLetter exactly, since
           an arbitrary accent color can't be assumed to pair with either
           theme's bg color the way the neutral gradient ramp is designed to. */}
-      <Text style={[styles.letter, { fontSize: size * 0.4, color: '#f6e7d2' }]}>{letter}</Text>
+      <Text style={[styles.letter, { fontSize: size * 0.4, color: colors.onAccent }]}>{letter}</Text>
     </View>
   ) : (
     <LinearGradient

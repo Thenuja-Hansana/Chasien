@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import TabBar from '@/components/TabBar';
-import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { startDm } from '@/lib/chat';
@@ -199,14 +199,6 @@ export default function ProfileScreen() {
               </View>
 
               {error && <Text style={styles.error}>{error}</Text>}
-
-              {isOwnProfile && profile && (
-                <View style={styles.actionsRow}>
-                  <Pressable style={styles.editProfileButton} onPress={() => router.push({ pathname: '/u/[userId]/edit', params: { userId } })}>
-                    <Text style={styles.editProfileButtonText}>Edit Profile</Text>
-                  </Pressable>
-                </View>
-              )}
 
               {!isOwnProfile && profile && (
                 <View style={styles.actionsRow}>
@@ -447,20 +439,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   actionsRow: {
     gap: Spacing[2],
   },
-  editProfileButton: {
-    height: 50,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: colors.divider,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editProfileButtonText: {
-    fontFamily: Fonts.body,
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.text,
-  },
   messageButton: {
     height: 50,
     borderRadius: Radius.pill,
@@ -523,11 +501,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: Spacing[3],
   },
   sectionLabel: {
-    fontFamily: Fonts.body,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
   },
   emptyText: {

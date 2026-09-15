@@ -401,33 +401,87 @@ items below are pulled forward from Phase 10 (list virtualization/image
 caching, loading/empty/error-state audit) rather than duplicated there —
 Phase 10 keeps a re-verification pass instead, see its note below.
 
-- [ ] UI consistency audit: every existing screen checked against
-      `app_reference/`'s tokens (spacing, type scale, color, corner
-      radii, iconography) — fix drift, don't redesign
+**2026-09-10:** this checklist sat untouched through several real commits
+that actually did Bones Phase-shaped work (the black/white/gray theme
+system, the enlarged tab bar, filled tab icons, skeleton loaders, unified
+empty states, haptics), so it stopped reflecting reality. Audited against
+the actual code rather than assumed — one item is genuinely done, two are
+real but narrow, one is partial, and four haven't been started at all. See
+decision-log, 2026-09-10, for the full evidence behind each line below.
+
+- [x] UI consistency audit — done, but as a redesign rather than the
+      drift-fix originally scoped: `constants/theme.ts` replaced
+      `app_reference/`'s single "Organic" dark palette outright with a new
+      black/white/gray system in Light and Dark modes, and every screen
+      now reads spacing/type/color from that one shared token file via
+      `useTheme()` instead of per-screen values — consistency by
+      construction, not a manual per-screen patch pass. **2026-09-11
+      follow-up:** actually walked the code for color drift (not assumed
+      from the token system existing) and found real leftovers — a
+      pre-Bones-Phase cream hardcoded in 5 places under two slightly
+      different hex values, a destructive-action button not using the
+      dedicated `error` token, and a real bug (an invisible toggle thumb
+      in Light mode, caught by hand on the device) — all fixed; see
+      decision-log, 2026-09-11. **Same-day follow-up:** corner radius and
+      type scale audited too — fixed Create Room/Room Settings' mismatched
+      avatar-preview radius, and introduced a real `Typography.label`
+      token for the small uppercase field/section label, which 9 of 11
+      screens had silently paired with the *regular*-weight font file
+      instead of the bold one, so it likely never rendered bold at all;
+      see decision-log, 2026-09-11. Spacing itself was checked too — the
+      common `paddingHorizontal` values (16, 20) already agree with each
+      other everywhere, just aren't sourced from a named token, so nothing
+      needed fixing there. Every sub-audit above (color, radius,
+      type-scale, spacing) is now genuinely done
 - [ ] Small-screen audit: verify every screen on a small form factor
       (compact Android width, e.g. an iPhone-SE-class 375px-equivalent)
-      — check for truncation, overflow, tab bar / keyboard collisions
+      — check for truncation, overflow, tab bar / keyboard collisions.
+      **Not started** — no compact-width testing recorded anywhere
 - [ ] List virtualization pass: tune `FlatList` (or migrate hot lists to
       `FlashList`) — `windowSize`, `removeClippedSubviews`,
       `getItemLayout` where row height is knowable — for the feed, chat
-      message lists, notifications feed, and the story-ring row
+      message lists, notifications feed, and the story-ring row.
+      **Not started** — the Room feed and chat thread use plain, untuned
+      `FlatList`; Home's Room list, the notifications feed, and the
+      story-ring row all use a plain `ScrollView` + `.map()`, not even
+      `FlatList`. No `FlashList` dependency installed
 - [ ] Image loading/caching pass: `expo-image` cache policy, placeholders
       (blurhash or solid-color), and right-sized variants for thumbnails
-      vs. full-screen views instead of always loading the full asset
+      vs. full-screen views instead of always loading the full asset.
+      **Not started** — every `<Image>` call site only ever sets
+      `contentFit`; no `cachePolicy`, no placeholders, no thumbnail vs.
+      full-size variants anywhere
 - [ ] Loading / empty / error states audited on every screen, not just
-      the happy path
+      the happy path. **Partial** — real `Skeleton`/`EmptyState`
+      components exist and are wired into 5 screens (Home, Discover,
+      Search, Notifications, Settings); the Room feed, chat list/thread,
+      post detail, story viewer, profile, friends, room settings/
+      subgroups, and the auth screens still use ad hoc
+      `ActivityIndicator`/plain-text states
 - [ ] Animation and transition polish (`react-native-reanimated`) —
-      screen transitions, tab switches, modal/sheet presentations
+      screen transitions, tab switches, modal/sheet presentations.
+      **Barely started** — `app/_layout.tsx` sets the four tab
+      destinations (Home/Discover/Chats/You) to `animation: 'none'` so
+      switching tabs doesn't feel like drilling into a new screen; nothing
+      else has been touched (no modal/sheet polish, no screen-transition
+      work beyond React Navigation's defaults)
 - [ ] Cold start time measured and reduced (font loading sequence, bundle
       size) — measured on the Galaxy A14 itself, not an emulator or a
-      faster dev machine
+      faster dev machine. **Not started** — no measurement recorded
+      anywhere
 - [ ] Memory profiling pass on the Galaxy A14 — confirm no growth/leak
       scrolling a long feed or chat history, given this project's own
       8GB-RAM dev-machine constraints mean the target device can't be
-      assumed to have headroom either
+      assumed to have headroom either. **Not started** — no profiling
+      session recorded anywhere
 - [ ] Touch target and accessibility pass: minimum tap sizes, and
       confirm layouts survive larger system font-scale settings without
-      breaking
+      breaking. **Barely started** — the tab bar itself was deliberately
+      enlarged for tap comfort (`theme.ts`'s own comment: sized up
+      specifically for older/less tech-savvy users); beyond that, only 4
+      `accessibilityLabel`s exist in the whole app and zero
+      `accessibilityRole`/`allowFontScaling`/`maxFontSizeMultiplier` — no
+      systematic tap-size or font-scale audit has happened
 
 **Exit condition:** the app feels smooth (no dropped-frame scrolling on
 feed/chat/notifications, no layout breakage) on the Galaxy A14 specifically,

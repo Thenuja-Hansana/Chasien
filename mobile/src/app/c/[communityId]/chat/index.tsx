@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
-import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -307,11 +307,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingBottom: Spacing[8],
   },
   sectionLabel: {
-    fontFamily: Fonts.body,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
+    ...Typography.label,
     color: colors.neutral[500],
     paddingHorizontal: Spacing[6],
     paddingTop: Spacing[4],
