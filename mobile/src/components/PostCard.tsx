@@ -1,12 +1,14 @@
 import * as Haptics from 'expo-haptics';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import Avatar from '@/components/Avatar';
+import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
 import PostMediaCarousel from '@/components/PostMediaCarousel';
+import PostOptionsMenu from '@/components/PostOptionsMenu';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime, type FeedPost } from '@/lib/posts';
@@ -18,29 +20,40 @@ const MAX_IMAGE_HEIGHT_FRACTION = 0.55;
 /**
  * One post in a Room feed — ported from app_reference/src/screens/Home.jsx.
  *
- * Two controls from the mock are deliberately absent rather than drawn
- * inert: the bookmark/save toggle (nothing in the Phase 1 schema stores a
- * saved post — there's no `bookmarks` table to write to) and the `dotsH`
- * overflow menu (its contents are report/remove, which is Phase 9's
- * trust-and-safety work). Both were local-only state in the mock. Same
- * standard the auth screens were held to in Phase 2: a button that does
- * nothing on tap is worse than no button.
+ * One control from the mock is deliberately absent rather than drawn inert:
+ * the bookmark/save toggle (nothing in the Phase 1 schema stores a saved
+ * post — there's no `bookmarks` table to write to). It was local-only state
+ * in the mock. Same standard the auth screens were held to in Phase 2: a
+ * button that does nothing on tap is worse than no button. The mock's other
+ * absent control, the `dotsH` overflow menu, is no longer absent —
+ * PostOptionsMenu below.
  */
 export default function PostCard({
   post,
+  viewerId,
+  viewerIsRoomOwner,
   onPress,
   onToggleLike,
   onVote,
+  onHide,
+  onDelete,
 }: {
   post: FeedPost;
+  viewerId: string;
+  viewerIsRoomOwner: boolean;
   onPress: () => void;
   onToggleLike: () => void;
   onVote: (optionId: string) => Promise<void>;
+  onHide: () => void;
+  onDelete: () => void;
 }) {
   const isModerator = post.authorRole === 'owner' || post.authorRole === 'mod';
+  const canDelete = post.authorId === viewerId || viewerIsRoomOwner;
   const { open: openUserPreview } = useUserPreview();
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // A quick pop on the heart itself when a like lands, on top of the
   // existing haptic — set directly on press rather than watched via an
@@ -54,26 +67,37 @@ export default function PostCard({
 
   return (
     <View style={styles.container}>
-      <Pressable
-        style={styles.authorRow}
-        disabled={!post.authorId}
-        onPress={() => openUserPreview(post.authorId as string)}
-      >
-        <Avatar gradient={post.authorId ?? 'mara'} letter={post.authorName.charAt(0).toUpperCase() || '?'} size={38} />
-        <View style={styles.authorText}>
-          <View style={styles.authorNameRow}>
-            <Text style={styles.authorName} numberOfLines={1}>
-              {post.authorName}
+      <View style={styles.headerRow}>
+        <Pressable
+          style={styles.authorRow}
+          disabled={!post.authorId}
+          onPress={() => openUserPreview(post.authorId as string)}
+        >
+          <Avatar gradient={post.authorId ?? 'mara'} letter={post.authorName.charAt(0).toUpperCase() || '?'} size={38} />
+          <View style={styles.authorText}>
+            <View style={styles.authorNameRow}>
+              <Text style={styles.authorName} numberOfLines={1}>
+                {post.authorName}
+              </Text>
+              {isModerator && (
+                <Text style={styles.modBadge}>{post.authorRole === 'owner' ? 'OWNER' : 'MOD'}</Text>
+              )}
+            </View>
+            <Text style={styles.time}>
+              @{post.authorHandle} · {relativeTime(post.createdAt)}
             </Text>
-            {isModerator && (
-              <Text style={styles.modBadge}>{post.authorRole === 'owner' ? 'OWNER' : 'MOD'}</Text>
-            )}
           </View>
-          <Text style={styles.time}>
-            @{post.authorHandle} · {relativeTime(post.createdAt)}
-          </Text>
-        </View>
-      </Pressable>
+        </Pressable>
+        <Pressable
+          style={styles.optionsButton}
+          onPress={() => setMenuOpen(true)}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Post options"
+        >
+          <Icon name="dotsH" size={18} color={colors.neutral[500]} />
+        </Pressable>
+      </View>
 
       {post.text ? (
         <Text style={styles.body}>
@@ -127,6 +151,31 @@ export default function PostCard({
           <Text style={styles.actionCount}>{post.commentCount}</Text>
         </Pressable>
       </View>
+
+      <PostOptionsMenu
+        visible={menuOpen}
+        canDelete={canDelete}
+        onClose={() => setMenuOpen(false)}
+        onHide={() => {
+          setMenuOpen(false);
+          onHide();
+        }}
+        onDelete={() => {
+          setMenuOpen(false);
+          setConfirmingDelete(true);
+        }}
+      />
+      <ConfirmModal
+        visible={confirmingDelete}
+        title="Delete this post?"
+        body="Everyone in this Room will lose access to it. This can't be undone."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          onDelete();
+        }}
+      />
     </View>
   );
 }
@@ -138,11 +187,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing[2],
+  },
   authorRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing[2],
-    marginBottom: Spacing[2],
+  },
+  optionsButton: {
+    padding: Spacing[1],
   },
   authorText: {
     flex: 1,

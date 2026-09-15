@@ -7,6 +7,88 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Per-post overflow menu: Hide (everyone) + Delete (owner or author)
+
+**Context:** Every post needed a "⋯" overflow menu (feed card and post-detail
+header) offering Hide (any Room member, personal — removes it from their own
+feed only) and Delete (restricted to the post's own author or the Room's
+owner — explicitly *not* moderators). `PostCard.tsx` already had a comment
+noting the mock's `dotsH` menu was left out as Phase 9 trust-and-safety work
+— but that schema already existed from Phase 1
+(`20260813051229_trust_and_safety.sql`): `moderation_actions` already had a
+`'remove_post'` action type, `is_room_owner()` already existed. Delete uses
+that existing design rather than inventing a parallel one.
+
+**What changed:**
+- New `hidden_posts (user_id, post_id, hidden_at)` table, RLS-scoped to
+  `user_id = auth.uid()` for select/insert/delete — structurally identical to
+  `post_likes`, just private instead of room-visible. No RPC needed, a plain
+  insert is enough (mirrors `setLiked()`'s own shape). One-way for now: no
+  undo toast, no "manage hidden posts" screen, though the table needs no
+  schema change to support one later — unhiding is just deleting the row.
+- New `delete_post(p_post_id, p_reason default null)` RPC, `security
+  definer` (a deliberate contrast to `create_post`'s `security invoker`) —
+  needed because the owner-removes-someone-else's-post case has no matching
+  RLS UPDATE policy (`"authors can edit their own... posts"` is
+  author-only). The function checks `auth.uid() = author_id or
+  is_room_owner(room_id, auth.uid())` itself before soft-deleting, and logs
+  to `moderation_actions` (`action_type = 'remove_post'`, with a small
+  `content_snapshot`) **only when the actor isn't the post's own author** —
+  self-deleting your own post isn't a moderation event any more than editing
+  it is; an owner removing someone else's is exactly what that table was
+  built to audit.
+- `fetchRoomFeed()` now excludes the viewer's hidden posts via a small
+  pre-query + `.not('id', 'in', ids)`, applied before pagination (not
+  filtered out of an already-paged result, which would make a page come
+  back short). `fetchPost()` (direct-link fetch) is untouched — hiding is
+  feed-only personal declutter, not a block; a direct link to a hidden post
+  still opens it.
+- `DiscardConfirmModal` (from today's earlier composer/back-button work)
+  renamed to `ConfirmModal` and generalized (`title`/`body`/`cancelLabel`/
+  `confirmLabel` all caller-supplied) once a third call site — Delete's
+  confirmation — needed the same shape with different copy, rather than
+  copying the same ~50 lines a third time. Its two existing callers
+  (`create-community.tsx`, `create-post.tsx`) were retrofitted onto it in
+  the same change.
+- New `PostOptionsMenu.tsx` — a bottom-sheet `Modal` (no existing popup-menu
+  precedent in this codebase to match; this is also what Instagram/
+  Facebook/WhatsApp's own per-post menus actually look like on mobile),
+  triggered from a new dots button in `PostCard.tsx`'s header row and next
+  to the existing pin button in `post/[postId].tsx`'s header. Tapping
+  Delete only closes the sheet and opens `ConfirmModal` — the menu itself
+  never deletes anything.
+- New `trash` icon added to `Icon.tsx` (Feather-style outline, matching this
+  file's existing porting convention); `eyeOff` (already existed, for the
+  password-visibility toggle) reused for Hide.
+
+**Verified on the real Galaxy A14**, including with direct `supabase db
+query --local` checks against the local Postgres to confirm server-side
+behavior, not just what the UI displayed:
+- Hid a post as its own author: disappeared from the feed immediately, and
+  stayed gone after a full app reload (confirming the exclusion is a real
+  server-side query filter, not just client-side state) — and still opened
+  correctly via a direct `post/[postId]` link.
+- Deleted that same post as its own author: `deleted_at`/`removed_by` set
+  correctly, **zero** `moderation_actions` rows written.
+- Deleted a different member's post as the Room owner (`tobi`'s post in
+  Grit Club, as owner `maraclimbs`): succeeded, navigated back, and a
+  `moderation_actions` row was written with `action_type = 'remove_post'`,
+  the correct `actor_id`, and a `content_snapshot` capturing the removed
+  text.
+- Viewed a different member's post as a plain member (Grit Club owner
+  `maraclimbs` viewing `tobi`'s post in Spiderman Club, where she's only a
+  member): the menu offered only Hide and Cancel — Delete correctly absent.
+
+**Deliberately not done:** an unhide/"manage hidden posts" screen, an undo
+toast after hiding, a reason-collection UI for deletion (the RPC accepts an
+optional reason, unused by this pass' UI — same precedent as `create_post`'s
+own `p_tag: null`), and negative-path testing of the RPC's own permission
+check via a raw unauthenticated/wrong-user call (verified by reading the SQL
+guard directly instead — the client-side menu's own hidden/shown Delete
+option was verified live for all three roles above).
+
+---
+
 ## 2026-09-15 — Post composer rebuilt to real IG/FB quality: multi-image carousel + video
 
 **Context:** `create-post.tsx` was the last screen in the app that still looked

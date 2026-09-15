@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import DiscardConfirmModal from '@/components/DiscardConfirmModal';
+import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -302,12 +302,14 @@ export default function CreatePost() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <DiscardConfirmModal
+      <ConfirmModal
         visible={showDiscardConfirm}
         title="Discard this post?"
         body="Everything you've entered so far will be lost — this can't be undone."
-        onKeepEditing={() => setShowDiscardConfirm(false)}
-        onDiscard={() => router.back()}
+        cancelLabel="Keep Editing"
+        confirmLabel="Discard"
+        onCancel={() => setShowDiscardConfirm(false)}
+        onConfirm={() => router.back()}
       />
     </SafeAreaView>
   );

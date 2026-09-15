@@ -14,11 +14,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import ConfirmModal from '@/components/ConfirmModal';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
 import PostCardSkeleton from '@/components/PostCardSkeleton';
 import PostMediaCarousel from '@/components/PostMediaCarousel';
+import PostOptionsMenu from '@/components/PostOptionsMenu';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -27,8 +29,10 @@ import { togglePostPin } from '@/lib/notifications';
 import { useUserPreview } from '@/lib/user-preview-context';
 import {
   addComment,
+  deletePost,
   fetchComments,
   fetchPost,
+  hidePost,
   relativeTime,
   setLiked,
   votePoll,
@@ -56,7 +60,10 @@ export default function PostDetail() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isModerator, setIsModerator] = useState(false);
+  const [isRoomOwner, setIsRoomOwner] = useState(false);
   const [pinning, setPinning] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const userId = session?.user.id;
 
@@ -68,10 +75,9 @@ export default function PostDetail() {
       setComments(freshComments);
       if (fresh) {
         const membership = await fetchMyMembership(fresh.roomId, userId);
-        setIsModerator(
-          membership?.join_state === 'approved' &&
-            (membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'),
-        );
+        const approved = membership?.join_state === 'approved';
+        setIsModerator(approved && (membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'));
+        setIsRoomOwner(approved && membership.role === 'owner');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load this post.');
@@ -123,6 +129,29 @@ export default function PostDetail() {
       setError(e instanceof Error ? e.message : 'Could not update the pin.');
     } finally {
       setPinning(false);
+    }
+  }
+
+  // Hiding or deleting the post the viewer is currently looking at leaves
+  // nothing to keep showing them, so both navigate back on success rather
+  // than trying to render an empty/removed state on this same screen.
+  async function handleHide() {
+    if (post === 'loading' || !post || !userId) return;
+    try {
+      await hidePost(post.id, userId);
+      router.back();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not hide that post.');
+    }
+  }
+
+  async function handleDelete() {
+    if (post === 'loading' || !post) return;
+    try {
+      await deletePost(post.id);
+      router.back();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete that post.');
     }
   }
 
@@ -192,24 +221,32 @@ export default function PostDetail() {
               {communityId}
             </Text>
           </View>
-          {isModerator ? (
+          <View style={styles.headerActions}>
+            {isModerator && (
+              <Pressable
+                onPress={handleTogglePin}
+                hitSlop={12}
+                disabled={pinning}
+                accessibilityRole="button"
+                accessibilityLabel={post.pinned ? 'Unpin post' : 'Pin post'}
+                accessibilityState={{ selected: post.pinned }}
+              >
+                {pinning ? (
+                  <ActivityIndicator size="small" color={colors.accent.DEFAULT} />
+                ) : (
+                  <Icon name="pin" size={20} filled={post.pinned} color={post.pinned ? colors.accent.DEFAULT : colors.text} />
+                )}
+              </Pressable>
+            )}
             <Pressable
-              onPress={handleTogglePin}
+              onPress={() => setMenuOpen(true)}
               hitSlop={12}
-              disabled={pinning}
               accessibilityRole="button"
-              accessibilityLabel={post.pinned ? 'Unpin post' : 'Pin post'}
-              accessibilityState={{ selected: post.pinned }}
+              accessibilityLabel="Post options"
             >
-              {pinning ? (
-                <ActivityIndicator size="small" color={colors.accent.DEFAULT} />
-              ) : (
-                <Icon name="pin" size={20} filled={post.pinned} color={post.pinned ? colors.accent.DEFAULT : colors.text} />
-              )}
+              <Icon name="dotsH" size={20} color={colors.text} />
             </Pressable>
-          ) : (
-            <View style={{ width: 22 }} />
-          )}
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -332,6 +369,31 @@ export default function PostDetail() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <PostOptionsMenu
+        visible={menuOpen}
+        canDelete={post.authorId === userId || isRoomOwner}
+        onClose={() => setMenuOpen(false)}
+        onHide={() => {
+          setMenuOpen(false);
+          handleHide();
+        }}
+        onDelete={() => {
+          setMenuOpen(false);
+          setConfirmingDelete(true);
+        }}
+      />
+      <ConfirmModal
+        visible={confirmingDelete}
+        title="Delete this post?"
+        body="Everyone in this Room will lose access to it. This can't be undone."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          handleDelete();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -413,6 +475,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   headerText: {
     flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[4],
   },
   headerTitle: {
     fontFamily: Fonts.bodyBold,

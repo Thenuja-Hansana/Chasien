@@ -183,15 +183,27 @@ export const FEED_PAGE_SIZE = 20;
 export async function fetchRoomFeed(roomId: string, userId: string, page = 0) {
   const from = page * FEED_PAGE_SIZE;
 
+  // Hidden posts are excluded before pagination (not filtered out of an
+  // already-paged result afterward), so a page never comes back short just
+  // because some of what it fetched happened to be hidden. A separate
+  // query, not a join, for the same reason likes/votes are separate in
+  // hydratePosts() below — this is a small, rarely-populated table, so an
+  // extra round trip is cheaper than complicating the main feed query.
+  const hiddenRes = await supabase.from('hidden_posts').select('post_id').eq('user_id', userId);
+  const hiddenIds = (hiddenRes.data ?? []).map((r) => r.post_id as string);
+
+  let postsQuery = supabase
+    .from('posts')
+    .select(POST_SELECT)
+    .eq('room_id', roomId)
+    .is('deleted_at', null)
+    .is(LIVE_COMMENTS_ONLY, null);
+  if (hiddenIds.length > 0) {
+    postsQuery = postsQuery.not('id', 'in', `(${hiddenIds.join(',')})`);
+  }
+
   const [postsRes, membersRes] = await Promise.all([
-    supabase
-      .from('posts')
-      .select(POST_SELECT)
-      .eq('room_id', roomId)
-      .is('deleted_at', null)
-      .is(LIVE_COMMENTS_ONLY, null)
-      .order('created_at', { ascending: false })
-      .range(from, from + FEED_PAGE_SIZE - 1),
+    postsQuery.order('created_at', { ascending: false }).range(from, from + FEED_PAGE_SIZE - 1),
     // Powers the OWNER/MOD badge. Every approved member can read the
     // other approved members of a Room they're in (see
     // 20260814073649_members_can_see_each_other.sql) — before that
@@ -284,6 +296,23 @@ export async function setLiked(postId: string, userId: string, liked: boolean) {
     const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', userId);
     if (error) throw error;
   }
+}
+
+/** Personal, one-way for now — see hidden_posts' own migration comment for why there's no unhide() yet. */
+export async function hidePost(postId: string, userId: string): Promise<void> {
+  const { error } = await supabase.from('hidden_posts').insert({ post_id: postId, user_id: userId });
+  if (error) throw error;
+}
+
+/**
+ * Soft-deletes a post — restricted, server-side, to its own author or the
+ * Room's owner (not moderators). See supabase/migrations/
+ * 20260915140100_delete_post_rpc.sql for why this has to be an RPC rather
+ * than a plain client update.
+ */
+export async function deletePost(postId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_post', { p_post_id: postId });
+  if (error) throw error;
 }
 
 export async function addComment(postId: string, userId: string, text: string, parentCommentId: string | null = null) {

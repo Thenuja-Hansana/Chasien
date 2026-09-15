@@ -19,7 +19,7 @@ import { useAuth } from '@/lib/auth-context';
 import { fetchRoomUnreadCounts, markAllNotificationsRead, subscribeToNotifications } from '@/lib/notifications';
 import { getCachedJoinedRoom } from '@/lib/room-cache';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
-import { FEED_PAGE_SIZE, fetchPost, fetchRoomFeed, setLiked, votePoll, type FeedPost } from '@/lib/posts';
+import { FEED_PAGE_SIZE, deletePost, fetchPost, fetchRoomFeed, hidePost, setLiked, votePoll, type FeedPost } from '@/lib/posts';
 import { fetchActiveStories, type Story } from '@/lib/stories';
 
 type LoadState = { room: Room | null; membership: Membership | null } | 'loading';
@@ -214,6 +214,30 @@ export default function RoomHome() {
       if (fresh) setPosts((prev) => prev?.map((p) => (p.id === post.id ? fresh : p)) ?? prev);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not record that vote.');
+    }
+  }
+
+  // Not optimistic, unlike the like/vote handlers above — a menu action
+  // already has a tap-through-confirm's worth of latency ahead of it, so
+  // waiting for the real result (rather than removing the card immediately
+  // and having to re-insert it at the right sorted position on failure) is
+  // simpler and the delay is imperceptible.
+  async function handleHidePost(post: FeedPost) {
+    if (!userId) return;
+    try {
+      await hidePost(post.id, userId);
+      setPosts((prev) => prev?.filter((p) => p.id !== post.id) ?? prev);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not hide that post.');
+    }
+  }
+
+  async function handleDeletePost(post: FeedPost) {
+    try {
+      await deletePost(post.id);
+      setPosts((prev) => prev?.filter((p) => p.id !== post.id) ?? prev);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete that post.');
     }
   }
 
@@ -445,6 +469,8 @@ export default function RoomHome() {
           renderItem={({ item }) => (
             <PostCard
               post={item}
+              viewerId={session.user.id}
+              viewerIsRoomOwner={membership.role === 'owner'}
               onPress={() =>
                 router.push({
                   pathname: '/c/[communityId]/post/[postId]',
@@ -453,6 +479,8 @@ export default function RoomHome() {
               }
               onToggleLike={() => handleToggleLike(item)}
               onVote={(optionId) => handleVote(item, optionId)}
+              onHide={() => handleHidePost(item)}
+              onDelete={() => handleDeletePost(item)}
             />
           )}
         />

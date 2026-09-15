@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import DiscardConfirmModal from '@/components/DiscardConfirmModal';
+import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
@@ -409,12 +409,14 @@ export default function CreateCommunity() {
         </Pressable>
       </View>
 
-      <DiscardConfirmModal
+      <ConfirmModal
         visible={showDiscardConfirm}
         title="Discard this Room?"
         body="Everything you've entered so far will be lost — this can't be undone."
-        onKeepEditing={() => setShowDiscardConfirm(false)}
-        onDiscard={() => router.back()}
+        cancelLabel="Keep Editing"
+        confirmLabel="Discard"
+        onCancel={() => setShowDiscardConfirm(false)}
+        onConfirm={() => router.back()}
       />
     </SafeAreaView>
   );

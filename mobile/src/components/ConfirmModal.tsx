@@ -4,41 +4,46 @@ import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
- * The "you're about to lose what you typed" confirmation shown when a
- * composer-style screen is closed (Cancel, X, or the hardware back
- * button/gesture) with unsaved content — first built for create-community,
- * now shared with create-post so every screen with this shape looks and
- * behaves identically rather than re-implementing the same ~50 lines.
+ * A generic "confirm before doing something you can't easily undo" dialog —
+ * first built for create-community's discard-confirmation, then reused by
+ * create-post's, and now by post deletion too. Generalized (title/body/
+ * button labels all caller-supplied, rather than hardcoded "Discard"/"Keep
+ * Editing") once a third call site needed the same shape with different
+ * copy, rather than copying the same ~50 lines a third time.
  */
-export default function DiscardConfirmModal({
+export default function ConfirmModal({
   visible,
   title,
   body,
-  onKeepEditing,
-  onDiscard,
+  cancelLabel = 'Cancel',
+  confirmLabel,
+  onCancel,
+  onConfirm,
 }: {
   visible: boolean;
   title: string;
   body: string;
-  onKeepEditing: () => void;
-  onDiscard: () => void;
+  cancelLabel?: string;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
 }) {
   const colors = useTheme();
   const styles = makeStyles(colors);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onKeepEditing}>
-      <Pressable style={styles.backdrop} onPress={onKeepEditing}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <Pressable style={styles.backdrop} onPress={onCancel}>
         {/* Swallows the backdrop's onPress so tapping inside the card doesn't close it. */}
         <Pressable style={styles.card} onPress={() => {}}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.body}>{body}</Text>
           <View style={styles.actions}>
-            <Pressable style={styles.cancelButton} onPress={onKeepEditing}>
-              <Text style={styles.cancelText}>Keep Editing</Text>
+            <Pressable style={styles.cancelButton} onPress={onCancel}>
+              <Text style={styles.cancelText}>{cancelLabel}</Text>
             </Pressable>
-            <Pressable style={styles.discardButton} onPress={onDiscard}>
-              <Text style={styles.discardText}>Discard</Text>
+            <Pressable style={styles.confirmButton} onPress={onConfirm}>
+              <Text style={styles.confirmText}>{confirmLabel}</Text>
             </Pressable>
           </View>
         </Pressable>
@@ -98,7 +103,7 @@ const makeStyles = (colors: ThemeColors) =>
     // `colors.error` — the one deliberate departure from the app's
     // otherwise monochrome palette, reserved for exactly this (errors and
     // destructive actions), since this one's irreversible.
-    discardButton: {
+    confirmButton: {
       flex: 1,
       height: 48,
       borderRadius: Radius.pill,
@@ -106,7 +111,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    discardText: {
+    confirmText: {
       fontFamily: Fonts.body,
       fontSize: 14,
       fontWeight: '700',
