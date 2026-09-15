@@ -7,6 +7,56 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Hardware back button: fixed the one screen where it caused silent data loss
+
+**Decision:** Before starting Phase 9, checked whether Android's hardware
+back button/gesture (never handled anywhere in this codebase — confirmed
+via exhaustive grep that `BackHandler` had zero usages) was a real gap or
+just an unaddressed nice-to-have. Found one genuine bug and fixed it;
+deliberately left three related things alone as separate, not-yet-agreed
+scope.
+
+**The bug:** `create-community.tsx` has a "Discard this Room?" confirmation
+modal, but it was only wired to the on-screen X button's `onPress`. A user
+filling out a new Room who backed out with the phone's back gesture instead
+of tapping X lost everything they'd typed with zero warning, since
+`expo-router`'s native-stack handles the hardware back event on its own by
+default and never went through `handleClose`. This is the only screen in
+the app where hardware-back behavior actually diverges from on-screen-button
+behavior in a way that causes harm — the other "cancel" screens have no
+confirmation logic at all, on-screen or hardware, so they're internally
+consistent even unfixed.
+
+**Fix:** Converted `handleClose` to a `useCallback`, and registered a
+`BackHandler.addEventListener('hardwareBackPress', ...)` listener via
+`useFocusEffect` that calls `handleClose` and returns `true` (taking over
+from native-stack's default dismiss). `npm run typecheck` and `npm run
+lint` both clean.
+
+**Verified on the real Galaxy A14** via `adb` (typed "TestRoom" into the
+Name field, then drove the back button/on-screen X/modal buttons directly):
+first hardware back press only dismisses the keyboard (standard Android
+behavior, not app-level), second press now correctly shows "Discard this
+Room?" with the typed data still visible underneath; "Keep Editing"
+correctly returns to the form with "TestRoom" intact; "Discard" (tried via
+both the on-screen X and the hardware-back path) correctly returns to Home
+with no Room created. Both entry points now share the same guard.
+
+**Deliberately not done (separate scope, not agreed to here):**
+- The other 4 screens with a cancel/close action have no discard-confirmation
+  logic at all, on screen or hardware — making hardware-back "consistent"
+  with them would mean adding new confirmation UX to screens that don't have
+  one today, not just wiring up an existing handler.
+- No double-back-to-exit pattern was added to root tab screens (Home,
+  Discover, Chats, You) — Android's own recents/app-switcher already covers
+  leaving the app; adding this would be a UX addition, not a bug fix.
+- `predictiveBackGestureEnabled: false` in `app.json` was left as-is — it
+  has no documented rationale in this repo, but changing it is an Android
+  15 predictive-back visual/behavior decision, not related to this data-loss
+  fix.
+
+---
+
 ## 2026-09-15 — Bones Phase closes out: cold start, memory, and font-scale, all on the real Galaxy A14
 
 **What happened:** the phone was already connected via `adb` (Supabase,

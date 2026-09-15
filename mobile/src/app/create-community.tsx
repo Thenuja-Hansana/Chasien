@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
@@ -67,13 +67,29 @@ export default function CreateCommunity() {
     !!avatarImage ||
     !!bannerImage;
 
-  function handleClose() {
+  const handleClose = useCallback(() => {
     if (hasChanges) {
       setShowDiscardConfirm(true);
     } else {
       router.back();
     }
-  }
+  }, [hasChanges]);
+
+  // The on-screen X only ever went through handleClose — the Android
+  // hardware back button and edge-swipe gesture are a separate system
+  // event native-stack handles on its own by default, so without this a
+  // back-gesture here silently discarded everything typed with no
+  // confirmation at all. Returning true tells Android this screen
+  // handled the press itself, taking over from the default dismiss.
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleClose();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [handleClose]),
+  );
 
   // Public needs no further choice, so picking it sets the real
   // visibility directly. Private isn't itself a RoomVisibility value —
