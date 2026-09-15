@@ -108,7 +108,7 @@ export default function Discover() {
   return (
     <View style={styles.container}>
       <BlurTargetView ref={blurTargetRef} style={styles.flex}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: clearance }]}>
+      <ScrollView>
         {/* No top-edge SafeAreaView on the screen itself — that padded
             the status-bar area with the screen's own (white, in Light
             mode) background before this banner ever got a chance to
@@ -116,81 +116,91 @@ export default function Discover() {
             the banner running edge-to-edge behind the status bar the way
             a full-bleed colored header should. The inset goes into the
             banner's own paddingTop instead, so the color reaches y: 0 and
-            only the heading/subtext are pushed clear of the notch. */}
+            only the heading/subtext are pushed clear of the notch.
+            `container`'s own background is the same accent color, not
+            `colors.bg` — belt and braces against whatever was actually
+            leaving a real device's status-bar row showing the screen's
+            base color instead of this banner's, moving that padding
+            alone didn't fully fix. With the base color already right,
+            any residual native-inset rounding shows accent, not white,
+            and `body` below explicitly owns the white the rest of the
+            screen needs instead of inheriting it from `container`. */}
         <View style={[styles.banner, { paddingTop: insets.top + Spacing[8] }]}>
           <Text style={styles.bannerHeading}>FIND YOUR{'\n'}ROOM</Text>
           <Text style={styles.bannerSubtext}>From climbing crews to sourdough starters — there&apos;s a Room for you.</Text>
         </View>
 
-        <View style={styles.filterRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-            {FILTERS.map((f) => {
-              const active = filter === f.key;
-              return (
-                <Pressable
-                  key={f.key}
-                  onPress={() => setFilter(f.key)}
-                  style={[styles.filterChip, active && styles.filterChipActive]}
-                >
-                  <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{f.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Pressable style={styles.searchButton} onPress={() => router.push('/search')} hitSlop={10}>
-            <Icon name="search" size={20} color={colors.text} />
-          </Pressable>
-        </View>
-
-        {error && <Text style={styles.error}>{error}</Text>}
-
-        {rooms === null ? (
-          <View style={styles.listWrap}>
-            <Skeleton width={120} height={17} radius={6} />
-            <View style={[styles.list, { marginTop: Spacing[4] }]}>
-              {[0, 1].map((i) => (
-                <View key={i} style={styles.card}>
-                  <Skeleton width="100%" height={96} radius={0} />
-                  <View style={styles.cardBody}>
-                    <View style={[styles.cardTopRow, { alignItems: 'center' }]}>
-                      <Skeleton width={64} height={64} radius={999} />
-                    </View>
-                    <Skeleton width={150} height={16} radius={6} />
-                    <View style={{ height: 6 }} />
-                    <Skeleton width="80%" height={12} radius={5} />
-                  </View>
-                </View>
-              ))}
-            </View>
+        <View style={[styles.body, { paddingBottom: clearance }]}>
+          <View style={styles.filterRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+              {FILTERS.map((f) => {
+                const active = filter === f.key;
+                return (
+                  <Pressable
+                    key={f.key}
+                    onPress={() => setFilter(f.key)}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                  >
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{f.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Pressable style={styles.searchButton} onPress={() => router.push('/search')} hitSlop={10}>
+              <Icon name="search" size={20} color={colors.text} />
+            </Pressable>
           </View>
-        ) : (
-          <View style={styles.listWrap}>
-            <Text style={styles.sectionLabel}>{filter === 'all' ? 'Featured Rooms' : filter}</Text>
 
-            {rooms.length === 0 ? (
-              <EmptyState
-                icon="globe"
-                heading="No Rooms yet"
-                message="Public Rooms will show up here once there are some to join."
-              />
-            ) : filteredRooms && filteredRooms.length === 0 ? (
-              <EmptyState icon="globe" message={`No Rooms in ${filter} yet — try another category.`} />
-            ) : (
-              <View style={styles.list}>
-                {filteredRooms?.map((room) => (
-                  <RoomCard
-                    key={room.id}
-                    room={room}
-                    membership={memberships.get(room.id)}
-                    joining={joiningId === room.id}
-                    onJoin={() => handleJoin(room)}
-                    mediaUrls={mediaUrls}
-                  />
+          {error && <Text style={styles.error}>{error}</Text>}
+
+          {rooms === null ? (
+            <View style={styles.listWrap}>
+              <Skeleton width={120} height={17} radius={6} />
+              <View style={[styles.list, { marginTop: Spacing[4] }]}>
+                {[0, 1].map((i) => (
+                  <View key={i} style={styles.card}>
+                    <Skeleton width="100%" height={96} radius={0} />
+                    <View style={styles.cardBody}>
+                      <View style={[styles.cardTopRow, { alignItems: 'center' }]}>
+                        <Skeleton width={64} height={64} radius={999} />
+                      </View>
+                      <Skeleton width={150} height={16} radius={6} />
+                      <View style={{ height: 6 }} />
+                      <Skeleton width="80%" height={12} radius={5} />
+                    </View>
+                  </View>
                 ))}
               </View>
-            )}
-          </View>
-        )}
+            </View>
+          ) : (
+            <View style={styles.listWrap}>
+              <Text style={styles.sectionLabel}>{filter === 'all' ? 'Featured Rooms' : filter}</Text>
+
+              {rooms.length === 0 ? (
+                <EmptyState
+                  icon="globe"
+                  heading="No Rooms yet"
+                  message="Public Rooms will show up here once there are some to join."
+                />
+              ) : filteredRooms && filteredRooms.length === 0 ? (
+                <EmptyState icon="globe" message={`No Rooms in ${filter} yet — try another category.`} />
+              ) : (
+                <View style={styles.list}>
+                  {filteredRooms?.map((room) => (
+                    <RoomCard
+                      key={room.id}
+                      room={room}
+                      membership={memberships.get(room.id)}
+                      joining={joiningId === room.id}
+                      onJoin={() => handleJoin(room)}
+                      mediaUrls={mediaUrls}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+        </View>
       </ScrollView>
       </BlurTargetView>
 
@@ -333,12 +343,18 @@ function RoomCard({
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  // The banner's own color, not colors.bg — see the comment above the
+  // banner's own JSX for why. The white the rest of the screen needs
+  // lives on `body` instead.
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.accent.DEFAULT,
   },
   flex: {
     flex: 1,
+  },
+  body: {
+    backgroundColor: colors.bg,
   },
   filterRow: {
     flexDirection: 'row',
@@ -384,9 +400,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
-  },
-  scrollContent: {
-    paddingBottom: Spacing[8],
   },
   banner: {
     backgroundColor: colors.accent.DEFAULT,

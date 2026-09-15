@@ -7,6 +7,68 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Discover white strip, round two: the first fix wasn't enough
+
+**What happened:** the user confirmed on a real device (screenshot,
+after a genuine reload — checked explicitly, not assumed) that the white
+strip above "FIND YOUR ROOM" was still there after the fix below. The
+heading itself *did* look correctly pushed down within the black banner
+(consistent with the `paddingTop: insets.top + Spacing[8]` part of that
+fix working), but a separate white gap still sat above the black region
+entirely — meaning something was still showing the screen's base
+background in the status-bar row, independent of whether the banner's
+own content was correctly inset.
+
+**Investigated and ruled out:** `expo-status-bar` was never imported
+anywhere in this app, so a stray opaque status-bar background was worth
+checking — but the current SDK's `StatusBar` component doesn't even
+expose `backgroundColor`/`translucent` props any more (confirmed against
+the versioned docs, not assumed from older API memory), which is itself
+evidence that Android edge-to-edge status-bar transparency isn't
+something this app could have misconfigured either way — it's not
+configurable, so it wasn't the cause. No `SafeAreaProvider` exists
+anywhere in the app's own source either, but `useTabBarClearance()` (the
+same `useSafeAreaInsets()` hook, used everywhere for bottom clearance)
+demonstrably returns correct real values throughout the app — expo-
+router supplies one internally — so that wasn't it either.
+
+**The actual fix:** stopped trying to pin down the exact native
+mechanism and made the fallback impossible to get wrong instead —
+`container`'s own background changed from `colors.bg` (white) to
+`colors.accent.DEFAULT` (the same black/near-black the banner already
+uses), and everything visually *below* the banner (the filter row, the
+Room list, loading/empty states) moved into a new explicitly-white `body`
+wrapper instead of inheriting white from `container`. Whatever was
+leaving a sliver of `container`'s own color visible above the banner —
+call it a `react-native-screens` native-stack default background, a
+sub-pixel inset rounding difference, or something else not fully pinned
+down — now shows the *correct* color there either way, because the
+screen's own base color is the right one for that region. Also moved
+`paddingBottom: clearance` off the `ScrollView`'s `contentContainerStyle`
+and onto `body` itself, and deleted the now-otherwise-empty
+`scrollContent` style — the bottom tab-bar-clearance gap was about to
+have the same bug in reverse (black showing through at the *bottom*
+where white is wanted) if that padding had stayed outside `body`'s own
+white background.
+
+**Verified:** typecheck and lint clean. Re-screenshotted on Expo web at
+both the top (banner still renders correctly) and scrolled to the very
+bottom (confirmed still white all the way to the tab bar, not bled black
+from `container`'s new color) — the latter check exists specifically
+because this fix could easily have introduced that exact regression.
+Same caveat as before: web can't reproduce the actual status-bar-row
+symptom (no notch, `insets.top` is `0`), so this still needs a look on
+the Galaxy A14 to confirm it's actually gone this time, not just
+theoretically more robust.
+
+**Revisit when:** if this still doesn't fully resolve it on-device, the
+next step is pinning down the exact native mechanism rather than
+guessing again — e.g. checking `react-native-screens`' own
+`nativeBackgroundColor`/`contentStyle` defaults directly, since that's
+the most likely remaining suspect this pass didn't get to conclusively.
+
+---
+
 ## 2026-09-15 — Fix a white strip above Discover's "Find your Room" banner
 
 **What happened:** the user reported a bare white strip above the black
