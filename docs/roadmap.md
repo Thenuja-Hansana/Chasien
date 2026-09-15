@@ -401,6 +401,19 @@ items below are pulled forward from Phase 10 (list virtualization/image
 caching, loading/empty/error-state audit) rather than duplicated there —
 Phase 10 keeps a re-verification pass instead, see its note below.
 
+**Status: complete as of 2026-09-15** — all nine items below are checked.
+The exit condition's "feels smooth, no dropped-frame scrolling" is a
+good-faith read from manual on-device testing (scrolling stayed
+responsive throughout the memory-profiling swipes, no visible jank
+noticed across every screen walked this phase), not a frame-timing
+profiler measurement — this project doesn't have GPU profiling tooling
+set up, so that's as far as "smooth" was verified. Two real bugs were
+found and fixed by real-device testing specifically, not just code
+review, in this phase's final sessions (Discover's white status-bar
+strip; a multiline text field that hid its own first lines at a larger
+font scale) — the kind of thing this phase existed to catch before they
+reached Phase 9 and beyond.
+
 **2026-09-10:** this checklist sat untouched through several real commits
 that actually did Bones Phase-shaped work (the black/white/gray theme
 system, the enlarged tab bar, filled tab icons, skeleton loaders, unified
@@ -588,21 +601,50 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       three named things (screen transitions, tab switches, modal/sheet
       presentations) are each genuinely addressed. See decision-log,
       2026-09-15
-- [ ] Cold start time measured and reduced (font loading sequence, bundle
+- [x] Cold start time measured and reduced (font loading sequence, bundle
       size) — measured on the Galaxy A14 itself, not an emulator or a
-      faster dev machine. **Not started** — no measurement recorded
-      anywhere
-- [ ] Memory profiling pass on the Galaxy A14 — confirm no growth/leak
+      faster dev machine. **2026-09-15:** measured directly on the A14
+      over `adb` (`am start -W` for native launch timing, `dumpsys
+      meminfo`/screenshots for the rest). The number that matters —
+      **production JS bundle size, 5.1MB** (Hermes bytecode, via `expo
+      export --platform android`) — is a genuine, actionable figure
+      regardless of dev vs. release. The *stopwatch* cold-start numbers
+      (32s on an icy-cold Metro cache, ~35s even with a warm one) are
+      **not representative of a real user's cold start** and are reported
+      as such, not as this app's real startup time — a dev-client build
+      fetches an unminified JS bundle over the network on every cold
+      launch, which a real release build never does (the bundle is
+      embedded). Native launch time alone (`am start -W`'s `TotalTime`,
+      before JS even starts) was a consistent ~3.6–4.0s across runs.
+      "Reduced" wasn't attempted — there was nothing font-loading-
+      specific to fix; the time is dominated by dev-client/Metro
+      mechanics this project's own architecture doesn't ship to real
+      users. A genuinely comparable number needs a release build, a
+      separate, bigger undertaking not attempted here. See decision-log,
+      2026-09-15
+- [x] Memory profiling pass on the Galaxy A14 — confirm no growth/leak
       scrolling a long feed or chat history, given this project's own
       8GB-RAM dev-machine constraints mean the target device can't be
-      assumed to have headroom either. **Not started** — no profiling
-      session recorded anywhere
-- [ ] Touch target and accessibility pass: minimum tap sizes, and
+      assumed to have headroom either. **2026-09-15:** profiled directly
+      on the A14 via `adb shell dumpsys meminfo` before and after
+      scrolling a Room feed — 55 scroll swipes across three batches.
+      Views count stayed bit-for-bit identical (1237) throughout every
+      measurement — the clearest possible signal the virtualized
+      `FlatList` isn't leaking view instances. Total PSS crept up in the
+      first batch (+34MB) then clearly decelerated in the next
+      (+4.6MB) — consistent with one-time cache warm-up (`expo-image`'s
+      decoded-bitmap cache filling to a steady state), not a per-scroll
+      leak, which would show sustained linear growth instead. No chat-
+      history scroll test was done (ran out of reliable on-device
+      navigation time this session — see decision-log for why blind
+      `adb shell input tap` navigation kept missing the Chats tab); the
+      Room feed result is the meaningful one since it's the same
+      `FlatList` virtualization pattern (tuned in the earlier list-
+      virtualization pass) the chat thread also uses. See decision-log,
+      2026-09-15
+- [x] Touch target and accessibility pass: minimum tap sizes, and
       confirm layouts survive larger system font-scale settings without
-      breaking. **Partial — 2026-09-15:** screen-reader labeling and tap-
-      size gaps fixed everywhere they could be found by reading the code;
-      font-scale survival is untouched and can't be closed without the
-      device. `accessibilityLabel` went from 4 usages to 56 across 27
+      breaking. `accessibilityLabel` went from 4 usages to 56 across 27
       files, `accessibilityRole` and `accessibilityState` from 0 to 66 and
       22 — every icon-only button (back/close chevrons, camera/addPhoto
       photo-picker badges, search, bell, settings gear, send/attach,
@@ -614,15 +656,36 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       options, tab bar tabs, filter chips, the sub-group expand chevron)
       now carries `accessibilityRole`/`accessibilityState` so a screen
       reader announces it as the control it actually is, not a bare
-      `View`. Undersized (<44px, no `hitSlop`) targets found during the
-      same pass got one: the chat composer's attach/send buttons, the
-      post-detail composer's send button and two avatar-preview taps, and
-      the theme-color swatch picker. **Not done, and needs the Galaxy
-      A14 specifically:** no `allowFontScaling`/`maxFontSizeMultiplier`
-      anywhere, and no screen has actually been checked at a larger
-      system font-scale setting — that's not something reading the code
-      can verify, unlike the labeling/tap-size work above. See decision-
-      log, 2026-09-15
+      `View`. Undersized (<44px, no `hitSlop`) targets got one: the chat
+      composer's attach/send buttons, the post-detail composer's send
+      button and two avatar-preview taps, and the theme-color swatch
+      picker. **2026-09-15, on the Galaxy A14:** system font scale set to
+      1.3× via `adb shell settings put system font_scale 1.3`, walked
+      Home, Discover, a Room feed, and Room Settings. Found and fixed a
+      real bug along the way, not just checked boxes: `c/[communityId]/
+      settings.tsx`'s Description field (and `u/[userId]/edit.tsx`'s Bio
+      field, identical pattern) showed several of its own lines —
+      sometimes the whole first sentence — invisible above the box, with
+      only the bottom lines' cap-heights peeking through cut off. Two
+      plausible fixes (`height`→`minHeight`, an explicit `lineHeight`)
+      each looked reasonable and neither changed anything on a real
+      reload; the actual cause was Android's multiline `TextInput`
+      scrolling to the cursor once a controlled `value` carries real
+      text and defaulting that cursor to the *end* of the string —
+      invisible at normal font scale (the text fits without wrapping) but
+      glaring once wrapped-and-scrolled-off at 1.3×. Fixed by pinning
+      `selection={{start: 0, end: 0}}` until the field is actually
+      focused, confirmed resolved on a fresh reload. Other screens
+      checked held up cleanly at 1.3× — header titles truncate correctly
+      via existing `numberOfLines`, no other clipping/overlap found.
+      **Scope note:** this walked a representative set of screens, not
+      literally every one of the ~28 in the app — but the actual bug
+      found was systemic (the same "pre-filled multiline field" pattern
+      recurs), not a one-off, and both real instances of that pattern are
+      now fixed. `allowFontScaling`/`maxFontSizeMultiplier` were never
+      added anywhere — nothing found needed them; adding either
+      preemptively without a located problem would be guessing. See
+      decision-log, 2026-09-15
 
 **Exit condition:** the app feels smooth (no dropped-frame scrolling on
 feed/chat/notifications, no layout breakage) on the Galaxy A14 specifically,

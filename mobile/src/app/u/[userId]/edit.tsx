@@ -30,6 +30,13 @@ export default function EditProfile() {
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
+  // Android's multiline TextInput scrolls to the cursor once its
+  // controlled `value` carries real text, defaulting that cursor to the
+  // *end* of the string — a real bug found and fixed on-device
+  // (c/[communityId]/settings.tsx's identical Description field, see
+  // its own comment), reproduced here since `bio` follows the exact same
+  // "starts empty, gets set once profile data loads" pattern.
+  const [bioSelection, setBioSelection] = useState<{ start: number; end: number } | undefined>({ start: 0, end: 0 });
   const [avatarImage, setAvatarImage] = useState<PickedImage | null>(null);
   const [bannerImage, setBannerImage] = useState<PickedImage | null>(null);
   const [existingAvatarUrl, setExistingAvatarUrl] = useState<string | null>(null);
@@ -183,11 +190,16 @@ export default function EditProfile() {
               style={[styles.input, styles.textarea, bioFocus.focused && styles.inputFocused]}
               value={bio}
               onChangeText={setBio}
-              onFocus={bioFocus.onFocus}
+              selection={bioSelection}
+              onFocus={() => {
+                bioFocus.onFocus();
+                setBioSelection(undefined);
+              }}
               onBlur={bioFocus.onBlur}
               placeholder="Tell people a bit about yourself"
               placeholderTextColor={colors.neutral[500]}
               multiline
+              scrollEnabled={false}
             />
 
             {error && <Text style={styles.error}>{error}</Text>}
@@ -343,6 +355,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.divider,
     paddingHorizontal: 20,
     fontSize: 16,
+    // Without this, Android clips the multiline textarea's first line's
+    // ascenders at a larger system font-scale setting — see settings.tsx's
+    // identical fix for the full explanation. Found on-device, 2026-09-15.
+    lineHeight: 23,
     color: colors.text,
     fontFamily: Fonts.body,
     marginBottom: Spacing[6],
@@ -352,7 +368,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1.5,
   },
   textarea: {
-    height: 96,
+    // minHeight, not height — see settings.tsx's identical fix, found
+    // on-device at a larger system font-scale setting.
+    minHeight: 96,
     borderRadius: Radius.md,
     paddingTop: 14,
     textAlignVertical: 'top',

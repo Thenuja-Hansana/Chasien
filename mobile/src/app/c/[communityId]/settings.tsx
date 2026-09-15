@@ -55,6 +55,20 @@ export default function CommunitySettings() {
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [description, setDescription] = useState('');
   const descriptionFocus = useFocusHighlight();
+  // Android's multiline TextInput scrolls to show the cursor once its
+  // controlled `value` carries real text, and defaults that cursor to
+  // the *end* of the string rather than the start — found on-device at
+  // a larger system font-scale setting (the field's first several lines
+  // were invisible, scrolled above the visible box), but the same
+  // scrolled-to-end position exists at any font scale, just less
+  // noticeable when the whole description fits without wrapping.
+  // Forcing selection to {0,0} until the field is actually focused pins
+  // the initial render to the top; once focused, `selection` goes back
+  // to undefined so typing isn't fighting a pinned cursor.
+  const [descriptionSelection, setDescriptionSelection] = useState<{ start: number; end: number } | undefined>({
+    start: 0,
+    end: 0,
+  });
   const [visibility, setVisibility] = useState<RoomVisibility>('public');
   const [requiredDomain, setRequiredDomain] = useState('');
   const domainFocus = useFocusHighlight();
@@ -384,11 +398,16 @@ export default function CommunitySettings() {
           style={[styles.input, styles.textarea, descriptionFocus.focused && styles.inputFocused]}
           value={description}
           onChangeText={setDescription}
-          onFocus={descriptionFocus.onFocus}
+          selection={descriptionSelection}
+          onFocus={() => {
+            descriptionFocus.onFocus();
+            setDescriptionSelection(undefined);
+          }}
           onBlur={descriptionFocus.onBlur}
           placeholder="What's this Room about?"
           placeholderTextColor={colors.neutral[500]}
           multiline
+          scrollEnabled={false}
         />
 
         <Text style={styles.label}>Who can join</Text>
@@ -813,6 +832,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.divider,
     paddingHorizontal: 20,
     fontSize: 15,
+    // Without this, Android clips the first line's ascenders in the
+    // multiline `textarea` below at a larger system font-scale setting —
+    // create-post.tsx's own caption field (fontSize 15, lineHeight 22)
+    // never had this bug, and was the tell: an explicit lineHeight is
+    // what a top-aligned multiline TextInput needs to actually reserve
+    // enough vertical room, `minHeight` growing the box wasn't it. Found
+    // on-device during the touch-target/accessibility pass's font-scale
+    // check, 2026-09-15.
+    lineHeight: 22,
     color: colors.text,
     fontFamily: Fonts.body,
   },
@@ -821,7 +849,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1.5,
   },
   textarea: {
-    height: 88,
+    // minHeight, not height — a fixed height would separately clip
+    // multi-line content that needs more room than one line's worth.
+    minHeight: 88,
     borderRadius: Radius.md,
     paddingTop: 14,
     textAlignVertical: 'top',

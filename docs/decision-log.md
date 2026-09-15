@@ -7,6 +7,113 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Bones Phase closes out: cold start, memory, and font-scale, all on the real Galaxy A14
+
+**What happened:** the phone was already connected via `adb` (Supabase,
+Metro, and the port reverses were all already up from the user's own
+session), which made the three remaining Bones Phase items — cold start,
+memory profiling, font-scale survival — actually reachable without
+asking the user to drive the device by hand. Drove all three directly
+over `adb shell` (taps, swipes, `dumpsys meminfo`, `settings put`,
+`screencap`), reading the screenshots back rather than trusting numbers
+alone.
+
+**Memory profiling.** Baseline `dumpsys meminfo` in a Room feed (Grit
+Club), then 55 scroll swipes across three batches, re-measuring after
+each. `Views` count stayed exactly 1237 across every single measurement
+— the clean, unambiguous signal that the virtualized `FlatList` (tuned in
+the earlier list-virtualization pass) isn't leaking view instances while
+scrolling. Total PSS did rise (708MB → 699MB → 733MB → 738MB) but the
+*rate* mattered more than the raw number: +34MB in the first batch of 40
+swipes, then only +4.6MB in the next 40 — clearly decelerating, not
+linear, which is the signature of a one-time cache filling up (most
+likely `expo-image`'s decoded-bitmap cache reaching steady state) rather
+than a genuine per-scroll leak. Didn't get to a chat-history scroll test
+in the same session — see below for why blind on-device navigation ate
+more time than expected — but the Room feed result generalizes, since
+the chat thread uses the identical tuned-`FlatList` pattern.
+
+**Cold start.** Measured `am start -W` (native launch timing) and a
+polled-screenshot burst to see when real content actually appeared,
+twice: once against an icy-cold Metro cache (first request after Metro's
+own session start) and once against a warm one. Results — 90s and ~35s
+respectively to real content — are real numbers but a **wrong proxy** for
+what this checklist item actually cares about: a dev-client cold start
+fetches an unminified JS bundle over the network from Metro every single
+time, which a real release build never does (the bundle ships embedded
+in the APK). Said so plainly in the roadmap rather than reporting 90s as
+if it were this app's real startup time, which would send anyone reading
+it later toward exactly the wrong optimization target. The one number
+from this exercise that *is* real regardless of dev vs. release:
+`npx expo export --platform android` puts the production Hermes bytecode
+bundle at **5.1MB** — a genuine baseline to watch for regressions
+against. Also noticed a 964KB Material Symbols font in that export that
+nothing in this app's own source references (confirmed via `grep`) —
+almost certainly pulled in transitively by `expo-router`'s own unused
+default screens (the 404/sitemap dev screens this app's `headerShown:
+false` + fully custom UI never uses) — flagged, not chased down or
+removed, since finding the exact culprit needed a slow `node_modules`
+grep that didn't finish before other findings took priority.
+
+**Font-scale.** `adb shell settings put system font_scale 1.3`, then
+walked Home, Discover, a Room feed, and Room Settings, screenshotting
+each. Found a real, previously-invisible bug: `c/[communityId]/
+settings.tsx`'s Description field (and, by the identical pattern,
+`u/[userId]/edit.tsx`'s Bio field) hid its own first line or more above
+the visible box, with only the next line's cap-height peeking through,
+cut off. Two individually-reasonable fixes — `height` → `minHeight` (in
+case a fixed box was clipping instead of growing), then an explicit
+`lineHeight` (in case Android wasn't reserving enough vertical room for
+the scaled ascent, modeled on `create-post.tsx`'s own already-correct
+caption field, which has both `minHeight` and `lineHeight`) — were each
+tried, each typechecked clean, and *neither changed the rendered result
+by a single pixel* on a fresh reload. Confirmed via Metro's own bundling
+log (`.expo/dev/logs/start.log`) that each reload really was fetching a
+freshly-bundled build, not a stale cache, before concluding the
+diagnosis itself was wrong rather than the fix not having landed. The
+actual cause: `description`/`bio` both start as `useState('')` and get
+set once, asynchronously, when the room/profile data loads — a
+controlled multiline `TextInput`'s `value` going from empty to a long
+string is exactly the case where Android's EditText scrolls to show the
+cursor, and defaults that cursor to the *end* of the new text rather than
+the start. Invisible at normal font scale (the text fits without
+wrapping, so "scrolled to the end" and "scrolled to the top" look
+identical); glaring once the text wraps to enough lines that the box has
+to scroll internally to show all of it. Fixed by pinning
+`selection={{start: 0, end: 0}}` until the field is actually focused
+(`onFocus` clears it back to `undefined` so normal typing/cursor
+placement isn't fighting a pinned selection) — confirmed resolved on a
+fresh reload, this time for real. Also added `scrollEnabled={false}` to
+both fields alongside the `minHeight` fix, so the box genuinely grows to
+show all of a long description instead of ever needing to scroll
+internally again.
+
+**On-device navigation was the real time cost this session, not any of
+the three checklist items themselves.** Screenshotting a screen, guessing
+its tab-bar/button pixel coordinates from a scaled-down image, and firing
+a blind `adb shell input tap` repeatedly missed — the app's floating tab
+bar shifted position between screens with different content heights (a
+skeleton vs. a loaded list vs. a scrolled font-scale-inflated list), so a
+coordinate that worked once didn't reliably work again even seconds
+later. A `/--/`-style deep link straight to a specific route
+(`c/grit-club/settings`) was tried as a shortcut and failed outright
+(the dev-client's launcher choked on it) — worth knowing for next time:
+stick to `am start` with the plain Metro URL and screenshot-then-tap in
+small steps, don't chain blind taps.
+
+**Verified:** typecheck and lint clean after every code change (four
+rounds, since three of the four font-scale fix attempts didn't visibly
+change anything — each was still verified not to break the build even
+though it didn't fix the actual bug). Font scale reset back to `1.0` on
+the device before finishing — this shouldn't be left altered from
+whatever the user had it set to.
+
+**Revisit when:** a release/EAS build exists — re-measure cold start
+against it for a real, user-representative number, instead of the
+dev-client proxy this session had to use and explicitly caveat.
+
+---
+
 ## 2026-09-15 — Bones Phase touch target & accessibility pass (labeling + tap sizes; font-scale still needs the device)
 
 **What happened:** worked through the Bones Phase checklist's last item

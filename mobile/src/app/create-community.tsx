@@ -590,6 +590,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.divider,
     paddingHorizontal: 20,
     fontSize: 15,
+    // Without this, Android clips the multiline textarea's first line's
+    // ascenders at a larger system font-scale setting — see settings.tsx's
+    // identical fix for the full explanation. Found on-device, 2026-09-15.
+    lineHeight: 22,
     color: colors.text,
     fontFamily: Fonts.body,
     marginBottom: Spacing[2],
@@ -599,7 +603,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1.5,
   },
   textarea: {
-    height: 88,
+    // minHeight, not height — see settings.tsx's identical fix, found
+    // on-device at a larger system font-scale setting.
+    minHeight: 88,
     borderRadius: Radius.md,
     paddingTop: 14,
     textAlignVertical: 'top',
