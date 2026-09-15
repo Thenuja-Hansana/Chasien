@@ -1,10 +1,10 @@
 import * as ImagePicker from 'expo-image-picker';
 
-import { compressImageForUpload, randomId, signBucketUrls, uploadBase64, type PickedImage } from '@/lib/mediaUtils';
+import { compressImageForUpload, randomId, signBucketUrls, uploadBase64, uploadLocalFile, type PickedImage } from '@/lib/mediaUtils';
 import { supabase } from '@/lib/supabase';
 
 /**
- * The one place that knows *where post images* physically live (chat
+ * The one place that knows *where post media* physically lives (chat
  * attachments have their own lib/messageMedia.ts, sharing the compress/
  * upload/sign internals in lib/mediaUtils.ts but not this bucket).
  *
@@ -18,7 +18,7 @@ import { supabase } from '@/lib/supabase';
  * (docs/roadmap.md already lists the bucket there).
  *
  * Everything outside this module — create-post, the feed, post detail —
- * only ever sees `uploadPostImage()` and `signMediaUrls()`, so that swap
+ * only ever sees `uploadPostMedia()` and `signMediaUrls()`, so that swap
  * is a change to this file, not a change to every screen.
  */
 
@@ -102,26 +102,57 @@ export async function captureImageOrVideo(): Promise<PickedMedia | null> {
   return assetToPickedMedia(result.assets[0]);
 }
 
+/** IG's own composer cap — client-enforced only, same as MAX_POLL_OPTIONS in create-post.tsx. */
+export const MAX_POST_MEDIA_ITEMS = 10;
+
 /**
- * Uploads one post image and returns its storage path (NOT a URL —
- * the bucket is private, so a stored URL would be a signed one that
- * expires; `post_media.url` holds this stable path and reading goes
- * through `signMediaUrls()` at render time).
+ * The post composer's gallery picker — like `pickImageOrVideo()` but
+ * multi-select, since a post (unlike a story) can carry a whole carousel.
+ * `remaining` is the caller's `MAX_POST_MEDIA_ITEMS - current.length`, so
+ * the OS picker itself refuses to let the user select past the cap.
+ */
+export async function pickPostMedia(remaining: number): Promise<PickedMedia[]> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) return [];
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images', 'videos'],
+    quality: 1,
+    allowsMultipleSelection: true,
+    selectionLimit: Math.max(1, remaining),
+  });
+  if (result.canceled) return [];
+  return result.assets.map(assetToPickedMedia);
+}
+
+/**
+ * Uploads one post media item (image or video) and returns its storage
+ * path (NOT a URL — the bucket is private, so a stored URL would be a
+ * signed one that expires; `post_media.url` holds this stable path and
+ * reading goes through `signMediaUrls()` at render time).
  *
  * The `{roomId}/{userId}/{uuid}` shape isn't cosmetic: the bucket's RLS
  * policies parse both segments back out to answer "is the caller a
  * member of this Room" and "does the caller own this object" — see
- * supabase/migrations/20260814063412_post_media_storage.sql.
+ * supabase/migrations/20260814063412_post_media_storage.sql. Branches
+ * exactly like stories.ts's createStory(): video is uploaded as-is (no
+ * client-side video compression in this app), image goes through the
+ * same 'feed' crop/compress every single-image post already used.
  */
-export async function uploadPostImage(image: PickedImage, roomId: string, userId: string): Promise<string> {
-  const base64 = await compressImageForUpload(image, 'feed');
+export async function uploadPostMedia(media: PickedMedia, roomId: string, userId: string): Promise<string> {
+  if (media.kind === 'video') {
+    const path = `${roomId}/${userId}/${randomId()}.mp4`;
+    await uploadLocalFile(BUCKET, path, media.uri, 'video/mp4');
+    return path;
+  }
+  const base64 = await compressImageForUpload(media, 'feed');
   const path = `${roomId}/${userId}/${randomId()}.jpg`;
   await uploadBase64(BUCKET, path, base64, 'image/jpeg');
   return path;
 }
 
-/** Best-effort — used to clean up an image whose post row failed to insert. */
-export async function deletePostImage(path: string): Promise<void> {
+/** Best-effort — used to clean up media whose post row failed to insert. */
+export async function deletePostMedia(path: string): Promise<void> {
   await supabase.storage.from(BUCKET).remove([path]);
 }
 

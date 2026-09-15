@@ -1,4 +1,4 @@
-import { compressImageForUpload, randomId, signBucketUrls, uploadBase64, uploadLocalFile } from '@/lib/mediaUtils';
+import { compressImageForUpload, mediaKindFromPath, randomId, signBucketUrls, uploadBase64, uploadLocalFile } from '@/lib/mediaUtils';
 import { supabase } from '@/lib/supabase';
 import type { PickedMedia } from '@/lib/media';
 
@@ -17,7 +17,9 @@ import type { PickedMedia } from '@/lib/media';
  * The schema stores one `media_url` column, no separate image/video
  * flag — kind is inferred from the stored file's extension rather than
  * adding a column for it, since the upload path already fully controls
- * what that extension is (randomId() + a fixed .jpg/.mp4).
+ * what that extension is (randomId() + a fixed .jpg/.mp4). See
+ * mediaUtils.ts's `mediaKindFromPath()`, shared with post media for the
+ * same reason.
  */
 
 const BUCKET = 'story-media';
@@ -33,10 +35,6 @@ export type Story = {
   authorHandle: string;
   authorName: string;
 };
-
-function kindFromPath(path: string): 'image' | 'video' {
-  return /\.mp4$/i.test(path) ? 'video' : 'image';
-}
 
 type StoryRow = {
   id: string;
@@ -62,7 +60,7 @@ export async function fetchActiveStories(roomId: string): Promise<Story[]> {
     room_id: row.room_id,
     author_id: row.author_id,
     media_url: row.media_url,
-    kind: kindFromPath(row.media_url),
+    kind: mediaKindFromPath(row.media_url),
     caption: row.caption,
     created_at: row.created_at,
     authorHandle: row.profiles?.handle ?? '',

@@ -7,6 +7,95 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Post composer rebuilt to real IG/FB quality: multi-image carousel + video
+
+**Context:** `create-post.tsx` was the last screen in the app that still looked
+like a placeholder — a caption box, a single-image button (gallery only, no
+video, no multi-select), and a poll builder, with nothing like the app's own
+`app_reference/src/screens/CreatePost.jsx` mock. Meanwhile the backend had
+quietly outgrown the UI: `create_post()`'s RPC already accepted an
+arbitrary-length ordered `p_media_paths[]`, and `PostCard.tsx` already
+rendered a "1/N" badge for multi-image posts — both built for a carousel
+that was never wired up frontend-side. Scoped via clarifying questions:
+multi-image carousel and video posts, in; interactive crop/filter UI,
+location tagging, an allow-comments toggle, a share-to-story toggle, and
+drag-to-reorder media, explicitly out.
+
+**What changed:**
+- `create-post.tsx`'s single `image` state became `mediaItems: PickedMedia[]`,
+  with a thumbnail strip (image/video tiles, remove-X, trailing add tile
+  capped at `MAX_POST_MEDIA_ITEMS = 10`) replacing the old single dashed
+  button. Adding media now offers the same camera/gallery choice
+  `create-story.tsx` already established, plus a new `pickPostMedia()`
+  gallery picker (`lib/media.ts`) that adds `allowsMultipleSelection` on top
+  of the existing single-select `pickImageOrVideo()`.
+- `uploadPostImage()` became `uploadPostMedia()`, branching image/video
+  exactly like `stories.ts`'s `createStory()` already did (video uploaded
+  as-is via `uploadLocalFile()`, image through the existing `'feed'`
+  crop/compress). Uploads happen sequentially in `handleSubmit`, not
+  `Promise.all` — real per-item progress text, and a fix for a real bug:
+  the old code only ever cleaned up the *one* `uploadedPath` it had on
+  failure; with N items, a late failure now removes every already-succeeded
+  path via `Promise.allSettled`, not just the last one.
+- No new `post_media` column for image-vs-video — followed `stories.ts`'s
+  own precedent of inferring kind from the stored file's extension, now
+  shared as `mediaKindFromPath()` in `mediaUtils.ts` (both `stories.ts` and
+  `posts.ts` import it instead of each keeping their own copy).
+- New `mobile/src/components/PostMediaCarousel.tsx` — a horizontal `FlatList`
+  carousel (no prior paging precedent existed anywhere in this codebase to
+  copy) shared by `PostCard.tsx` and the post-detail screen, replacing their
+  old `imageUrls[0]`-only render. Box aspect ratio is fixed from the first
+  slide only (matching Instagram's own carousel behavior); every slide
+  renders `contentFit="contain"`, never `cover` — `useCappedMediaHeight`'s
+  own doc comment is explicit that a photo is letterboxed, never cropped
+  further, to fit a height cap, and this extends that same rule to a
+  multi-slide carousel instead of quietly contradicting it for uniformity.
+  Video slides are paused-by-default with native controls (a deliberate
+  divergence from the story viewer's autoplay/muted/no-controls treatment,
+  which is story-specific), and pause when scrolled out of view via
+  `onViewableItemsChanged`. `PostCard`'s "1/N" badge — dead code until now,
+  since nothing could create a multi-image post — is now live.
+- `FeedPost.imageUrls`/`imageCount` renamed to `media: PostMediaItem[]`
+  (`{url, kind}`) throughout `posts.ts` and every consumer. Also fixed a
+  correctness gap this rename surfaced: `AuthorPostPreview.imagePath` (the
+  profile grid, `u/[userId]/index.tsx`, and the user-preview popup,
+  `UserPreviewCard.tsx`) fed straight into an `<Image>` — a video-first post
+  would have hit that with a `.mp4` path. Renamed to `mediaPath` +
+  `mediaKind`, both small-tile surfaces now show a placeholder + `play`
+  icon for a video instead of a broken image.
+- `post-media` storage bucket (`supabase/migrations/20260814063412_...sql`)
+  only allowed `image/jpeg|png|webp` at 5 MiB — video would have been
+  rejected there, not by RLS (the existing policies only ever parsed
+  `{roomId}/{userId}/...` path segments, never mime/extension). New
+  migration `20260915130000_post_media_storage_video.sql` mirrors
+  `story-media`'s own mime list and 50 MiB cap exactly via a plain
+  `update storage.buckets set ...` — no RLS changes, no RPC changes.
+- Extracted `mobile/src/components/DiscardConfirmModal.tsx` from
+  `create-community.tsx`'s discard-confirmation block (the hardware-back fix
+  earlier today) and reused it here — `create-post.tsx` gets the identical
+  discard-confirmation + `BackHandler`/`useFocusEffect` wiring, and
+  `create-community.tsx` was retrofitted onto the shared component in the
+  same change rather than carrying a second copy of the same ~50 lines.
+
+**Verified on the real Galaxy A14** via `adb`: selected 3 photos through the
+new multi-select gallery picker, removed one from the thumbnail strip,
+posted, and confirmed the feed showed a live "1/3" swipeable carousel
+(letterboxed correctly, badge updated on swipe from `1/3` to `2/3`).
+Separately captured a video via the camera-collection path, posted it alone,
+and confirmed it rendered in the feed as a real inline video player (native
+controls, correct duration, paused by default) rather than a broken tile —
+both the composer's thumbnail-strip preview and the feed's full carousel
+render video correctly. `npm run typecheck` and `npm run lint` both clean
+throughout.
+
+**Deliberately not done (separate scope):** interactive crop/filter tooling,
+real location tagging, an `allow_comments` column/toggle, a share-to-story
+cross-post mechanism, and drag-to-reorder media — all explicitly scoped out
+via clarifying questions before implementation, matching what the mock
+sketches but this app's schema/UX doesn't yet support.
+
+---
+
 ## 2026-09-15 — Hardware back button: fixed the one screen where it caused silent data loss
 
 **Decision:** Before starting Phase 9, checked whether Android's hardware

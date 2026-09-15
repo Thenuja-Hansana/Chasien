@@ -52,7 +52,7 @@ export default function UserPreviewCard({ userId, visible, onClose }: { userId: 
   }, [userId, visible]);
 
   useEffect(() => {
-    const paths = (posts ?? []).map((p) => p.imagePath).filter((p): p is string => !!p);
+    const paths = (posts ?? []).map((p) => p.mediaPath).filter((p): p is string => !!p);
     const unsigned = paths.filter((p) => !mediaUrls.has(p));
     if (unsigned.length === 0) return;
     signMediaUrls(unsigned)
@@ -95,10 +95,14 @@ export default function UserPreviewCard({ userId, visible, onClose }: { userId: 
                   <Text style={styles.noPosts}>No posts yet.</Text>
                 ) : (
                   posts.map((post) => {
-                    const url = post.imagePath ? mediaUrls.get(post.imagePath) : undefined;
+                    const url = post.mediaPath ? mediaUrls.get(post.mediaPath) : undefined;
                     return (
                       <View key={post.id} style={styles.postThumb}>
-                        {url ? (
+                        {url && post.mediaKind === 'video' ? (
+                          <View style={styles.postThumbVideo}>
+                            <Icon name="play" size={18} color={colors.text} />
+                          </View>
+                        ) : url ? (
                           <Image
                             source={{ uri: url }}
                             style={styles.postThumbImage}
@@ -209,6 +213,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   postThumbImage: {
     width: '100%',
     height: '100%',
+  },
+  postThumbVideo: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
   },
   postThumbText: {
     fontFamily: Fonts.body,

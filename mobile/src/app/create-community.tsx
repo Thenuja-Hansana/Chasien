@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import DiscardConfirmModal from '@/components/DiscardConfirmModal';
 import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
@@ -408,22 +409,13 @@ export default function CreateCommunity() {
         </Pressable>
       </View>
 
-      <Modal visible={showDiscardConfirm} transparent animationType="fade" onRequestClose={() => setShowDiscardConfirm(false)}>
-        <Pressable style={styles.confirmBackdrop} onPress={() => setShowDiscardConfirm(false)}>
-          <Pressable style={styles.confirmCard} onPress={() => {}}>
-            <Text style={styles.confirmTitle}>Discard this Room?</Text>
-            <Text style={styles.confirmBody}>Everything you&apos;ve entered so far will be lost — this can&apos;t be undone.</Text>
-            <View style={styles.confirmActions}>
-              <Pressable style={styles.confirmCancelButton} onPress={() => setShowDiscardConfirm(false)}>
-                <Text style={styles.confirmCancelText}>Keep Editing</Text>
-              </Pressable>
-              <Pressable style={styles.confirmDiscardButton} onPress={() => router.back()}>
-                <Text style={styles.confirmDiscardText}>Discard</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <DiscardConfirmModal
+        visible={showDiscardConfirm}
+        title="Discard this Room?"
+        body="Everything you've entered so far will be lost — this can't be undone."
+        onKeepEditing={() => setShowDiscardConfirm(false)}
+        onDiscard={() => router.back()}
+      />
     </SafeAreaView>
   );
 }
@@ -785,71 +777,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: Fonts.heading,
     fontSize: 16,
     color: colors.bg,
-  },
-  confirmBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing[6],
-  },
-  confirmCard: {
-    width: '100%',
-    maxWidth: 340,
-    borderRadius: Radius.lg,
-    backgroundColor: colors.bg,
-    padding: Spacing[6],
-  },
-  confirmTitle: {
-    fontFamily: Fonts.heading,
-    fontSize: 18,
-    color: colors.text,
-    marginBottom: Spacing[2],
-  },
-  confirmBody: {
-    fontFamily: Fonts.body,
-    fontSize: 13.5,
-    lineHeight: 19,
-    color: colors.neutral[400],
-    marginBottom: Spacing[6],
-  },
-  confirmActions: {
-    flexDirection: 'row',
-    gap: Spacing[3],
-  },
-  confirmCancelButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: colors.divider,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmCancelText: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  // `colors.error` — the one deliberate departure from the app's
-  // otherwise monochrome palette, reserved for exactly this (errors and
-  // destructive actions), since this one's irreversible. Previously its
-  // own hand-picked red that didn't match `colors.error` at all and
-  // didn't adjust for Dark mode contrast the way that token does — see
-  // decision-log, 2026-09-10.
-  confirmDiscardButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: Radius.pill,
-    backgroundColor: colors.error,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmDiscardText: {
-    fontFamily: Fonts.body,
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#ffffff',
   },
 });

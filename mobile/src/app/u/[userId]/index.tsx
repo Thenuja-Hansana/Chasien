@@ -76,7 +76,7 @@ export default function ProfileScreen() {
           const roomPaths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((path): path is string => !!path);
           if (roomPaths.length > 0) signRoomMediaUrls(roomPaths).then(setRoomMediaUrls).catch(() => {});
 
-          const postPaths = postList.map((post) => post.imagePath).filter((path): path is string => !!path);
+          const postPaths = postList.map((post) => post.mediaPath).filter((path): path is string => !!path);
           if (postPaths.length > 0) signMediaUrls(postPaths).then(setPostMediaUrls).catch(() => {});
         } catch (e) {
           setError(e instanceof Error ? e.message : 'Failed to load this profile.');
@@ -344,7 +344,7 @@ export default function ProfileScreen() {
                 ) : (
                   <View style={styles.postGrid}>
                     {posts.map((post) => {
-                      const url = post.imagePath ? postMediaUrls.get(post.imagePath) : undefined;
+                      const url = post.mediaPath ? postMediaUrls.get(post.mediaPath) : undefined;
                       return (
                         <Pressable
                           key={post.id}
@@ -354,7 +354,11 @@ export default function ProfileScreen() {
                             router.push({ pathname: '/c/[communityId]/post/[postId]', params: { communityId: post.roomSlug, postId: post.id } })
                           }
                         >
-                          {url ? (
+                          {url && post.mediaKind === 'video' ? (
+                            <View style={styles.postThumbVideoBadge}>
+                              <Icon name="play" size={20} color={colors.text} />
+                            </View>
+                          ) : url ? (
                             <Image
                               source={{ uri: url }}
                               style={styles.postThumbImage}
@@ -608,6 +612,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   postThumbImage: {
     width: '100%',
     height: '100%',
+  },
+  postThumbVideoBadge: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   postThumbText: {
     fontFamily: Fonts.body,

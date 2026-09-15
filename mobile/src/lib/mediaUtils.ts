@@ -151,6 +151,17 @@ export async function uploadLocalFile(bucket: string, path: string, fileUri: str
   if (error) throw error;
 }
 
+/**
+ * Every video uploaded through this app lands at a fixed `.mp4` path
+ * (stories.ts's `createStory()`, and post media below, both control the
+ * extension themselves), so whether a stored object is an image or a
+ * video is fully determined by its own filename — no separate `kind`
+ * column needed anywhere media is stored.
+ */
+export function mediaKindFromPath(path: string): 'image' | 'video' {
+  return /\.mp4$/i.test(path) ? 'video' : 'image';
+}
+
 /** Long enough to scroll a list without re-signing; short enough that a leaked URL dies quickly. */
 export const SIGNED_URL_TTL_SECONDS = 60 * 60;
 

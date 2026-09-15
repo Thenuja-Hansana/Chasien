@@ -1,4 +1,3 @@
-import { Image, type ImageLoadEventData } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -19,8 +18,8 @@ import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
 import PostCardSkeleton from '@/components/PostCardSkeleton';
+import PostMediaCarousel from '@/components/PostMediaCarousel';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
-import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -58,12 +57,6 @@ export default function PostDetail() {
   const [error, setError] = useState<string | null>(null);
   const [isModerator, setIsModerator] = useState(false);
   const [pinning, setPinning] = useState(false);
-  // Same reasoning as PostCard's imageWrap: the upload is pre-cropped to
-  // one of the feed's fixed ratios, but that ratio isn't stored, so the
-  // hero sizes itself from the loaded image rather than a fixed height.
-  const [heroAspectRatio, setHeroAspectRatio] = useState(1);
-  const handleHeroLoad = (event: ImageLoadEventData) => setHeroAspectRatio(event.source.width / event.source.height);
-  const maxHeroHeight = useCappedMediaHeight(MAX_HERO_HEIGHT_FRACTION);
 
   const userId = session?.user.id;
 
@@ -220,15 +213,10 @@ export default function PostDetail() {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          {post.imageUrls.length > 0 && (
-            <Image
-              source={{ uri: post.imageUrls[0] }}
-              style={[styles.heroImage, { aspectRatio: heroAspectRatio, maxHeight: maxHeroHeight }]}
-              contentFit="contain"
-              transition={150}
-              cachePolicy="memory-disk"
-              onLoad={handleHeroLoad}
-            />
+          {post.media.length > 0 && (
+            <View style={styles.heroWrap}>
+              <PostMediaCarousel media={post.media} maxHeightFraction={MAX_HERO_HEIGHT_FRACTION} />
+            </View>
           )}
 
           <View style={styles.section}>
@@ -442,9 +430,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
   },
-  heroImage: {
+  heroWrap: {
     width: '100%',
-    backgroundColor: colors.surface,
   },
   section: {
     paddingHorizontal: Spacing[4],

@@ -1,4 +1,5 @@
 import { signMediaUrls } from '@/lib/media';
+import { mediaKindFromPath } from '@/lib/mediaUtils';
 import { supabase } from '@/lib/supabase';
 
 export type PollOption = {
@@ -17,6 +18,8 @@ export type Poll = {
   myOptionId: string | null;
 };
 
+export type PostMediaItem = { url: string; kind: 'image' | 'video' };
+
 export type FeedPost = {
   id: string;
   roomId: string;
@@ -29,9 +32,8 @@ export type FeedPost = {
   text: string | null;
   tag: string | null;
   createdAt: string;
-  /** Signed, display-ready URLs. Empty when the post has no media. */
-  imageUrls: string[];
-  imageCount: number;
+  /** Signed, display-ready URLs, ordered by position. Empty when the post has no media. */
+  media: PostMediaItem[];
   likeCount: number;
   likedByMe: boolean;
   commentCount: number;
@@ -147,12 +149,14 @@ async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<str
       text: p.text,
       tag: p.tag,
       createdAt: p.created_at,
-      imageUrls: p.post_media
+      media: p.post_media
         .slice()
         .sort((a, b) => a.position - b.position)
-        .map((m) => signedUrls.get(m.url))
-        .filter((u): u is string => Boolean(u)),
-      imageCount: p.post_media.length,
+        .map((m): PostMediaItem | null => {
+          const url = signedUrls.get(m.url);
+          return url ? { url, kind: mediaKindFromPath(m.url) } : null;
+        })
+        .filter((m): m is PostMediaItem => m !== null),
       likeCount: p.post_likes[0]?.count ?? 0,
       likedByMe: likedPostIds.has(p.id),
       commentCount: p.comments[0]?.count ?? 0,
@@ -378,7 +382,14 @@ export async function fetchLatestPostPreview(roomId: string): Promise<RoomActivi
   };
 }
 
-export type AuthorPostPreview = { id: string; roomSlug: string; imagePath: string | null; text: string | null; hasPoll: boolean };
+export type AuthorPostPreview = {
+  id: string;
+  roomSlug: string;
+  mediaPath: string | null;
+  mediaKind: 'image' | 'video' | null;
+  text: string | null;
+  hasPoll: boolean;
+};
 
 /**
  * The user-preview popup's small "some recent posts" strip, and the full
@@ -408,13 +419,17 @@ export async function fetchRecentPostsByAuthor(authorId: string, limit = 3): Pro
     polls: { id: string } | null;
     rooms: { slug: string } | null;
   }[];
-  return rows.map((row) => ({
-    id: row.id,
-    roomSlug: row.rooms?.slug ?? '',
-    imagePath: row.post_media[0]?.url ?? null,
-    text: row.text,
-    hasPoll: !!row.polls,
-  }));
+  return rows.map((row) => {
+    const path = row.post_media[0]?.url ?? null;
+    return {
+      id: row.id,
+      roomSlug: row.rooms?.slug ?? '',
+      mediaPath: path,
+      mediaKind: path ? mediaKindFromPath(path) : null,
+      text: row.text,
+      hasPoll: !!row.polls,
+    };
+  });
 }
 
 /** "3h", "2d" — the compact relative stamp the mock uses on every post. */

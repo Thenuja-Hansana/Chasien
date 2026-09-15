@@ -1,14 +1,13 @@
-import { Image, type ImageLoadEventData } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
+import PostMediaCarousel from '@/components/PostMediaCarousel';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
-import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime, type FeedPost } from '@/lib/posts';
 import { useUserPreview } from '@/lib/user-preview-context';
@@ -42,14 +41,6 @@ export default function PostCard({
   const { open: openUserPreview } = useUserPreview();
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // Uploads are pre-cropped to one of the feed's fixed ratios (square, 4:5
-  // portrait, or 1.91:1 landscape — see compressImageForUpload()'s 'feed'
-  // variant), but that ratio isn't stored anywhere, so the card sizes
-  // itself from the loaded image's own dimensions rather than a fixed
-  // height that would just re-crop it a second time on top of the first.
-  const [aspectRatio, setAspectRatio] = useState(1);
-  const handleImageLoad = (event: ImageLoadEventData) => setAspectRatio(event.source.width / event.source.height);
-  const maxImageHeight = useCappedMediaHeight(MAX_IMAGE_HEIGHT_FRACTION);
 
   // A quick pop on the heart itself when a like lands, on top of the
   // existing haptic — set directly on press rather than watched via an
@@ -91,18 +82,10 @@ export default function PostCard({
         </Text>
       ) : null}
 
-      {post.imageUrls.length > 0 && (
-        <Pressable style={[styles.imageWrap, { aspectRatio, maxHeight: maxImageHeight }]} onPress={onPress}>
-          <Image
-            source={{ uri: post.imageUrls[0] }}
-            style={styles.image}
-            contentFit="contain"
-            transition={150}
-            cachePolicy="memory-disk"
-            onLoad={handleImageLoad}
-          />
-          {post.imageCount > 1 && <Text style={styles.imageCount}>1/{post.imageCount}</Text>}
-        </Pressable>
+      {post.media.length > 0 && (
+        <View style={styles.mediaWrap}>
+          <PostMediaCarousel media={post.media} maxHeightFraction={MAX_IMAGE_HEIGHT_FRACTION} onPress={onPress} />
+        </View>
       )}
 
       {post.poll && <PollCard poll={post.poll} onVote={onVote} />}
@@ -199,29 +182,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   tag: {
     color: colors.accent[300],
   },
-  imageWrap: {
+  mediaWrap: {
     marginTop: Spacing[2],
-    borderRadius: Radius.md,
-    overflow: 'hidden',
-    width: '100%',
-    backgroundColor: colors.surface,
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-  },
-  imageCount: {
-    position: 'absolute',
-    right: 10,
-    top: 10,
-    fontFamily: Fonts.bodyBold,
-    fontSize: 10.5,
-    color: colors.text,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
-    overflow: 'hidden',
   },
   actions: {
     flexDirection: 'row',

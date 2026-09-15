@@ -1,8 +1,10 @@
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,18 +16,24 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import DiscardConfirmModal from '@/components/DiscardConfirmModal';
 import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
-import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
-import { deletePostImage, pickImage, uploadPostImage, type PickedImage } from '@/lib/media';
-import { feedAspectRatioFor } from '@/lib/mediaUtils';
+import {
+  captureImageOrVideo,
+  deletePostMedia,
+  MAX_POST_MEDIA_ITEMS,
+  pickPostMedia,
+  uploadPostMedia,
+  type PickedMedia,
+} from '@/lib/media';
 import { createPost } from '@/lib/posts';
 import { fetchRoomBySlug, type Room } from '@/lib/rooms';
 
 const MAX_POLL_OPTIONS = 4;
-const MAX_PREVIEW_HEIGHT_FRACTION = 0.5;
+const TILE_SIZE = 76;
 
 export default function CreatePost() {
   const { session } = useAuth();
@@ -35,19 +43,20 @@ export default function CreatePost() {
 
   const [room, setRoom] = useState<Room | null>(null);
   const [text, setText] = useState('');
-  const [image, setImage] = useState<PickedImage | null>(null);
+  const [mediaItems, setMediaItems] = useState<PickedMedia[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
   const [submitting, setSubmitting] = useState(false);
   const [statusLine, setStatusLine] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   // One key rather than a separate hook per field, since the poll options
   // list is dynamic (up to MAX_POLL_OPTIONS) — 'caption' | 'question' |
   // `option-${index}`.
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const clearFocus = (key: string) => setFocusedField((f) => (f === key ? null : f));
-  const maxPreviewHeight = useCappedMediaHeight(MAX_PREVIEW_HEIGHT_FRACTION);
 
   const userId = session?.user.id;
 
@@ -59,22 +68,69 @@ export default function CreatePost() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load this Room.'));
   }, [communityId]);
 
-  if (!session) return null;
-
   const filledOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
   const pollReady = !pollOpen || (pollQuestion.trim().length > 0 && filledOptions.length >= 2);
   // Mirrors create_post()'s own guard: a post needs at least one of the three.
-  const hasContent = text.trim().length > 0 || image !== null || (pollOpen && pollQuestion.trim().length > 0);
+  const hasContent = text.trim().length > 0 || mediaItems.length > 0 || (pollOpen && pollQuestion.trim().length > 0);
   const canSubmit = hasContent && pollReady && !submitting;
+  // Broader than hasContent on purpose — opening the poll builder at all
+  // (even before typing a question) is something worth warning about
+  // losing, not just a submittable poll.
+  const hasChanges = text.trim().length > 0 || mediaItems.length > 0 || pollOpen;
 
-  async function handlePickImage() {
+  const handleClose = useCallback(() => {
+    if (hasChanges) {
+      setShowDiscardConfirm(true);
+    } else {
+      router.back();
+    }
+  }, [hasChanges]);
+
+  // The on-screen Cancel only ever went through handleClose — the Android
+  // hardware back button and edge-swipe gesture are a separate system
+  // event native-stack handles on its own by default, so without this a
+  // back-gesture here silently discarded a drafted post with no
+  // confirmation at all (see create-community.tsx for the original fix
+  // this mirrors).
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleClose();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [handleClose]),
+  );
+
+  if (!session) return null;
+
+  async function handlePickMedia() {
     setError(null);
     try {
-      const picked = await pickImage();
-      if (picked) setImage(picked);
+      const remaining = MAX_POST_MEDIA_ITEMS - mediaItems.length;
+      const picked = await pickPostMedia(remaining);
+      if (picked.length > 0) setMediaItems((prev) => [...prev, ...picked]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not open your photo library.');
+    } finally {
+      setPickerOpen(false);
     }
+  }
+
+  async function handleCaptureMedia() {
+    setError(null);
+    try {
+      const captured = await captureImageOrVideo();
+      if (captured) setMediaItems((prev) => [...prev, captured]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open the camera.');
+    } finally {
+      setPickerOpen(false);
+    }
+  }
+
+  function removeMediaAt(index: number) {
+    setMediaItems((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleSubmit() {
@@ -82,27 +138,34 @@ export default function CreatePost() {
     setSubmitting(true);
     setError(null);
 
-    let uploadedPath: string | null = null;
+    // Sequential, not Promise.all: lets statusLine show real progress and
+    // means cleanup-on-failure is just "delete what's already in this
+    // array" — no separate bookkeeping needed for which uploads landed
+    // before a later one failed.
+    const uploadedPaths: string[] = [];
     try {
-      if (image) {
-        setStatusLine('Compressing and uploading image…');
-        uploadedPath = await uploadPostImage(image, room.id, userId);
+      for (let i = 0; i < mediaItems.length; i++) {
+        setStatusLine(mediaItems.length > 1 ? `Uploading ${i + 1} of ${mediaItems.length}…` : 'Uploading…');
+        uploadedPaths.push(await uploadPostMedia(mediaItems[i], room.id, userId));
       }
 
       setStatusLine('Posting…');
       await createPost({
         roomId: room.id,
         text,
-        mediaPaths: uploadedPath ? [uploadedPath] : [],
+        mediaPaths: uploadedPaths,
         pollQuestion: pollOpen ? pollQuestion : null,
         pollOptions: pollOpen ? filledOptions : [],
       });
 
       router.replace({ pathname: '/c/[communityId]', params: { communityId } });
     } catch (e) {
-      // The image lands in storage before the post row exists, so a
-      // failure here would otherwise strand an object nobody references.
-      if (uploadedPath) await deletePostImage(uploadedPath).catch(() => {});
+      // Media lands in storage before the post row exists, so a failure
+      // here would otherwise strand every object already uploaded, not
+      // just the last one.
+      if (uploadedPaths.length > 0) {
+        await Promise.allSettled(uploadedPaths.map((p) => deletePostMedia(p)));
+      }
       setError(e instanceof Error ? e.message : 'Could not publish that post.');
     } finally {
       setSubmitting(false);
@@ -118,7 +181,7 @@ export default function CreatePost() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} disabled={submitting}>
+          <Pressable onPress={handleClose} disabled={submitting}>
             <Text style={styles.headerAction}>Cancel</Text>
           </Pressable>
           <Text style={styles.headingText}>New post</Text>
@@ -144,33 +207,42 @@ export default function CreatePost() {
             editable={!submitting}
           />
 
-          {image ? (
-            // Sized to match what uploadPostImage()'s 'feed' crop will actually
-            // keep, so the composer previews the real framing, not the full
-            // uncropped photo the picker returned.
-            <View
-              style={[
-                styles.imageWrap,
-                { aspectRatio: feedAspectRatioFor(image.width, image.height), maxHeight: maxPreviewHeight },
-              ]}
-            >
-              <Image source={{ uri: image.uri }} style={styles.image} contentFit="contain" />
-              <Pressable
-                style={styles.removeImage}
-                onPress={() => setImage(null)}
-                disabled={submitting}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Remove photo"
-              >
-                <Icon name="close" size={16} color={colors.text} />
+          {mediaItems.length === 0 && !pickerOpen && (
+            <Pressable style={styles.addMedia} onPress={() => setPickerOpen(true)} disabled={submitting}>
+              <Icon name="addPhoto" size={20} color={colors.accent.DEFAULT} />
+              <Text style={styles.addMediaText}>Add photos or video</Text>
+            </Pressable>
+          )}
+
+          {mediaItems.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tileRow}>
+              {mediaItems.map((item, index) => (
+                <ComposerMediaTile
+                  key={item.uri}
+                  media={item}
+                  onRemove={() => removeMediaAt(index)}
+                  disabled={submitting}
+                />
+              ))}
+              {mediaItems.length < MAX_POST_MEDIA_ITEMS && (
+                <Pressable style={styles.addTile} onPress={() => setPickerOpen(true)} disabled={submitting}>
+                  <Icon name="addPhoto" size={18} color={colors.accent.DEFAULT} />
+                </Pressable>
+              )}
+            </ScrollView>
+          )}
+
+          {pickerOpen && (
+            <View style={styles.pickChoice}>
+              <Pressable style={styles.pickButton} onPress={handleCaptureMedia} disabled={submitting}>
+                <Icon name="camera" size={19} color={colors.accent.DEFAULT} />
+                <Text style={styles.pickButtonText}>Take photo or video</Text>
+              </Pressable>
+              <Pressable style={styles.pickButton} onPress={handlePickMedia} disabled={submitting}>
+                <Icon name="addPhoto" size={19} color={colors.accent.DEFAULT} />
+                <Text style={styles.pickButtonText}>Choose from gallery</Text>
               </Pressable>
             </View>
-          ) : (
-            <Pressable style={styles.addImage} onPress={handlePickImage} disabled={submitting}>
-              <Icon name="addPhoto" size={20} color={colors.accent.DEFAULT} />
-              <Text style={styles.addImageText}>Add a photo</Text>
-            </Pressable>
           )}
 
           {pollOpen ? (
@@ -219,9 +291,9 @@ export default function CreatePost() {
               {!pollReady && <Text style={styles.hint}>A poll needs a question and at least two options.</Text>}
             </View>
           ) : (
-            <Pressable style={styles.addImage} onPress={() => setPollOpen(true)} disabled={submitting}>
+            <Pressable style={styles.addMedia} onPress={() => setPollOpen(true)} disabled={submitting}>
               <Icon name="checkDouble" size={20} color={colors.accent2.DEFAULT} />
-              <Text style={[styles.addImageText, { color: colors.accent2[300] }]}>Add a poll</Text>
+              <Text style={[styles.addMediaText, { color: colors.accent2[300] }]}>Add a poll</Text>
             </Pressable>
           )}
 
@@ -229,7 +301,66 @@ export default function CreatePost() {
           {error && <Text style={styles.error}>{error}</Text>}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <DiscardConfirmModal
+        visible={showDiscardConfirm}
+        title="Discard this post?"
+        body="Everything you've entered so far will be lost — this can't be undone."
+        onKeepEditing={() => setShowDiscardConfirm(false)}
+        onDiscard={() => router.back()}
+      />
     </SafeAreaView>
+  );
+}
+
+/**
+ * One thumbnail in the composer's media strip. Branches to a separate
+ * component per kind (rather than one component with a conditional
+ * `useVideoPlayer` call) so an image tile never allocates a native video
+ * player it will never use.
+ */
+function ComposerMediaTile({ media, onRemove, disabled }: { media: PickedMedia; onRemove: () => void; disabled: boolean }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  return (
+    <View style={styles.tile}>
+      {media.kind === 'video' ? <ComposerVideoThumb uri={media.uri} /> : (
+        <Image source={{ uri: media.uri }} style={styles.tileMedia} contentFit="cover" />
+      )}
+      <Pressable
+        style={styles.tileRemove}
+        onPress={onRemove}
+        disabled={disabled}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Remove"
+      >
+        <Icon name="close" size={13} color={colors.text} />
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * A paused, no-controls video preview (this is a picker tile, not a
+ * player: tapping remove is the only interaction it needs) with a
+ * centered play glyph standing in for a real poster frame, since this
+ * app has no thumbnail-extraction step and doesn't need one for a
+ * handful of ephemeral composer tiles.
+ */
+function ComposerVideoThumb({ uri }: { uri: string }) {
+  const colors = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const player = useVideoPlayer(uri);
+
+  return (
+    <View style={styles.tileVideoWrap}>
+      <VideoView player={player} style={styles.tileMedia} contentFit="cover" nativeControls={false} />
+      <View style={styles.tilePlayBadge}>
+        <Icon name="play" size={14} color="#ffffff" />
+      </View>
+    </View>
   );
 }
 
@@ -287,7 +418,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.accent.DEFAULT,
     borderWidth: 1.5,
   },
-  addImage: {
+  addMedia: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -298,31 +429,81 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: colors.divider,
   },
-  addImageText: {
+  addMediaText: {
     fontFamily: Fonts.bodySemibold,
     fontSize: 13.5,
     color: colors.accent[300],
   },
-  imageWrap: {
-    width: '100%',
+  tileRow: {
+    gap: Spacing[2],
+  },
+  tile: {
+    width: TILE_SIZE,
+    height: TILE_SIZE,
     borderRadius: Radius.md,
     overflow: 'hidden',
     backgroundColor: colors.surface,
   },
-  image: {
+  tileMedia: {
     width: '100%',
     height: '100%',
   },
-  removeImage: {
+  tileVideoWrap: {
+    width: '100%',
+    height: '100%',
+  },
+  tilePlayBadge: {
     position: 'absolute',
-    right: 10,
-    top: 10,
-    width: 30,
-    height: 30,
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileRemove: {
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 22,
+    height: 22,
     borderRadius: Radius.pill,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  addTile: {
+    width: TILE_SIZE,
+    height: TILE_SIZE,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickChoice: {
+    flexDirection: 'row',
+    gap: Spacing[2],
+  },
+  pickButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing[2],
+    height: 48,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.divider,
+    paddingHorizontal: Spacing[2],
+  },
+  pickButtonText: {
+    fontFamily: Fonts.bodySemibold,
+    fontSize: 12.5,
+    color: colors.accent[300],
+    flexShrink: 1,
   },
   pollBox: {
     padding: Spacing[3],
