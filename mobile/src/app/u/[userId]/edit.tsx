@@ -128,7 +128,7 @@ export default function EditProfile() {
           <Pressable onPress={handlePickBanner} style={styles.bannerWrap}>
             {bannerUri ? (
               <>
-                <Image source={{ uri: bannerUri }} style={styles.bannerImage} contentFit="cover" />
+                <Image source={{ uri: bannerUri }} style={styles.bannerImage} contentFit="cover" cachePolicy="memory-disk" />
                 <View style={styles.bannerEditButton}>
                   <Icon name="camera" size={18} color="#ffffff" />
                 </View>
@@ -145,7 +145,7 @@ export default function EditProfile() {
 
           <Pressable onPress={handlePickAvatar} style={styles.avatarRing}>
             {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatarImage} contentFit="cover" />
+              <Image source={{ uri: avatarUri }} style={styles.avatarImage} contentFit="cover" cachePolicy="memory-disk" />
             ) : (
               <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarPlaceholderLetter}>{name.trim().charAt(0).toUpperCase() || '?'}</Text>

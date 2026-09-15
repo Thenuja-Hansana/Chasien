@@ -247,7 +247,15 @@ function RoomCard({
       onPress={() => router.push({ pathname: '/c/[communityId]', params: { communityId: room.slug } })}
     >
       <View style={[styles.cardBanner, { backgroundColor: accent }]}>
-        {bannerUrl && <Image source={{ uri: bannerUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />}
+        {bannerUrl && (
+          <Image
+            source={{ uri: bannerUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={200}
+          />
+        )}
         <LinearGradient
           colors={['rgba(255,255,255,0.35)', 'rgba(0,0,0,0.25)']}
           start={{ x: 0, y: 0 }}
@@ -259,7 +267,22 @@ function RoomCard({
       <View style={styles.cardBody}>
         <View style={styles.cardTopRow}>
           {avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.cardLogo} contentFit="cover" />
+            // The accent+letter fallback renders underneath, not instead of,
+            // the photo — otherwise this card shows nothing at all while
+            // avatarUrl's signed URL loads. Same fix as Avatar.tsx, image
+            // caching pass, 2026-09-15.
+            <View style={styles.cardLogo}>
+              <View style={[StyleSheet.absoluteFill, styles.cardLogoFill, { backgroundColor: accent }]}>
+                <Text style={styles.cardLogoLetter}>{room.name.charAt(0).toUpperCase()}</Text>
+              </View>
+              <Image
+                source={{ uri: avatarUrl }}
+                style={[StyleSheet.absoluteFill, styles.cardLogoFill]}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={200}
+              />
+            </View>
           ) : (
             <View style={[styles.cardLogo, { backgroundColor: accent }]}>
               <Text style={styles.cardLogoLetter}>{room.name.charAt(0).toUpperCase()}</Text>
@@ -445,6 +468,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: colors.surface,
+  },
+  // Just the round clip, for the fallback/photo layers stacked inside
+  // cardLogo's own border+centering box — see the imageUrl branch above.
+  cardLogoFill: {
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardLogoLetter: {
     fontFamily: Fonts.heading,

@@ -163,10 +163,19 @@ export default function ProfileScreen() {
         ) : (
           <>
             <View style={styles.bannerWrap}>
-              {bannerUrl ? (
-                <Image source={{ uri: bannerUrl }} style={styles.bannerImage} contentFit="cover" />
-              ) : (
-                <View style={styles.bannerEmpty} />
+              {/* bannerEmpty renders underneath regardless of bannerUrl, not
+                  just as the no-banner fallback — otherwise a real banner
+                  shows nothing while its signed URL loads. Image caching
+                  pass, 2026-09-15. */}
+              <View style={styles.bannerEmpty} />
+              {bannerUrl && (
+                <Image
+                  source={{ uri: bannerUrl }}
+                  style={[StyleSheet.absoluteFill, styles.bannerImage]}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={200}
+                />
               )}
               {isOwnProfile && (
                 <Pressable
@@ -310,7 +319,13 @@ export default function ProfileScreen() {
                           }
                         >
                           {url ? (
-                            <Image source={{ uri: url }} style={styles.postThumbImage} contentFit="cover" />
+                            <Image
+                              source={{ uri: url }}
+                              style={styles.postThumbImage}
+                              contentFit="cover"
+                              cachePolicy="memory-disk"
+                              transition={150}
+                            />
                           ) : (
                             <Text style={styles.postThumbText} numberOfLines={5}>
                               {post.hasPoll ? '📊 Poll' : (post.text ?? '')}

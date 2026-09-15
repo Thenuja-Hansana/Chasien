@@ -87,6 +87,7 @@ export default function PostCard({
             style={styles.image}
             contentFit="contain"
             transition={150}
+            cachePolicy="memory-disk"
             onLoad={handleImageLoad}
           />
           {post.imageCount > 1 && <Text style={styles.imageCount}>1/{post.imageCount}</Text>}

@@ -191,7 +191,7 @@ export default function StoryViewer() {
         story.kind === 'video' ? (
           <StoryVideo key={story.id} uri={url} onProgress={handleVideoProgress} onEnd={next} />
         ) : (
-          <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={150} />
         )
       )}
       <LinearGradient colors={['rgba(0,0,0,.65)', 'transparent']} style={styles.topShade} />

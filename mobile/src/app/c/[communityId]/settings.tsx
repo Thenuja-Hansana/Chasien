@@ -303,7 +303,12 @@ export default function CommunitySettings() {
           <Pressable onPress={handlePickBanner} style={styles.previewBannerWrap}>
             {bannerImage || existingBannerUrl ? (
               <>
-                <Image source={{ uri: bannerImage?.uri ?? existingBannerUrl! }} style={styles.previewBannerImage} contentFit="cover" />
+                <Image
+                  source={{ uri: bannerImage?.uri ?? existingBannerUrl! }}
+                  style={styles.previewBannerImage}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
                 <View style={styles.bannerEditButton}>
                   <Icon name="camera" size={18} color="#ffffff" />
                 </View>
@@ -321,7 +326,12 @@ export default function CommunitySettings() {
           <View style={styles.previewRow}>
             <Pressable onPress={handlePickAvatar} style={styles.avatarRing}>
               {avatarImage || existingAvatarUrl ? (
-                <Image source={{ uri: avatarImage?.uri ?? existingAvatarUrl! }} style={styles.previewAvatar} contentFit="cover" />
+                <Image
+                  source={{ uri: avatarImage?.uri ?? existingAvatarUrl! }}
+                  style={styles.previewAvatar}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
               ) : (
                 <View style={[styles.previewAvatar, { backgroundColor: currentRoom.accent_color ?? colors.neutral[700] }]}>
                   <Text style={styles.previewAvatarLetter}>{currentRoom.name.charAt(0).toUpperCase()}</Text>

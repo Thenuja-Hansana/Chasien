@@ -99,7 +99,13 @@ export default function UserPreviewCard({ userId, visible, onClose }: { userId: 
                     return (
                       <View key={post.id} style={styles.postThumb}>
                         {url ? (
-                          <Image source={{ uri: url }} style={styles.postThumbImage} contentFit="cover" />
+                          <Image
+                            source={{ uri: url }}
+                            style={styles.postThumbImage}
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={150}
+                          />
                         ) : (
                           <Text style={styles.postThumbText} numberOfLines={4}>
                             {post.hasPoll ? '📊 Poll' : (post.text ?? '')}

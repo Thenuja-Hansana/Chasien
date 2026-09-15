@@ -215,6 +215,7 @@ export default function PostDetail() {
               style={[styles.heroImage, { aspectRatio: heroAspectRatio, maxHeight: maxHeroHeight }]}
               contentFit="contain"
               transition={150}
+              cachePolicy="memory-disk"
               onLoad={handleHeroLoad}
             />
           )}

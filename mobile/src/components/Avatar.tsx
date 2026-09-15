@@ -59,9 +59,7 @@ export default function Avatar({ gradient, color, imageUrl, letter, size = 40, s
   const gradientColors = gradientsFor(colors)[gradient] ?? gradientsFor(colors).mara;
   const radius = shape === 'circle' ? 999 : Math.max(10, size * 0.34);
 
-  const inner = imageUrl ? (
-    <Image source={{ uri: imageUrl }} style={[styles.fill, { borderRadius: radius }]} contentFit="cover" />
-  ) : color ? (
+  const fallback = color ? (
     <View style={[styles.fill, { borderRadius: radius, backgroundColor: color }]}>
       {/* colors.onAccent, not the theme-derived contrast the gradient
           branch below uses — matches Home's roomIconLetter exactly, since
@@ -82,6 +80,28 @@ export default function Avatar({ gradient, color, imageUrl, letter, size = 40, s
           for text on its "mine" bubble. */}
       <Text style={[styles.letter, { fontSize: size * 0.4, color: colors.bg }]}>{letter}</Text>
     </LinearGradient>
+  );
+
+  // A real photo used to render *instead of* the color/gradient fallback,
+  // so an avatar with an actual uploaded photo showed nothing at all
+  // while its signed URL loaded/decoded — every other avatar state already
+  // has a correctly-colored placeholder, this one just never used it. Now
+  // the fallback always renders as the base layer and the photo
+  // cross-fades in on top of it once decoded, image caching pass,
+  // 2026-09-15.
+  const inner = imageUrl ? (
+    <View style={styles.fill}>
+      {fallback}
+      <Image
+        source={{ uri: imageUrl }}
+        style={[styles.fill, StyleSheet.absoluteFill, { borderRadius: radius }]}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={200}
+      />
+    </View>
+  ) : (
+    fallback
   );
 
   return (

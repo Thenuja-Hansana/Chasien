@@ -52,7 +52,7 @@ function RowPreview({ text, imagePath, mediaUrls }: { text: string; imagePath: s
 
   return (
     <View style={styles.previewLine}>
-      {url && <Image source={{ uri: url }} style={styles.previewThumb} contentFit="cover" />}
+      {url && <Image source={{ uri: url }} style={styles.previewThumb} contentFit="cover" cachePolicy="memory-disk" />}
       <Text style={styles.rowPreview} numberOfLines={1}>
         {text}
       </Text>

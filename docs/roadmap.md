@@ -491,9 +491,43 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
 - [ ] Image loading/caching pass: `expo-image` cache policy, placeholders
       (blurhash or solid-color), and right-sized variants for thumbnails
       vs. full-screen views instead of always loading the full asset.
-      **Not started** — every `<Image>` call site only ever sets
-      `contentFit`; no `cachePolicy`, no placeholders, no thumbnail vs.
-      full-size variants anywhere
+      **Partial — 2026-09-15:** cache policy and placeholders done;
+      right-sized variants blocked, not implemented (see below).
+      `cachePolicy="memory-disk"` added to every remote-image call site
+      app-wide (Avatar, post images, chat images,
+      Discover cards, profile banner/post-grid, Chats inbox thumbnails,
+      story viewer, post detail) — local file-picker previews (create-
+      Room, create-post, create-story) deliberately skipped, caching is
+      meaningless for a `file://` URI that's about to be uploaded and
+      discarded. Solid-color placeholders added everywhere a real gap
+      existed: `Avatar.tsx`'s photo case rendered nothing at all while
+      loading instead of its own gradient/color fallback (now the
+      fallback renders as a base layer, the photo cross-fades on top,
+      `transition={200}`) — same fix applied to Discover's Room-card logo
+      and Profile's banner, which had the identical gap. Most other call
+      sites already had a `backgroundColor` on the image's wrapper (a
+      legitimate solid-color placeholder) from earlier work — left as-is.
+      Also fixed in passing: `MessageBubble.tsx`'s two chat-image call
+      sites were using React Native's core `Image`, not `expo-image` at
+      all — no caching, no placeholder support, ever, regardless of this
+      pass — switched to `expo-image`. **Right-sized thumbnail/full-size
+      variants: not implemented, and not currently implementable.**
+      Supabase Storage's image-transformation API (`storage.image_
+      transformation` in `supabase/config.toml`) is Pro-plan only and
+      deliberately left disabled — this project has stayed on the free
+      tier throughout (see `mediaUtils.ts`'s own comments on protecting
+      free-tier storage/egress), so there's no dynamic per-request resize
+      endpoint to request a smaller variant from. The existing mitigation
+      is upload-time, not request-time: `compressImageForUpload()`
+      already caps every asset to 1080px on its longest edge (or a
+      cropped 1080px-class preset for feed/story uploads) before it ever
+      reaches storage, and `expo-image` downsamples during decode to
+      roughly its rendered `style` size regardless. Generating and
+      uploading a second, genuinely smaller thumbnail variant per image
+      would work, but touches the upload pipeline (extra encode, extra
+      upload, extra storage object per image) — a real feature, not a
+      client-side polish tweak, and out of scope for this pass. See
+      decision-log, 2026-09-15
 - [ ] Loading / empty / error states audited on every screen, not just
       the happy path. **Partial** — real `Skeleton`/`EmptyState`
       components exist and are wired into 5 screens (Home, Discover,

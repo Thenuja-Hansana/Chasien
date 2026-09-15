@@ -7,6 +7,97 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Bones Phase image loading/caching pass (partial: variants blocked)
+
+**What happened:** worked through the Bones Phase checklist's three-part
+image item — cache policy, placeholders, right-sized variants — across
+every `<Image>` call site in the app (19 across 14 files). Two of the
+three are done; the third turned out to be genuinely blocked by this
+project's own infrastructure constraints, not just unstarted, so the
+checklist item stays unchecked with a **Partial** note rather than being
+marked done on the strength of the two easier pieces.
+
+**Cache policy:** `cachePolicy="memory-disk"` added to every call site
+that loads a real remote/signed URL — `Avatar.tsx`, `PostCard.tsx`,
+`MessageBubble.tsx` (both bubbles), `discover.tsx` (banner + card logo),
+`u/[userId]/index.tsx` (banner + post-grid thumbnails),
+`UserPreviewCard.tsx`, `chats/index.tsx` (inbox photo-preview thumbnail),
+`story.tsx`, `post/[postId].tsx`, plus the *existing-image* branch of the
+three upload-preview screens that can show either a freshly-picked local
+photo or a previously-saved remote one (`c/[communityId]/settings.tsx`,
+`u/[userId]/edit.tsx`). Left alone, deliberately: `create-community.tsx`
+and the local-picker branches of `create-post.tsx`/`create-story.tsx` —
+every source there is a `file://` URI about to be uploaded and discarded,
+where a network cache policy is a no-op, not a missed optimization.
+
+**A real bug found along the way:** `MessageBubble.tsx`'s two chat-image
+call sites (`mineImage`/`theirsImage`) were importing `Image` from
+`react-native` itself, not `expo-image` — meaning chat photos had never
+had any of `expo-image`'s caching, decode-time downsampling, or
+placeholder support, on any platform, independent of this pass. Switched
+both to `expo-image`'s `Image` (confirmed via `tsc`: the `contentFit`
+prop doesn't exist on core `Image`'s types, which is what caught this).
+
+**Placeholders:** most image call sites already had a legitimate
+solid-color placeholder — a `backgroundColor` set on the image's wrapper
+View (`colors.surface`, a fixed gray, a Room's own accent color) — from
+earlier UI-consistency work, so those were left as-is. Two real gaps
+found and fixed: `Avatar.tsx`'s `imageUrl` branch rendered *only* the
+`<Image>`, with none of the component's own well-designed gradient/color/
+letter fallback behind it, so an avatar with a real uploaded photo showed
+nothing at all while its signed URL loaded or decoded — every other
+Avatar state already had a correctly-colored placeholder, this one just
+never used it. Restructured so the fallback always renders as a base
+layer and the photo is a `position: absolute` sibling on top with
+`transition={200}` (a cross-dissolve once it decodes) — `StyleSheet.
+absoluteFill` for the overlay (not `absoluteFillObject`, which this RN
+version's own type definitions don't export — caught by `tsc`, not
+assumed). The identical gap existed in two more places that hand-roll
+the same "photo with a color+letter fallback" pattern instead of reusing
+`Avatar`: Discover's Room-card logo and Profile's banner (the latter's
+`bannerEmpty` gray swatch was an else-branch instead of an always-visible
+base layer) — both fixed the same way.
+
+**Right-sized variants — blocked, not implemented.** The checklist item
+asks for "right-sized variants for thumbnails vs. full-screen views
+instead of always loading the full asset." Checked whether Supabase
+Storage's on-request image-transformation API could serve this (a
+signed/public URL with `?width=&height=` query params, resized server-
+side) — `supabase/config.toml` has `[storage.image_transformation]`
+commented out with the note "Image transformation API is available to
+Supabase Pro plan," and this project has deliberately stayed on the free
+tier throughout (see `mediaUtils.ts`'s own comments on protecting
+free-tier storage/egress costs, and `compressImageForUpload()`'s
+upload-time 1080px cap for the same reason). Without that endpoint,
+"right-sized" would mean generating and uploading a second, genuinely
+smaller object per image at upload time — a real change to the upload
+pipeline (a second `ImageManipulator` render + a second `uploadBase64`
+call per image, plus wiring the DB/UI to pick the right size per
+context), not a client-side rendering tweak like the two pieces above.
+Left undone rather than half-implemented under this pass's banner.
+`expo-image`'s own decode-time downsampling to roughly the rendered
+`style` size is the only mitigation currently in place — real, but not
+the same as a genuinely smaller stored asset.
+
+**Verified:** typecheck and lint clean (the two real bugs above — the
+`absoluteFillObject` typo and `MessageBubble`'s wrong `Image` import —
+were both caught by `tsc`, not by visual inspection). Re-screenshotted at
+a mobile viewport (Expo web + headless Chromium): Discover's "New" Room
+card (the one seeded Room with a real uploaded avatar photo) renders the
+photo cleanly through the new fallback+overlay layering, with no
+double-border or letter-bleed-through artifacts; Home, profile, Chats
+inbox, and the Room feed all render unchanged for the (majority)
+letter/gradient-avatar case, confirming no regression to the untouched
+branch.
+
+**Revisit when:** this project moves off Supabase's free tier (making
+`storage.image_transformation` available for real per-request resizing),
+or if asset size becomes an actually-measured problem worth the upload-
+pipeline work of generating real thumbnail variants — don't build it
+speculatively before either is true.
+
+---
+
 ## 2026-09-15 — Bones Phase list virtualization pass
 
 **What happened:** tuned or converted the four lists the Bones Phase
