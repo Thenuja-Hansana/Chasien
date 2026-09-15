@@ -7,6 +7,37 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-15 — Fix a white strip above Discover's "Find your Room" banner
+
+**What happened:** the user reported a bare white strip above the black
+"FIND YOUR ROOM" banner header on the Discover/Explore screen. Root cause
+was `discover.tsx`'s outer `SafeAreaView` applying `edges={['top']}` to
+the whole screen — that pads the status-bar-height area with the
+screen's own `container` background (white in Light mode) *before* the
+black `banner` View, which lives inside the scroll content below it, ever
+gets a chance to paint. The banner itself never reaches the top of the
+screen; a plain white gap sits above it instead.
+
+**Fix:** the outer `SafeAreaView` became a plain `View` (no top-edge
+inset on the screen itself), and the safe-area top inset
+(`useSafeAreaInsets().top`) moved into the `banner` View's own
+`paddingTop` instead. The black banner now paints all the way to `y: 0`,
+extending behind the status bar the way a full-bleed colored header
+should — only the heading/subtext inside it are pushed clear of the
+notch, not the color itself. Same pattern `story.tsx`'s full-bleed dark
+background already uses (a plain outer `View`, safe-area handling pushed
+onto the inner content instead of the whole screen).
+
+**Verified:** typecheck and lint clean; re-rendered on Expo web with no
+crash or regression. Web can't actually demonstrate the fix itself —
+`useSafeAreaInsets()` reports `top: 0` in a browser with no notch to
+account for, so the bug never reproduced there to begin with and the
+screenshot looks identical before and after. The fix is a standard,
+well-understood pattern (matches `story.tsx`'s own precedent exactly),
+but the real confirmation is on-device.
+
+---
+
 ## 2026-09-15 — Bones Phase animation and transition polish
 
 **What happened:** closed out the Bones Phase checklist's last non-

@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
@@ -45,6 +45,7 @@ export default function Discover() {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
+  const insets = useSafeAreaInsets();
   const blurTargetRef = useRef<View>(null);
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const [memberships, setMemberships] = useState<Map<string, Membership>>(new Map());
@@ -105,10 +106,18 @@ export default function Discover() {
   const filteredRooms = rooms?.filter((r) => filter === 'all' || r.category === filter) ?? null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <BlurTargetView ref={blurTargetRef} style={styles.flex}>
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: clearance }]}>
-        <View style={styles.banner}>
+        {/* No top-edge SafeAreaView on the screen itself — that padded
+            the status-bar area with the screen's own (white, in Light
+            mode) background before this banner ever got a chance to
+            paint, leaving a bare strip above "FIND YOUR ROOM" instead of
+            the banner running edge-to-edge behind the status bar the way
+            a full-bleed colored header should. The inset goes into the
+            banner's own paddingTop instead, so the color reaches y: 0 and
+            only the heading/subtext are pushed clear of the notch. */}
+        <View style={[styles.banner, { paddingTop: insets.top + Spacing[8] }]}>
           <Text style={styles.bannerHeading}>FIND YOUR{'\n'}ROOM</Text>
           <Text style={styles.bannerSubtext}>From climbing crews to sourdough starters — there&apos;s a Room for you.</Text>
         </View>
@@ -187,7 +196,7 @@ export default function Discover() {
 
       <StartRoomFab />
       <TabBar active="Explore" userId={session.user.id} blurTarget={blurTargetRef} />
-    </SafeAreaView>
+    </View>
   );
 }
 
