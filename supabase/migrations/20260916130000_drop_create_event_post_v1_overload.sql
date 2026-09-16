@@ -1,0 +1,22 @@
+-- Drops the original 5-parameter create_event_post() left behind by
+-- 20260915160100_create_event_post_rpc_v2.sql.
+--
+-- That migration added p_event_ends_at and p_event_link with
+-- `create or replace`, and its header comment says doing so keeps the
+-- function's identity. It doesn't: Postgres identifies a function by its
+-- name *and* its argument types, so a different parameter list creates a
+-- second overload instead of replacing the first. Both versions existed
+-- side by side (found by a local backend smoke test, 2026-09-16).
+--
+-- Harmless to the app as written — lib/posts.ts's createEventPost() always
+-- sends all seven named parameters, which only the new version matches —
+-- but any call omitting p_event_ends_at/p_event_link (including a JS object
+-- where either is `undefined`, which JSON.stringify silently drops) failed
+-- with PGRST203 "Could not choose the best candidate function". Both
+-- versions were SECURITY INVOKER, so the old one was never a privilege
+-- problem, only an ambiguity.
+--
+-- The 7-parameter version is untouched, and nothing calls the old one.
+-- (For the same mistake to not recur: 20260916120100_create_post_rpc_v2.sql
+-- shows the right way to add a parameter — drop, then create.)
+drop function if exists create_event_post(uuid, text, text, timestamptz, text);
