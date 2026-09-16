@@ -39,15 +39,29 @@ Deno.serve(async (req) => {
 
   const { data: verification } = await admin
     .from('room_email_verifications')
-    .select('id, room_id, user_id, verified_at, expires_at')
+    .select('id, room_id, user_id, email, verified_at, expires_at')
     .eq('token', token)
     .maybeSingle();
   if (!verification) {
     return page('<h2>This verification link is invalid.</h2>', 404);
   }
 
-  const { data: room } = await admin.from('rooms').select('name').eq('id', verification.room_id).maybeSingle();
+  const { data: room } = await admin.from('rooms').select('name, visibility, required_email_domain').eq('id', verification.room_id).maybeSingle();
   const roomName = room?.name ?? 'this Room';
+
+  // Re-check the domain here too, not only in request-room-verification.
+  // Clients used to be able to insert their own verification rows (any
+  // email, self-chosen token) and this function trusted whatever row the
+  // token matched — a full bypass of domain verification, found and closed
+  // 2026-09-16 (see 20260916150000_lock_down_client_writable_columns.sql).
+  // Only the service role can write these rows now, but a membership grant
+  // shouldn't depend on that alone: the row must still name an address at
+  // the Room's current required domain.
+  const emailDomain = String(verification.email ?? '').trim().toLowerCase().split('@')[1];
+  const requiredDomain = room?.required_email_domain?.toLowerCase();
+  if (room?.visibility !== 'domain_verified' || !requiredDomain || emailDomain !== requiredDomain) {
+    return page('<h2>This verification link is invalid.</h2><p>Go back to the app and request a new one.</p>', 403);
+  }
 
   if (verification.verified_at) {
     return page(`<h2>Already verified</h2><p>You're a member of <strong>${roomName}</strong> — reopen the Chasien app to see it.</p>`);
