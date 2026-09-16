@@ -56,7 +56,6 @@ export default function RoomHome() {
   const [error, setError] = useState<string | null>(null);
 
   const [posts, setPosts] = useState<FeedPost[] | null>(null);
-  const [page, setPage] = useState(0);
   const [reachedEnd, setReachedEnd] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,9 +76,8 @@ export default function RoomHome() {
   const loadFeed = useCallback(
     async (roomId: string) => {
       if (!userId) return;
-      const first = await fetchRoomFeed(roomId, userId, 0);
+      const first = await fetchRoomFeed(roomId, userId);
       setPosts(first);
-      setPage(0);
       setReachedEnd(first.length < FEED_PAGE_SIZE);
     },
     [userId],
@@ -255,9 +253,11 @@ export default function RoomHome() {
     if (loadingMore || reachedEnd || !posts || !userId) return;
     setLoadingMore(true);
     try {
-      const next = await fetchRoomFeed(roomId, userId, page + 1);
+      // Continue after the last post still in the list — correct even after
+      // hides/deletes removed rows, which offset paging wasn't.
+      const last = posts[posts.length - 1];
+      const next = await fetchRoomFeed(roomId, userId, last ? { createdAt: last.createdAt, id: last.id } : null);
       setPosts([...posts, ...next]);
-      setPage(page + 1);
       if (next.length < FEED_PAGE_SIZE) setReachedEnd(true);
     } catch {
       setReachedEnd(true);

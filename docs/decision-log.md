@@ -7,6 +7,43 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-16 — Room feed pages by cursor, not offset
+
+**Context:** Flagged while fixing the duplicate-photo warning: the Room feed
+loaded 20 posts at a time with `range(page × 20, …)`, ordered by `created_at`
+alone.
+
+**Reproduced on the local stack** (25 seeded posts in `testing`, through the
+public API with the app's query):
+- A post arriving between page 1 and page 2 pushed page 1's last post onto
+  page 2 — **the same post twice**, React's duplicate-key warning.
+- A post removed from page 1 before page 2 (hide, delete) pulled a row back —
+  **one post never shown at all**. Worse than the duplicate, since it's
+  silent; not previously known.
+- Two posts with the same `created_at` at a page boundary have no defined
+  order under offset paging, so they can also repeat or vanish.
+
+**Fix:** keyset pagination. `fetchRoomFeed(roomId, userId, after?)` orders by
+`(created_at, id)` and continues strictly after the last post already in the
+list (`created_at < x or (created_at = x and id < y)`); the feed screen passes
+its current last post as the cursor, so rows removed from the list since
+don't matter. `id` is the tiebreaker. The cursor keeps `created_at` as the
+exact string the API returned — converting through `Date` would drop the
+microseconds and break the equality branch. Values are double-quoted in the
+`.or()` filter because a timestamp's `:`/`+` are PostgREST syntax otherwise.
+No migration: `posts_room_feed_idx (room_id, created_at desc)` still serves
+the ordering; ties are rare enough that the extra `id` sort is negligible.
+Revisit with a `(room_id, created_at desc, id desc)` index if feeds get large.
+
+**Verification:** before/after on the same scenarios — offset: 1 duplicate,
+1 skipped; keyset: 0 and 0. Re-run through the app's own supabase-js client
+with `fetchRoomFeed`'s query chain (3/3, including two identical timestamps
+that actually straddled the page boundary), plus the complete query with
+`POST_SELECT` embeds, the hidden-posts exclusion and a cursor (no overlap,
+ordered, embeds intact). Backend smoke test 30/30. Lint + typecheck pass.
+Needs a scroll-through-the-feed check on the A14.
+
+
 ## 2026-09-16 — Tag people (New Post screen, stage 4)
 
 **Decision:** an author can tag up to 20 people in a post; tagged people are

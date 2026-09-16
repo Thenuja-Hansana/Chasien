@@ -228,14 +228,25 @@ async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<str
 
 export const FEED_PAGE_SIZE = 20;
 
+/** Where the next page starts: the last post already loaded. `createdAt` must be the exact string the API returned (microseconds included). */
+export type FeedCursor = { createdAt: string; id: string };
+
 /**
  * Reverse-chronological, paginated. Never ranked — `posts_room_feed_idx`
  * (room_id, created_at desc) exists precisely to make this ordering the
  * fast path, per feed.sql.
+ *
+ * Keyset pagination: each page continues strictly after `after`, ordered by
+ * (created_at, id). It used to be offset pagination ordered by created_at
+ * alone, which broke two ways, both reproduced on the local stack
+ * (2026-09-16): a post arriving while you scroll pushed the last row of the
+ * previous page onto the next one (the same post twice — React's
+ * duplicate-key warning), and a post removed from a loaded page (hide,
+ * delete) pulled a row back so it was never shown at all. `id` breaks ties
+ * between posts with the same timestamp, so none are skipped or repeated at
+ * a page boundary either.
  */
-export async function fetchRoomFeed(roomId: string, userId: string, page = 0) {
-  const from = page * FEED_PAGE_SIZE;
-
+export async function fetchRoomFeed(roomId: string, userId: string, after: FeedCursor | null = null) {
   // Hidden posts are excluded before pagination (not filtered out of an
   // already-paged result afterward), so a page never comes back short just
   // because some of what it fetched happened to be hidden. A separate
@@ -254,9 +265,13 @@ export async function fetchRoomFeed(roomId: string, userId: string, page = 0) {
   if (hiddenIds.length > 0) {
     postsQuery = postsQuery.not('id', 'in', `(${hiddenIds.join(',')})`);
   }
+  if (after) {
+    // Quoted: a timestamp's ':' and '+' are otherwise read as PostgREST syntax.
+    postsQuery = postsQuery.or(`created_at.lt."${after.createdAt}",and(created_at.eq."${after.createdAt}",id.lt.${after.id})`);
+  }
 
   const [postsRes, membersRes] = await Promise.all([
-    postsQuery.order('created_at', { ascending: false }).range(from, from + FEED_PAGE_SIZE - 1),
+    postsQuery.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(FEED_PAGE_SIZE),
     // Powers the OWNER/MOD badge. Every approved member can read the
     // other approved members of a Room they're in (see
     // 20260814073649_members_can_see_each_other.sql) — before that
