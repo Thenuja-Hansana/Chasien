@@ -47,7 +47,10 @@ user load, real revenue) to spend money.
 - **Authority-bearing changes are server-side:** membership, roles and join
   state (room-membership Edge Function), pins and removals (SECURITY DEFINER
   functions), domain verification (service-role Edge Functions), counters
-  and notifications (SECURITY DEFINER triggers).
+  and notifications (SECURITY DEFINER triggers), and post tags
+  (`tag_people_in_post()`, SECURITY DEFINER, which silently drops anyone not
+  allowed so no error can reveal a block — clients may only read tags and
+  remove their own).
 - **No client edits of posts, comments or messages yet.** When editing
   ships, grant UPDATE on the content column together with a trigger that
   stamps `edited_at`, so edits can't be silent.

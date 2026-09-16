@@ -7,6 +7,68 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-16 — Tag people (New Post screen, stage 4)
+
+**Decision:** an author can tag up to 20 people in a post; tagged people are
+notified, see who's tagged on the post, and can remove themselves.
+
+**Rules:** only approved members of the post's Room; never the author;
+nobody with a block in either direction; duplicates collapse; 20 max
+(counted on what was requested, before filtering, so the limit can't probe
+who got filtered). A member who muted the Room is tagged but not notified —
+the same rule @mentions follow.
+
+**The design changed from the plan in one place, for privacy.** The plan had
+tags inserted by the client under an RLS check. But `blocks` only lets you
+see blocks *you* made — if an insert for someone who blocked you were
+refused, that refusal would tell you. So there is **no client INSERT on
+`post_tags` at all**: the only write path is `tag_people_in_post()`
+(SECURITY DEFINER, sees every block), which `create_post()` calls, and which
+drops disallowed people silently. Clients may read tags (only where they can
+read the post) and delete their own tag. Residual limit, same as Instagram's:
+an author reading back their own post's tags could notice someone missing,
+but nothing states why.
+
+**Schema** (`20260916170000_notification_type_tag.sql`,
+`20260916170100_post_tags.sql`): the `tag` enum value is its own migration
+(Postgres can't use an enum value in the transaction that added it).
+`post_tags (post_id, user_id)`, cascade on post/profile delete; SELECT via
+the post's own RLS, DELETE for the tagged person only (failing closed — no
+author removal until a feature needs it); `notify_on_post_tag` trigger
+writes `{postId, preview}`, matching the other post notifications so the
+notifications screen's existing "open the post" routing just works.
+`create_post()` dropped and recreated with `p_tagged_user_ids uuid[]`.
+`notify-activity` gains the push title "X tagged you in a post".
+
+**Display:** a person badge on the photo that reveals tappable names (the
+choice made for this stage); posts without media have nowhere for a badge,
+so they get a small "with @a, @b +N" line under the author instead. Names
+open the existing profile preview. "Remove tag" appears in the post's ⋯ menu
+only for someone who's tagged. The composer's Tag people row sits above Add
+location (Instagram's order); `TagPeopleSheet` searches the Room's members,
+hides people you've blocked, and uses the Android keyboard rule from the
+location-sheet fix.
+
+**Verification:**
+- 15 SQL checks as real users, all rolled back: exactly the allowed person
+  tagged from a list mixing a member, a duplicate, blocked-by-author,
+  blocked-the-author, self and a non-member; one notification to the right
+  person with the right actor; members read tags, non-members/outsider/anon
+  don't; direct insert, update and tagging on someone else's post refused;
+  only the tagged person can remove a tag; muted member tagged but not
+  notified; 21 tags refused with the whole post rolled back; deleted post's
+  tags hidden.
+- 9 API checks with the app's exact request shapes (picker query, JSON uuid
+  array into `create_post`, `post_tags(user_id, profiles(handle, name))`
+  embed, outsider isolation, direct POST refused, remove-own-tag), using a
+  temporary membership that was fully undone (member_count and channel
+  participants verified back to their prior values).
+- Regression: 30-check backend smoke, 11 location, 15 posts-grants, 38
+  security — all pass. Lint + typecheck pass. 69 migrations applied.
+- Not verifiable off-device: the push itself (it goes to Expo's service) and
+  the UI. Needs the A14 plus a second account in a browser.
+
+
 ## 2026-09-16 — Location sheet hid behind the keyboard on Android
 
 **Found on the Galaxy A14:** typing in the Add location sheet, the text

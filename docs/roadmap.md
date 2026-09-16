@@ -686,8 +686,9 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       added anywhere — nothing found needed them; adding either
       preemptively without a located problem would be guessing. See
       decision-log, 2026-09-15
-- [ ] Post composer's review step becomes Instagram's New Post screen,
-      in four stages, each verified on the Galaxy A14 before the next:
+- [x] Post composer's review step becomes Instagram's New Post screen,
+      in four stages, each verified on the Galaxy A14 before the next
+      (all four done, 2026-09-16):
   - [x] **Stage 1 — the screen.** Media previewed at exactly the feed's
         size and crop, borderless caption, Post button pinned at the
         bottom, back arrow to the picker. Lint/typecheck clean; tested
@@ -708,7 +709,17 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
         30-check smoke + 38-check security suite); tested on the Galaxy A14
         by the developer, 2026-09-16, including a follow-up fix for the
         sheet hiding behind the keyboard. See decision-log, 2026-09-16
-  - [ ] **Stage 4 — Tag people.** `post_tags` table written only through
+  - [x] **Stage 4 — Tag people.** Code in (`20260916170000`/`170100`,
+        `TagPeopleSheet`, `PostTags` badge/line, "Remove tag" in the post
+        menu, `tag` notification + push text); lint/typecheck clean;
+        backend verified (15 SQL rule checks, 9 API checks, plus smoke,
+        location, posts-grants and security suites). Built as planned below
+        except writes go through a SECURITY DEFINER `tag_people_in_post()`
+        with no client INSERT at all — a client insert checked by RLS would
+        have revealed blocks through its errors. Tested on the Galaxy A14 by
+        the developer, 2026-09-16, including the tag notification and push
+        arriving on the phone from a second account.
+        Original plan: `post_tags` table written only through
         `create_post`, which drops anyone who isn't an approved member of
         the Room or has a block either way; the people picker can read the
         Room's approved members directly (fellow members already can,
