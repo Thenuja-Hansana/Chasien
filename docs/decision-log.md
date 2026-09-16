@@ -7,6 +7,638 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-16 — Location sheet hid behind the keyboard on Android
+
+**Found on the Galaxy A14:** typing in the Add location sheet, the text
+field sat under the keyboard. `LocationSheet` used
+`KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}`
+— `undefined` turns avoidance off. That relied on Android's `adjustResize`
+shrinking the window, which Expo's default edge-to-edge display (Android 15+
+target) no longer does. The chat composer had already hit and documented
+exactly this (`chats/[chatId].tsx`) and uses `'height'` on Android.
+
+**Fix:** `'height'` on Android, matching the chat composer, with a comment
+saying why. Rule of thumb for this app: any `KeyboardAvoidingView`, including
+inside an RN `<Modal>`, gets `'height'` on Android, never `undefined`.
+
+**Verification:** lint + typecheck only — keyboard behavior can't be checked
+off-device. Needs the A14: the field, counter and buttons should ride above
+the keyboard. If the sheet's nav-bar bottom padding leaves a visible gap
+above the keyboard, drop that padding while the keyboard is shown.
+
+
+## 2026-09-16 — Posts get a location (New Post screen, stage 3)
+
+**Decision:** a post can carry a free-text place name, added from an "Add
+location" row on the composer's review screen and shown under the author on
+the post card and post detail screen.
+
+- **Free text, not place search.** Place-search APIs (Google Places and
+  similar) are paid; this project stays on free tiers. Same shape as
+  `events.location`. Revisit if a free, self-hostable places dataset ever
+  becomes worth the storage.
+- **Schema** (`20260916160000_post_location.sql`): `posts.location text`
+  with a table CHECK of 1–100 characters or NULL. The limit is on the table,
+  not only in `create_post()`, because clients can insert into `posts`
+  directly — verified that a direct insert can't skip it. `create_post()`
+  trims and stores blank as NULL, and a location alone doesn't make a post
+  (still needs text, media or a poll).
+- **Column grant added on purpose.** Since the lockdown entry below, a new
+  column isn't client-writable until granted, and `create_post()` is
+  SECURITY INVOKER — so `grant insert (location) on posts` is part of the
+  migration. This is the first column added under that rule, and it worked
+  as intended: forgetting the grant would have failed loudly, not opened
+  anything.
+- **`create_post()` dropped and recreated** with a trailing `p_location`,
+  not `create or replace`, avoiding the leftover-overload bug
+  `create_event_post` had. `lib/posts.ts`'s `createPost()` sends every key,
+  `null` rather than omitted. A call without `p_location` (an older app
+  bundle) still resolves, since only one version exists.
+- **UI:** `LocationSheet` reuses `EventDateTimeModal`'s bottom-sheet shell
+  (its own bottom safe-area padding, since RN's Modal renders outside the
+  screen's SafeAreaView). It edits a draft and only commits on Done, so
+  backing out leaves the post's location unchanged; `maxLength` matches the
+  CHECK. The review screen shows only rows that work — Tag people joins in
+  stage 4. The draft counts toward the discard-confirmation check. Post tab
+  only; Clips could get it later.
+
+**Verification:** lint + typecheck pass. 11 checks against the local stack
+through the public API as real users (run once before the migration as a
+control, which failed): trimmed storage and read-back, blank → NULL, older
+7-key call still works, 100 accepted / 101 refused with no post created,
+location-only post refused, direct insert can't skip the limit, exactly one
+`create_post`, the column grant present, and a non-member reads zero rows.
+Regression: 30-check backend smoke test, 15-check posts grants suite, and
+38-check security suite all still pass. 67 migrations applied. Not yet
+checked on the Galaxy A14.
+
+
+## 2026-09-16 — Every client-writable table gets column-level grants; domain verification closed
+
+**Context:** Follow-up to the `posts` fix below — the same gap audited
+across all 24 tables. `grants.sql` granted every column of every table to
+`authenticated` and relied on RLS, which filters rows but not columns.
+
+**Reproduced before fixing** (ordinary users, exactly as PostgREST executes
+a request; rolled-back transactions except T1, which needed the real Edge
+Function and used a throwaway Room, cleaned up):
+- **T1 (high):** insert your own `room_email_verifications` row (any email,
+  self-chosen token), open `verify-room-email?token=…` → "You're verified!",
+  approved member of a domain_verified Room. The verify function looked rows
+  up by token alone and never re-checked the email.
+- **T2 (high):** a pending member of a private sub-group sets their own
+  `conversation_participants.join_state = 'approved'` and posts in it (the
+  "own personal preferences" policy guarded `banned`/`posting_disabled` but
+  not `join_state`).
+- **T3 (high):** muted in chat X, send in chat Y, update the message's
+  `conversation_id` to X. Messages could also be inserted future-dated and
+  self-pinned.
+- **T4:** accepting a friend request could rewrite `user_b`/`requested_by`
+  (WITH CHECK only required `status = 'accepted'`) → forged friendship.
+- **T5** never-expiring stories (`expires_at`); **T6** a second vote on a
+  single-choice poll by skipping `vote_poll()`; **T7** reports inserted as
+  already reviewed with a fabricated `content_snapshot`; **T8** comments
+  future-dated / "removed by" someone else; **T9** room `member_count` and
+  `created_by` rewrites.
+- Held already: moving content into a Room/conversation you're not in,
+  banned users, anon writes (RLS).
+
+**Also found — a functional bug, not a hole:** "mute this Room's
+notifications" updated `room_memberships` directly, which has no UPDATE
+policy by design, so it matched 0 rows with no error and never muted.
+
+**What changed** (`20260916150000_lock_down_client_writable_columns.sql`):
+- `room_email_verifications`: client INSERT policy dropped, all client
+  writes revoked — only `request-room-verification` (service role, which
+  checks the domain) writes it. `verify-room-email` now also re-checks that
+  the row's email is at the Room's current required domain before granting
+  membership, so a stray row can't grant it either.
+- Column-level INSERT/UPDATE grants, inventoried from every client write in
+  `mobile/src` and every SECURITY INVOKER function body:
+  `conversation_participants` (update: muted, pinned, last_read_at),
+  `messages` and `comments` (insert: content columns; no update), `posts`
+  (the UPDATE (text, tag) granted earlier today withdrawn — see below),
+  `friendships` (insert: the pair + requester; update: status), `stories`
+  (insert: content columns), `poll_votes` (insert: the vote), `reports`
+  (insert: reporter/target/reason — no status, reviewer or snapshot),
+  `rooms` (insert: creation fields; update: the settings screen's fields),
+  `profiles` (update: the editable fields + presence heartbeat),
+  `notifications` (update: read_at). Every trigger writing these tables was
+  checked first — all SECURITY DEFINER, so unaffected.
+- **No client UPDATE on posts, comments or messages at all.** Nothing in the
+  app edits them, and a text-only grant would still allow *silent* edits
+  (`edited_at` untouched) — including a muted member rewriting old messages.
+  This tightens the `posts` entry below. When editing ships, grant the
+  content column together with a trigger stamping `edited_at`.
+- `enforce_single_choice_poll_vote` BEFORE INSERT trigger (SECURITY DEFINER,
+  sees all votes) — `vote_poll()` still works because it removes the
+  previous pick first.
+- `set_room_notifications_muted(room, muted)` SECURITY DEFINER RPC, changing
+  only the caller's own approved membership row;
+  `setRoomNotificationsMuted()` in `lib/notifications.ts` calls it.
+- `anon`: INSERT/UPDATE/DELETE/TRUNCATE revoked on every table, and in
+  default privileges for future tables; TRUNCATE (which bypasses RLS)
+  revoked from `authenticated` too.
+
+**Verification:**
+- 38-check suite (attacks refused + every write path the app uses still
+  works: send message, react, mark read, participant prefs, comment, like,
+  hide, create_post, vote_poll single + multi, story, report, friend
+  request + accept, create Room + owner trigger, Room settings, profile,
+  presence, notification read, the new mute RPC, non-member mute refused).
+  **Control run first:** before the migration all the attack checks failed
+  and the app checks passed. The control also caught a false positive in the
+  suite itself (an invalid enum label made one "refused" check pass for the
+  wrong reason) — fixed, and confirmed failing pre-migration, passing after.
+- Domain verification end to end, 7/7: the attack's insert refused and its
+  token invalid; a stray wrong-domain row rejected by the Edge Function (403,
+  proving the new check is live); wrong-domain official request refused;
+  the real flow (request with a matching address → server-created row →
+  emailed link) still verifies and joins.
+- 30-check backend smoke test 30/30; posts grants suite 15/15 (its "author
+  text edit" check flipped to expect refusal). App lint + typecheck pass.
+  66 migrations applied. Nothing left behind by any test.
+
+**Deliberately not in this pass** (roadmap Phase 10): client-written
+timestamps on likes/reactions/blocks/hidden posts/push tokens; direct inserts
+into `polls`/`poll_options`/`post_media`/`events` that skip `create_post`'s
+validation; server-side report snapshots (Phase 9); business rules beyond
+column writes (e.g. DMs vs blocks) weren't audited.
+
+**Environment note:** the phone showed "Failed to load this Room" mid-session
+because Docker had stopped, the adb server had wedged (even `adb devices`
+hung) losing the `adb reverse` tunnels, and Metro wasn't running. Restored by
+relaunching Docker, `docker start supabase_edge_runtime_chasien`, killing and
+restarting adb, re-adding both reverses, starting Metro and relaunching the
+app via the localhost dev-client URL (runbook steps 1–8). Adding "a hung
+`adb` needs its processes killed, not just `adb kill-server`" to the runbook
+would be worth it if it recurs.
+
+
+## 2026-09-16 — posts: clients can only write the columns they're meant to
+
+**Context:** Found while planning Add location (which adds a column to
+`posts`). `grants.sql` (Phase 1) granted INSERT/UPDATE on every table to
+`authenticated` and left all restriction to RLS — but RLS filters *rows*,
+not *columns*. `posts`' INSERT policy checks authorship, membership and
+`members_can_post`; its UPDATE policy checks authorship; neither cares which
+columns are written.
+
+**What was actually open** (proven on the local stack through the public
+API with ordinary sessions; a plain-member case impersonated inside a
+rolled-back transaction so no notification was sent):
+- A plain member (tobi, Grit Club) could insert a post with `pinned = true`
+  and `created_at` a year in the future. The feed orders by `created_at`,
+  so such a post sits above every newer one in the Room; pinning is meant to
+  be moderator-only via `toggle_post_pin()`.
+- An author could update their own post's `pinned`, `created_at`, and the
+  moderation columns (`removed_by`, `removal_reason`).
+- **Not open:** moving a post into another Room by updating `room_id` was
+  already refused — an UPDATE's new row must also pass `posts`' SELECT
+  policy, which requires membership of the new Room. The core cross-Room
+  isolation guarantee held. (My first hypothesis was that it didn't; the
+  probe said otherwise, which is why it ran before anything was claimed.)
+
+**Fix:** `20260916140000_posts_column_write_grants.sql` revokes table-level
+INSERT/UPDATE on `posts` from `anon` and `authenticated`, then grants
+`authenticated` INSERT on only `room_id, author_id, text, tag` (exactly what
+the two SECURITY INVOKER RPCs, `create_post` and `create_event_post`, write)
+and UPDATE on only `text, tag` (the edit the "authors can edit their own
+posts" policy exists for). `toggle_post_pin` and `delete_post` are SECURITY
+DEFINER, so unaffected; `updated_at` is set by a BEFORE trigger, which
+column privileges don't apply to; the client never writes `posts` directly.
+Writers were inventoried from the full migration history, not assumed.
+
+A consequence worth keeping: **a new `posts` column isn't client-writable
+until it's added to these grants.** Add location's `location` column will
+need adding to the INSERT grant.
+
+**Considered instead:** a BEFORE INSERT/UPDATE trigger rejecting changes to
+protected columns — works, but it has to special-case the SECURITY DEFINER
+RPCs that legitimately change `pinned`/`deleted_at`, and it fails open for
+any column nobody remembered to list. Column grants fail closed.
+
+**Verification:** a 15-check script run twice. Before the migration, as a
+control: all 6 refusal checks failed (the hole was real) and all 9
+"legitimate paths still work" checks passed. The control run also caught a
+bug in the test itself (concatenating a boolean yields `'true'`, not psql's
+`'t'`, so it misread `pinned`), fixed before the real run. After the
+migration: 15/15 — direct pinned/future-dated inserts and updates, and
+moderation-column updates, refused for the author and for a plain member;
+`create_post`, `create_event_post`, author text edits, `toggle_post_pin`
+(owner yes, non-moderator no) and `delete_post` all still work; `anon` has
+no INSERT/UPDATE left. The full 30-check backend smoke test still passes.
+65 migrations applied.
+
+**Not done here:** other tables very likely share both gaps (column-level
+writes, and `anon` holding default INSERT/UPDATE/DELETE). Added to the
+roadmap's Phase 10 security pass rather than widening this fix.
+
+**Environment note:** Docker Desktop was found fully stopped mid-session
+(free memory had been down to ~480 MB earlier — runbook gotcha #8). It came
+back with a plain relaunch; `supabase_edge_runtime_chasien` exited on
+restart as the runbook predicts and needed `docker start`.
+
+
+## 2026-09-16 — Local backend smoke test; the leftover create_event_post overload is dropped
+
+**Context:** The events, multi-answer poll and `vote_poll` migrations
+(2026-09-15/16) had never been exercised against a running local stack —
+their own entries say so. Ran a scripted end-to-end check through the public
+API as real seeded users (anon key + sessions, never the service role), in
+the `testing` Room (mara is its only member, so no other account got a
+notification or push), removing everything it created.
+
+**Result:** 29/30 on the first run. Services up (auth, PostgREST, storage,
+edge runtime executing `room-membership`); all 63 repo migrations applied,
+none missing or extra; photo upload to the private bucket, `create_post`
+with photo + poll, multi-answer voting and retraction, single-choice
+replacement, `create_event_post` with end time and link, signed URLs
+serving the exact bytes and no public URL. Room isolation held for a
+non-member (`outsider`): zero rows reading the post, media, poll, votes and
+event, and refused on signing, `create_post`, `vote_poll` and upload.
+
+**The failure:** two `create_event_post` functions existed. The v2
+migration (`20260915160100`) added `p_event_ends_at`/`p_event_link` with
+`create or replace`, and its comment claims that keeps the function's
+identity; Postgres identifies a function by name *and* argument types, so
+it created a second overload (the doubt was already noted in the "Polls can
+allow multiple answers" entry). The app was unaffected — `createEventPost()`
+always sends all seven named parameters — but any call omitting the two new
+ones failed with PGRST203 "Could not choose the best candidate function",
+reproduced directly. Both were SECURITY INVOKER, and a signed-out call was
+still refused by posts' RLS, so it was an ambiguity, not a hole.
+
+**Fix:** `20260916130000_drop_create_event_post_v1_overload.sql` drops the
+5-parameter version. Applied with `supabase migration up --local` (no reset,
+local data kept). Re-run: 30/30, and the previously failing call now
+succeeds with the defaults. Rule for next time, already followed by
+`create_post` v2: adding a parameter means drop, then create.
+
+**Noted, not changed:** `anon` can EXECUTE every function in `public` (35 of
+35) — Supabase's default grant, which the migrations' `revoke ... from
+public` lines don't remove. RLS is what actually stops a signed-out call
+(verified above), so this is a missing defense-in-depth layer rather than a
+bug; tightening it would be a project-wide change of its own.
+
+
+## 2026-09-16 — The photo grid remembers what's already in the post
+
+**Bug:** a console error, "Encountered two children with the same key", on
+the Post composer's review screen. The same photo was in the post twice.
+`MediaGridPicker` always opened with nothing ticked and knew nothing about
+media already in the post, and `create-post.tsx` *appended* whatever it
+confirmed. Going back from the review screen (its back arrow, added the
+same day, made this the obvious path) and ticking your photos again added
+each a second time; `PostMediaCarousel` keys slides by file path, so React
+warned. Posting would have uploaded the duplicate as a second slide. The
+old "+" tile in the pre-redesign strip had the same flaw.
+
+**Fix — Instagram's behavior:** the grid opens with the post's gallery
+items already ticked, in order, and "Next" returns the post's *complete*
+list, which replaces the parent's rather than adding to it.
+- Gallery items now carry `assetId` (`PickedMedia`), which is how the grid
+  recognizes them; confirming reuses the existing item for any still
+  ticked, so photo-editor edits survive a trip back to the grid.
+- Unticking removes an item from the post. Unticking everything disables
+  "Next" (the grid's count now includes what's already in the post, so the
+  earlier "`|| postMedia.length > 0`" workaround in `headerMeta` is gone).
+- In-app camera shots aren't gallery assets, so the grid can't show them:
+  they stay in the post, count toward the 10-item limit, and follow the
+  gallery items. Removable with the × on the review screen.
+- Carousel keys deliberately stay the file path, so any future duplicate
+  still surfaces as a warning instead of being masked by an index key.
+
+**Not the cause here, but found while checking:** the Room feed pages by
+offset ordered by `created_at` alone, so a post arriving between page loads
+(or two posts with the same timestamp across a page boundary) can come back
+on the next page and trigger the same warning there. Needs a keyset cursor
+(`created_at`, `id`); not fixed yet.
+
+**Correction to earlier entries today:** the New Post screen and photo
+editor entries say plain Room members can't list a Room's members under
+RLS, so tagging would need a new member-search RPC. That's wrong —
+`20260814073649_members_can_see_each_other.sql` (Phase 5) lets approved
+members see each other's approved rows. It came from `fetchRoomMembers()`'s
+comment in `lib/rooms.ts`, which predated that migration; the comment and
+the roadmap's Stage 4 plan are now corrected.
+
+**Verification status:** lint and typecheck pass; the confirm logic was
+walked through re-confirming unchanged, ticking, unticking, edited photos,
+camera shots, and the item limit. Needs the A14 check. Note that a draft
+already open across a fast refresh has items without `assetId`, which the
+grid treats as camera shots — reopen the composer before testing.
+
+
+## 2026-09-16 — Portrait posts go from 4:5 to 3:4
+
+**Context:** Asked to make portrait posts a little bigger, right after the
+photo editor landed.
+
+**Decision:** `FEED_SHAPES.portrait` is now 1080×1440 (3:4), up from
+1080×1350 (4:5), and the feed's media height cap
+(`FEED_MEDIA_MAX_HEIGHT_FRACTION`, shared by the feed and the composer's
+preview) rises from 0.55 to 0.6 of the window's height.
+- 3:4 is what phone cameras shoot in portrait, so those photos now post
+  uncropped instead of losing ~6% off the top and bottom — likely the real
+  reason portrait felt small. It's also Instagram's current portrait size.
+- The cap had to rise with it: a full-width 3:4 photo on a ~20:9 phone like
+  the Galaxy A14 is roughly 54–58% of the window's height, so 0.55 could
+  show it with bars on its sides.
+- New posts only. The feed sizes every post from its stored file, so
+  existing 4:5 posts keep displaying as 4:5.
+- Cost: ~7% more pixels per portrait photo — negligible against the storage
+  cap, and far under the bucket's 50 MiB file limit.
+
+**Considered instead:** keeping 4:5 and only raising the height cap (may
+change nothing visible on the A14, where 4:5 sits near the old cap), or only
+enlarging the photo editor's crop frame (posts stay the same size).
+
+**Not changed:** the post detail screen's own cap
+(`MAX_HERO_HEIGHT_FRACTION = 0.5`) — portrait posts can show with side bars
+there, as 4:5 ones already could.
+
+**Verification status:** lint, typecheck and the crop-math property check
+(re-run with 3:4) pass; `closestFeedShape()` read from source maps a 3:4
+camera photo, a 4:5 photo and a 9:16 screenshot to portrait, and 4:3/16:9
+landscapes to square/landscape as before. Needs the A14 check: a portrait
+camera photo previews and posts full-width with no side bars.
+
+
+## 2026-09-16 — Post photos get a crop/rotate/flip editor, and a post has one shape
+
+**Context:** Feed photos can only be square (1:1), portrait (4:5) or
+landscape (1.91:1), and the upload used to pick one per photo, center-crop
+to it, and give the author no say. Asked for real editing on the New Post
+screen despite those limits: the author should choose the shape and what
+goes in the frame.
+
+**What we decided:**
+- **The three shapes stay the only outputs.** The editor's frame is always
+  one of them, so the feed, storage cap and upload presets are unchanged —
+  the author just controls *which* shape and *which part* of the photo.
+- **One shape per post**, Instagram's rule, replacing per-photo shapes.
+  Until the author picks one it follows the first photo's closest shape
+  (the old rule, applied once per post); every photo then uploads in it.
+  Carousels stop letterboxing mismatched photos inside the first one's box.
+- **Edits are stored relative to the photo, never as pixels or files.**
+  `PhotoEdit` is rotation, flip, zoom, and a crop center as fractions of the
+  rotated photo. The editor pans a 1440px copy, the preview renders from
+  another downscaled copy, and the upload renders from the full-size
+  original — the same relative edit frames the same region in all three
+  (property-checked below). It also means changing the post's shape
+  re-frames every other edited photo around its existing crop instead of
+  discarding their edits.
+- **The original is never replaced.** `PickedMedia` keeps the original's
+  uri/size and only gains `edit` and `previewUri` (a display-only JPEG).
+  Re-editing starts from full quality, and the upload JPEG-encodes once,
+  from the original — never the preview.
+- **Rotate/flip happen before the crop is computed, in a separate render**,
+  so the crop uses the rotated image's real pixel size as the manipulator
+  sees it, not the gallery's reported width/height.
+- **Gestures run on the UI thread**: `react-native-gesture-handler` pan and
+  pinch as Reanimated worklets writing shared values only, no React state
+  per frame — the smoothness that matters on the Galaxy A14. Both libraries
+  were already dependencies; gesture-handler had never actually been used,
+  so it got its required `GestureHandlerRootView` in `_layout.tsx` (no
+  effect on existing screens). Shared values use `get()`/`set()`, not
+  `.value`: the React Compiler lint rejects writing `.value` from a
+  component's named functions.
+- **The editor replaces the composer while open** instead of covering it,
+  unmounting the review carousel and its video players while a decoded
+  photo is in memory. Preview re-renders after a shape change run one photo
+  at a time for the same reason.
+- **Photos only.** The app has no video-processing library, and the only
+  real option (ffmpeg-kit) is retired and very heavy; the Edit pill doesn't
+  appear on videos.
+
+**Considered instead:**
+- *Filters and brightness/contrast adjustments* — need
+  `@shopify/react-native-skia`: free, but a large native dependency (bigger
+  download, native rebuild, more GPU work on a low-end phone). Deferred;
+  crop/rotate/flip covers what the upload limits actually take away.
+- *Per-photo shapes* (keep the old behavior) — rejected for Instagram's
+  one-shape carousel, which also removes letterboxing.
+- *Saving the edit as a rendered file and uploading that* — would JPEG-
+  encode twice and make re-editing compound the loss.
+
+**Replaced:** `feedAspectRatioFor()` / `FEED_PRESETS` became named
+`FEED_SHAPES` + `closestFeedShape()` (identical tie-breaking), since a
+post's shape is now a value passed around, not recomputed per photo.
+
+**Verification status:** lint and typecheck pass. There's no test runner,
+so the crop math was property-checked by extracting the real
+`clampPhotoFocus`/`photoEditCropRect`/`centeredCropRect` from
+`mediaUtils.ts`, transpiling them with the project's TypeScript, and
+checking 30,000 random cases: an unedited photo crops within a pixel of the
+old center crop; every edit's crop stays inside the photo, has the shape's
+ratio and the zoom's size; and a 1440px copy frames the same region as the
+full-size photo. Known answers and a deliberately wrong ratio (caught) were
+checked too. **Not yet device-checked**, and the parts only a device can
+show are: rotate and flip in the editor matching the uploaded result
+(RN view transforms vs the manipulator), pinch/drag smoothness on the A14,
+and memory headroom editing large camera photos.
+
+
+## 2026-09-16 — The Post composer's review step previews media at its real posted size
+
+**Context:** After "Next", the Post tab showed a boxed caption field above
+a strip of 76pt square thumbnails. Neither told you what the post would
+look like: the feed draws media full card width, and the upload crops
+every photo, so a thumbnail was the wrong size *and* possibly the wrong
+shape. Asked to rebuild it as Instagram's New Post screen: media shown
+exactly as it will be posted, a borderless caption below, then Tag people
+and Add location as rows.
+
+**What changed (stage 1 of 3 — the screen):**
+- The preview *is* the feed's `PostMediaCarousel`, not a lookalike. It
+  gained an optional per-slide `cropAspectRatio`, set only by the
+  composer, from `feedAspectRatioFor()` — the same function that picks
+  the 1:1 / 4:5 / 1.91:1 crop `compressImageForUpload('feed')` applies on
+  upload. A slide with it is drawn as a `cover` image in a box of that
+  ratio, letterboxed in the carousel's box; that is the same centered crop
+  the upload makes (to within a pixel of rounding), letterboxed the way
+  the feed will draw the cropped file. Posted media never sets it. The feed's 0.55 height cap
+  moved from `PostCard.tsx` into the carousel module
+  (`FEED_MEDIA_MAX_HEIGHT_FRACTION`) so both use one constant, and the
+  review screen's ScrollView uses `PostCard`'s own `Spacing[4]` padding so
+  the width matches too, not just the shape.
+- Videos need no crop value: they upload uncropped, and the carousel
+  already sizes them from the loaded video.
+- Caption is a bare multiline input closed off by a hairline, no box.
+- Instagram's chrome for this screen: a back arrow (to the picker, draft
+  kept) instead of the close button, a full-width Post button pinned
+  below the ScrollView instead of in the header, and the Post/Clip/Poll/
+  Event switcher hidden. Android's hardware back does the same as the
+  arrow, except mid-upload. Upload status and errors moved next to the
+  button, where a tall portrait photo can't push them off-screen.
+- Back-to-picker used to be the strip's "+" tile. With that gone, the
+  picker's "Next" now also enables when media is already staged, so
+  going back doesn't strand you until you pick something new.
+- The old thumbnail strip (`ComposerMediaTile`) was removed; the Clip
+  tab's `ComposerMediaPreview` in the same file is unchanged.
+
+**Considered instead:** a separate, simpler preview component for the
+composer. Rejected because "exactly as posted" is only true while the
+preview and the feed share one sizing rule; two components would drift
+the first time either changed.
+
+**Stages 2 and 3** (Add location, Tag people) are backend features — no
+location column or tags table exists — and their rows appear only once
+each works, per this codebase's no-inert-controls convention. Tagging
+also can't reuse `fetchRoomMembers()`: RLS only lets owners/mods list a
+Room's members. See the roadmap's Bones Phase entry for the plan.
+
+**Verification status:** lint and typecheck pass. Not yet device-checked:
+on the Galaxy A14, confirm a square, a portrait and a landscape photo each
+preview in the same shape and size the feed then shows after posting,
+including a mixed-shape carousel and a video, and that removing the first
+slide reshapes the box.
+
+
+## 2026-09-16 — Grouped-card text rows get a fixed height and their own background
+
+**Context:** Tapping an empty option row on the composer's Poll tab put the
+caret at the *right* edge of the row instead of at the start of the "Add"
+placeholder; the Event tab's name/location/link rows did the same. The
+question field one section above, and every caption field in the app,
+behaved correctly.
+
+**Root cause:** On Android an empty `TextInput` draws its placeholder from a
+separate hint layout while positioning the caret from the (empty) text
+layout — `ReactEditText.kt` substitutes the hint as the measure text when
+the value is empty ("make sure we have *something* to measure"). The two
+disagree for a single-line input that is transparent over a styled parent
+and whose height is unresolved (`minHeight` + `paddingVertical` rather than
+a fixed `height`). That is upstream react-native#32225 / #28794. Every input
+that behaved correctly broke at least one of those conditions: the captions
+and the chat composer are `multiline`, and the poll question carries its own
+`backgroundColor` and a fixed `height: 46`.
+
+**What changed:** the row input moved out of `PollTabFields`/`EventTabFields`
+into one `GroupedTextInput` in `GroupedCard.tsx`, next to the `GroupedRow`
+and `GroupedDivider` it already exported. Its single-line variant uses a
+fixed `height: 52` with `paddingVertical: 0` + `textAlignVertical: 'center'`
++ `includeFontPadding: false`, and paints `colors.surface` itself — the same
+colour `GroupedCard` already paints beneath it, so it is visually identical
+but no longer a transparent child of a styled parent. Both triggering
+conditions are removed at once rather than bisected, since either alone
+would be a latent trap for the next grouped row someone adds. The multiline
+variant (Event's description) keeps the old `minHeight: 70` / top-aligned
+geometry — it never showed the bug.
+
+**Also removed:** `textAlign: 'left'` on both poll inputs, the only use of
+`textAlign` on a `TextInput` anywhere in the app and evidently an earlier
+attempt at this same fix. It was a no-op: `ReactTextInputManager.setTextAlign`
+maps `'left'` to `Gravity.LEFT`, which in AOSP `TextView.makeNewLayout`
+resolves to the same `Layout.Alignment.ALIGN_NORMAL` as the default
+`Gravity.START` in an LTR locale. Worth remembering before reaching for
+`textAlign` against a future alignment bug.
+
+**Considered instead:** patching the two tab files separately with the same
+workaround, which would have left the trap in place for the next grouped row;
+and dropping the placeholder on empty rows, which upstream reports as a
+workaround but costs the affordance the row exists for.
+
+**Verification status:** `lint` and `typecheck` pass, but neither can see a
+caret. Needs a real-device pass on the Galaxy A14: tap each empty row on both
+the Poll and Event tabs and confirm the caret sits at the placeholder's first
+glyph, and that row heights and the focus tint are unchanged.
+
+
+## 2026-09-16 — Polls can allow multiple answers
+
+**Context:** feed.sql's `poll_votes` primary key was deliberately `(poll_id,
+user_id)`, not `(poll_option_id, user_id)`, specifically so a second vote for
+a different option in the same poll was rejected at the schema level — the
+comment there says so explicitly. Asked to add a composer toggle so a poll's
+creator can allow voters to pick more than one option, which meant that
+invariant could no longer be a flat, unconditional constraint.
+
+**What changed:**
+- `polls.allow_multiple boolean` (migration `20260916120000_poll_allow_multiple.sql`),
+  and the `poll_votes` primary key moved to `(poll_id, poll_option_id,
+  user_id)` — it now only stops the same person voting the same option
+  twice, not a second *different* option.
+- The "single choice unless allow_multiple" rule moved into a new
+  `vote_poll(poll_id, option_id)` RPC (`20260916120200_vote_poll_rpc.sql`)
+  rather than being expressed as an RLS check, since a rule that reads
+  another table's column isn't something a plain insert policy can enforce
+  cleanly, and doing it as three sequential client calls (read the poll,
+  maybe delete, insert) would leave a race window between them that a single
+  statement doesn't have. Tapping an already-picked option retracts it;
+  otherwise it replaces the previous pick (single-choice) or is added
+  alongside it (multi-select). SECURITY INVOKER, same reasoning as
+  `create_post()` — it runs under the caller's own RLS-gated permissions, so
+  this adds atomicity without adding trust.
+- `create_post()` gained a trailing `p_poll_allow_multiple` parameter via an
+  explicit `drop function` + recreate, not `create or replace`: Postgres
+  identifies a function by name *and* its ordered argument-type list, so
+  adding a parameter changes that identity regardless of it having a
+  default — `create or replace` would have left the old 6-argument version
+  sitting alongside the new 7-argument one as a second overload rather than
+  replacing it. (`create_event_post_rpc_v2.sql`'s own comment claims
+  `create or replace` preserves identity when appending a defaulted trailing
+  argument; that doesn't match Postgres's documented behavior, and is worth
+  a look if `create_event_post` ever needs the same treatment again.)
+- `PollCard.tsx`'s voting UI (`lib/posts.ts`'s `Poll.myOptionId: string |
+  null` → `myOptionIds: string[]`) now toggles each option independently
+  when `allowMultiple` is set, instead of the radio-button "tapping a new
+  option replaces the old one" behavior.
+- Not yet verified against a live local Supabase stack — this session had no
+  Docker/local stack running. Needs the usual real-device pass before
+  shipping: apply the three new migrations, create both a single-choice and
+  a multi-select poll, and confirm voting/retracting/switching all behave
+  as intended for each.
+
+
+## 2026-09-15 — Room "+" button becomes a Post/Clip/Poll/Event create modal
+
+**Context:** The Room feed's "+" button opened one linear form
+(`create-post.tsx`) with an inline, optional poll builder. Asked to redesign
+it Instagram-style: tapping "+" opens a modal with its own bottom nav
+switching between four creation kinds, each its own page.
+
+**What changed:**
+- `create-post.tsx` is now a tabbed shell (Post/Clip/Poll/Event), switched by
+  a new floating pill nav (`components/create/CreateTabSwitcher.tsx`). Every
+  tab's state is lifted into the shell, not owned per-tab, so switching tabs
+  mid-draft never loses a draft.
+- Post and Clip both submit through the existing `create_post` RPC — Clip is
+  just a video-only post with its own composer chrome
+  (`lib/media.ts`'s `pickVideo()`/`captureVideo()`), no schema change needed.
+  Poll moved from an inline collapsible section to its own tab, same RPC.
+- New `events` table, 1:1 with `posts` (`post_id` unique), modeled on how
+  `polls` already attaches to a post — an event is a post with an attached
+  row, so it appears in the feed for free rather than needing its own feed
+  query. New `create_event_post` RPC (title/starts_at required; ends_at and
+  link optional, following up in a second migration once the UI needed
+  them). Deliberately does *not* include reminders or guest RSVPs — no
+  scheduled-job system and no RSVP feature exist in this app, and a toggle
+  with nothing behind it is worse than no toggle. New `EventCard.tsx`
+  renders next to `PollCard.tsx` in the feed.
+- The Event tab's "Starts"/"Ends" picker (`EventDateTimeModal.tsx`) is a
+  dependency-free quick-pick (date chips for the next two weeks, 30-minute
+  time chips) rather than a native calendar widget — no date/time-picker
+  library is installed, and adding one means a native rebuild this
+  environment can't verify.
+
+**Gotcha hit, worth flagging for next time:** the new floating tab-switcher
+pill (`position: 'absolute'`, `bottom: Spacing[3]`) first shipped assuming
+its parent `SafeAreaView`'s bottom safe-area padding would cover it — it
+doesn't. An absolutely positioned child's offsets measure from its parent's
+outer (padding-included) box edge, not the parent's padded content edge, so
+the padding a `SafeAreaView` adds for its *normal-flow* children is invisible
+to an absolutely positioned sibling. The bar landed flush against — or
+under — the device's gesture/button nav, effectively invisible. Fixed by
+reading `useSafeAreaInsets()` directly in the switcher itself, same as
+`TabBar.tsx`'s own floating pill already does — see that component's own
+2026-09-02 decision-log entry for the near-identical bug this is a repeat
+of. Any new `position: 'absolute'`, edge-anchored element needs its own
+inset, full stop — a SafeAreaView ancestor's padding does not do it for you.
+
+---
+
 ## 2026-09-15 — Per-post overflow menu: Hide (everyone) + Delete (owner or author)
 
 **Context:** Every post needed a "⋯" overflow menu (feed card and post-detail

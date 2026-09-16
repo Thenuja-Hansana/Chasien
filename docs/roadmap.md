@@ -686,6 +686,37 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       added anywhere — nothing found needed them; adding either
       preemptively without a located problem would be guessing. See
       decision-log, 2026-09-15
+- [ ] Post composer's review step becomes Instagram's New Post screen,
+      in four stages, each verified on the Galaxy A14 before the next:
+  - [x] **Stage 1 — the screen.** Media previewed at exactly the feed's
+        size and crop, borderless caption, Post button pinned at the
+        bottom, back arrow to the picker. Lint/typecheck clean; tested
+        on the Galaxy A14 by the developer, 2026-09-16. See decision-log,
+        2026-09-16
+  - [x] **Stage 2 — photo editor.** Crop (pinch/drag inside a square,
+        portrait or landscape frame), rotate, flip, reset; one shape per
+        post; portrait is 3:4. Client-only, no new dependency. Lint/
+        typecheck clean, crop math property-checked; tested on the Galaxy
+        A14 by the developer, 2026-09-16. Follow-up fix the same day: the
+        photo grid remembers what's already in the post (duplicate
+        photos). See decision-log, 2026-09-16
+  - [x] **Stage 3 — Add location.** Free-text place name (no paid places
+        API): `posts.location` column, `create_post` parameter, shown on
+        the post card. `20260916160000_post_location.sql`, `LocationSheet`,
+        row on the review screen, post card + detail; lint/typecheck clean;
+        backend verified against the local stack (11 location checks +
+        30-check smoke + 38-check security suite); tested on the Galaxy A14
+        by the developer, 2026-09-16, including a follow-up fix for the
+        sheet hiding behind the keyboard. See decision-log, 2026-09-16
+  - [ ] **Stage 4 — Tag people.** `post_tags` table written only through
+        `create_post`, which drops anyone who isn't an approved member of
+        the Room or has a block either way; the people picker can read the
+        Room's approved members directly (fellow members already can,
+        since `20260814073649_members_can_see_each_other.sql` — no new
+        search RPC needed, just filtering out blocks); a `tag`
+        notification; tags shown on the post. Isolation checked
+        explicitly: a non-member listing members, tagging a non-member,
+        and reading another Room's tags must all come back empty
 
 **Exit condition:** the app feels smooth (no dropped-frame scrolling on
 feed/chat/notifications, no layout breakage) on the Galaxy A14 specifically,
@@ -727,7 +758,30 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
       re-check, not the first pass
 - [ ] Security pass: re-verify RLS + Edge Function checks from Phase 1
       still hold after all the features built on top; rate-limit auth
-      endpoints
+      endpoints.
+  - [x] **Column-level writes, done early (2026-09-16).** RLS filters rows,
+        not columns, and `grants.sql` had granted every column of every
+        table. Audited all 24 tables; reproduced and closed: joining a
+        domain-verified Room without a matching email, self-approving into
+        private sub-groups, moving messages into a chat you're muted in,
+        rewriting who a friendship is between, never-expiring stories,
+        double votes on single-choice polls, pre-reviewed reports with
+        fabricated evidence, future-dated/self-pinned posts, messages and
+        comments, room counter/creator rewrites; and `anon` write/TRUNCATE
+        privileges everywhere. Also fixed Room notification mute, which
+        silently did nothing. 38-check suite + domain-verification flow +
+        30-check backend test, all against the live local stack. See
+        decision-log, 2026-09-16 (two entries) and migrations
+        `20260916140000`/`20260916150000`
+  - [ ] Still open from that audit: client-written timestamps on likes,
+        reactions, blocks, hidden posts and push tokens; direct inserts into
+        `polls`/`poll_options`/`post_media`/`events` that skip
+        `create_post`'s validation; server-side `content_snapshot` capture
+        when Phase 9 builds reporting; an `edited_at` trigger alongside any
+        future edit feature. Not audited: business rules outside column
+        writes (e.g. starting a DM with someone who blocked you)
+  - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
+        after Phase 9's features
 
 **Exit condition:** you'd hand this to a stranger without wincing.
 

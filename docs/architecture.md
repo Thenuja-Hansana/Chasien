@@ -36,6 +36,23 @@ user load, real revenue) to spend money.
 | 8 | CI | **GitHub Actions** | Free (minutes cap, fine at this scale) | Lint/typecheck/test on every push. |
 | 9 | App builds / distribution | **EAS (Expo Application Services)** | Free tier (limited builds/month), local builds free beyond that | Never fully blocked — local builds are slower but free. |
 
+## Database write access (current rule)
+
+- **Row Level Security decides which rows; column grants decide which
+  fields.** Every table has RLS on. Client-writable tables grant
+  `authenticated` INSERT/UPDATE on named columns only — exactly what the app
+  and the SECURITY INVOKER functions (`create_post`, `create_event_post`,
+  `vote_poll`, `start_dm`) write. Since 2026-09-16; before that, a blanket
+  grant left authority-bearing columns writable (see decision-log).
+- **Authority-bearing changes are server-side:** membership, roles and join
+  state (room-membership Edge Function), pins and removals (SECURITY DEFINER
+  functions), domain verification (service-role Edge Functions), counters
+  and notifications (SECURITY DEFINER triggers).
+- **No client edits of posts, comments or messages yet.** When editing
+  ships, grant UPDATE on the content column together with a trigger that
+  stamps `edited_at`, so edits can't be silent.
+- `anon` has no write privileges on any table, including future ones.
+
 ## Known costs we can't avoid forever
 
 Not infra, but flagging now so nothing is a surprise later:
