@@ -15,7 +15,7 @@ type WebhookPayload = {
   record: {
     id: string;
     user_id: string;
-    type: 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'new_post' | 'new_story' | 'message';
+    type: 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'new_post' | 'new_story' | 'message' | 'tag';
     actor_id: string | null;
     room_id: string | null;
     data: Record<string, unknown>;
@@ -36,6 +36,8 @@ function titleFor(type: string, actorName: string, roomName: string, likerCount:
       return likerCount > 1 ? `${actorName} and ${likerCount - 1} others liked your post` : `${actorName} liked your post`;
     case 'mention':
       return `${actorName} mentioned you`;
+    case 'tag':
+      return `${actorName} tagged you in a post`;
     case 'join_request':
       return `${actorName} wants to join ${roomName}`;
     case 'pinned_post':
