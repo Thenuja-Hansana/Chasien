@@ -31,6 +31,12 @@ export type EventInfo = {
 
 export type PostMediaItem = { url: string; kind: 'image' | 'video' };
 
+/** A person tagged in a post — also the shape the composer's people picker selects. */
+export type TaggedPerson = { userId: string; handle: string; name: string };
+
+/** Mirrors tag_people_in_post()'s limit in 20260916170100_post_tags.sql. */
+export const MAX_POST_TAGS = 20;
+
 export type FeedPost = {
   id: string;
   roomId: string;
@@ -44,6 +50,8 @@ export type FeedPost = {
   tag: string | null;
   /** Free-text place name, 1–100 chars or null — see supabase/migrations/20260916160000_post_location.sql. */
   location: string | null;
+  /** People tagged in the post, ordered by name. See supabase/migrations/20260916170100_post_tags.sql. */
+  tags: TaggedPerson[];
   createdAt: string;
   /** Signed, display-ready URLs, ordered by position. Empty when the post has no media. */
   media: PostMediaItem[];
@@ -78,7 +86,8 @@ const POST_SELECT = `
   post_likes(count),
   comments(count),
   polls(id, question, allow_multiple, poll_options(id, label, position, poll_votes(count))),
-  events(id, title, starts_at, ends_at, location, link)
+  events(id, title, starts_at, ends_at, location, link),
+  post_tags(user_id, profiles(handle, name))
 ` as const;
 
 /**
@@ -121,6 +130,8 @@ type RawPost = {
   } | null;
   /** An OBJECT, not an array — `events.post_id` is unique, same reasoning as `polls` above. */
   events: { id: string; title: string; starts_at: string; ends_at: string | null; location: string | null; link: string | null } | null;
+  /** An array — a post has many tags. Already filtered by RLS to posts the viewer can read. */
+  post_tags: { user_id: string; profiles: { handle: string; name: string } | null }[];
 };
 
 /**
@@ -176,6 +187,9 @@ async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<str
       text: p.text,
       tag: p.tag,
       location: p.location,
+      tags: (p.post_tags ?? [])
+        .map((t) => ({ userId: t.user_id, handle: t.profiles?.handle ?? 'unknown', name: t.profiles?.name ?? 'Deleted user' }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
       createdAt: p.created_at,
       media: p.post_media
         .slice()
@@ -317,6 +331,13 @@ export async function createPost(params: {
   pollAllowMultiple?: boolean;
   /** Free-text place name; blank or omitted means none (the RPC trims and stores NULL). */
   location?: string | null;
+  /**
+   * People to tag. The server silently leaves out anyone who isn't an
+   * approved member of the Room or has a block with the author either way,
+   * so what was picked and what gets saved can differ — by design, so no
+   * error ever reveals a block.
+   */
+  taggedUserIds?: string[];
 }) {
   // Every parameter is sent on every call, `null` rather than omitted: a
   // key left `undefined` is dropped by JSON.stringify, and a call missing
@@ -331,6 +352,7 @@ export async function createPost(params: {
     p_poll_options: params.pollOptions,
     p_poll_allow_multiple: params.pollAllowMultiple ?? false,
     p_location: params.location ?? null,
+    p_tagged_user_ids: params.taggedUserIds ?? [],
   });
   if (error) throw error;
   return data as string;
@@ -372,6 +394,40 @@ export async function setLiked(postId: string, userId: string, liked: boolean) {
     const { error } = await supabase.from('post_likes').delete().eq('post_id', postId).eq('user_id', userId);
     if (error) throw error;
   }
+}
+
+/**
+ * Who can be tagged in a new post in this Room: its approved members (which
+ * fellow members may read — 20260814073649_members_can_see_each_other.sql),
+ * minus the viewer and anyone the viewer has blocked. People who blocked the
+ * viewer can't be filtered here (you can't see those blocks, deliberately);
+ * create_post() drops them server-side without saying so.
+ */
+export async function fetchTaggableMembers(roomId: string, userId: string): Promise<TaggedPerson[]> {
+  const [membersRes, blocksRes] = await Promise.all([
+    supabase
+      .from('room_memberships')
+      .select('user_id, profiles!room_memberships_user_id_fkey(handle, name)')
+      .eq('room_id', roomId)
+      .eq('join_state', 'approved'),
+    supabase.from('blocks').select('blocked_id').eq('blocker_id', userId),
+  ]);
+  if (membersRes.error) throw membersRes.error;
+  if (blocksRes.error) throw blocksRes.error;
+  const blocked = new Set((blocksRes.data ?? []).map((b) => b.blocked_id as string));
+  return (membersRes.data ?? [])
+    .filter((m) => m.user_id !== userId && !blocked.has(m.user_id))
+    .map((m) => {
+      const profile = m.profiles as unknown as { handle: string; name: string } | null;
+      return { userId: m.user_id as string, handle: profile?.handle ?? 'unknown', name: profile?.name ?? 'Deleted user' };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Takes the viewer off a post they're tagged in. RLS lets a tagged person delete only their own tag. */
+export async function removeMyTag(postId: string, userId: string): Promise<void> {
+  const { error } = await supabase.from('post_tags').delete().eq('post_id', postId).eq('user_id', userId);
+  if (error) throw error;
 }
 
 /** Personal, one-way for now — see hidden_posts' own migration comment for why there's no unhide() yet. */

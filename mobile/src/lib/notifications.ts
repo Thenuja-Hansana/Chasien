@@ -32,7 +32,8 @@ export type NotificationType =
   | 'new_story'
   | 'message'
   | 'friend_request'
-  | 'friend_accept';
+  | 'friend_accept'
+  | 'tag';
 
 export type AppNotification = {
   id: string;

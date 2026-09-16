@@ -8,6 +8,7 @@ import CreateTabSwitcher, { CREATE_TAB_SWITCHER_CLEARANCE, type CreateTab } from
 import EventDateTimeModal from '@/components/create/EventDateTimeModal';
 import EventTabFields from '@/components/create/EventTabFields';
 import LocationSheet from '@/components/create/LocationSheet';
+import TagPeopleSheet from '@/components/create/TagPeopleSheet';
 import MediaGridPicker, { type MediaGridPickerHandle } from '@/components/create/MediaGridPicker';
 import PhotoEditor from '@/components/create/PhotoEditor';
 import PollTabFields from '@/components/create/PollTabFields';
@@ -19,7 +20,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { deletePostMedia, MAX_POST_MEDIA_ITEMS, uploadPostMedia, type PickedMedia } from '@/lib/media';
 import { closestFeedShape, isUneditedPhoto, renderPhotoEditPreview, type FeedShape, type PhotoEdit } from '@/lib/mediaUtils';
-import { createEventPost, createPost } from '@/lib/posts';
+import { createEventPost, createPost, type TaggedPerson } from '@/lib/posts';
 import { fetchRoomBySlug, type Room } from '@/lib/rooms';
 
 type PickPhase = 'pick' | 'review';
@@ -92,6 +93,8 @@ export default function CreatePost() {
   // '' = no location. Trimmed when set (LocationSheet) and again by create_post().
   const [postLocation, setPostLocation] = useState('');
   const [locationSheetOpen, setLocationSheetOpen] = useState(false);
+  const [postTags, setPostTags] = useState<TaggedPerson[]>([]);
+  const [tagSheetOpen, setTagSheetOpen] = useState(false);
   const [postMedia, setPostMedia] = useState<PickedMedia[]>([]);
   const [postGridCount, setPostGridCount] = useState(0);
   const postPickerRef = useRef<MediaGridPickerHandle>(null);
@@ -142,6 +145,7 @@ export default function CreatePost() {
   const hasChanges =
     postText.trim().length > 0 ||
     postLocation.length > 0 ||
+    postTags.length > 0 ||
     postMedia.length > 0 ||
     postGridCount > 0 ||
     clipText.trim().length > 0 ||
@@ -335,6 +339,7 @@ export default function CreatePost() {
             pollQuestion: null,
             pollOptions: [],
             location: postLocation || null,
+            taggedUserIds: postTags.map((t) => t.userId),
           });
         } catch (e) {
           // Media lands in storage before the post row exists, so a
@@ -480,6 +485,8 @@ export default function CreatePost() {
                 shape={postShape}
                 onRemoveMedia={removePostMediaAt}
                 onEditPhoto={openPhotoEditor}
+                tags={postTags}
+                onOpenTags={() => setTagSheetOpen(true)}
                 location={postLocation}
                 onOpenLocation={() => setLocationSheetOpen(true)}
                 onClearLocation={() => setPostLocation('')}
@@ -573,6 +580,20 @@ export default function CreatePost() {
         onCancel={() => setShowDiscardConfirm(false)}
         onConfirm={() => router.back()}
       />
+
+      {room && userId && (
+        <TagPeopleSheet
+          visible={tagSheetOpen}
+          roomId={room.id}
+          userId={userId}
+          value={postTags}
+          onDone={(people) => {
+            setPostTags(people);
+            setTagSheetOpen(false);
+          }}
+          onClose={() => setTagSheetOpen(false)}
+        />
+      )}
 
       <LocationSheet
         visible={locationSheetOpen}

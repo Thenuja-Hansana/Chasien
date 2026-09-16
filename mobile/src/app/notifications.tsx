@@ -58,6 +58,9 @@ function textFor(n: AppNotification): { line: string; highlight?: string } {
       const preview = typeof n.data.preview === 'string' ? n.data.preview : null;
       return { line: `${n.actorName} mentioned you${preview ? `: "${preview}"` : ''}` };
     }
+    // Opens the post via data.postId, same as the other post notifications.
+    case 'tag':
+      return { line: `${n.actorName} tagged you in a post in`, highlight: n.roomName ?? undefined };
     case 'join_request':
       return { line: `${n.actorName} wants to join`, highlight: n.roomName ?? undefined };
     case 'pinned_post':

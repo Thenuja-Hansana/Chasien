@@ -19,15 +19,20 @@ import { useTheme } from '@/hooks/use-theme';
 export default function PostOptionsMenu({
   visible,
   canDelete,
+  canRemoveTag = false,
   onClose,
   onHide,
   onDelete,
+  onRemoveTag,
 }: {
   visible: boolean;
   canDelete: boolean;
+  /** The viewer is tagged in this post — they can take themselves off it (RLS allows only their own tag). */
+  canRemoveTag?: boolean;
   onClose: () => void;
   onHide: () => void;
   onDelete: () => void;
+  onRemoveTag?: () => void;
 }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
@@ -44,6 +49,13 @@ export default function PostOptionsMenu({
             <Icon name="eyeOff" size={19} color={colors.text} />
             <Text style={styles.rowText}>Hide post</Text>
           </Pressable>
+
+          {canRemoveTag && onRemoveTag && (
+            <Pressable style={styles.row} onPress={onRemoveTag} accessibilityRole="button">
+              <Icon name="youTab" size={19} color={colors.text} />
+              <Text style={styles.rowText}>Remove tag</Text>
+            </Pressable>
+          )}
 
           {canDelete && (
             <Pressable style={styles.row} onPress={onDelete} accessibilityRole="button">

@@ -7,6 +7,7 @@ import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { PickedMedia } from '@/lib/media';
 import { feedShapeAspectRatio, type FeedShape } from '@/lib/mediaUtils';
+import type { TaggedPerson } from '@/lib/posts';
 
 function toCarouselItem(media: PickedMedia, shape: FeedShape): CarouselMediaItem {
   if (media.kind === 'video') return { url: media.uri, kind: 'video' };
@@ -40,6 +41,8 @@ export default function PostTabFields({
   shape,
   onRemoveMedia,
   onEditPhoto,
+  tags,
+  onOpenTags,
   location,
   onOpenLocation,
   onClearLocation,
@@ -51,6 +54,8 @@ export default function PostTabFields({
   shape: FeedShape;
   onRemoveMedia: (index: number) => void;
   onEditPhoto: (index: number) => void;
+  tags: TaggedPerson[];
+  onOpenTags: () => void;
   /** '' when none is set. */
   location: string;
   onOpenLocation: () => void;
@@ -113,9 +118,29 @@ export default function PostTabFields({
         <View style={styles.divider} />
       </View>
 
-      {/* Instagram's detail rows: icon, label, chevron. Only rows whose
-          feature actually works are drawn — Tag people joins this list in
-          Stage 4, not before (this codebase doesn't render inert controls). */}
+      {/* Instagram's detail rows: icon, label, chevron — Tag people, then
+          Add location, in Instagram's order. */}
+      <View>
+        <Pressable
+          style={styles.detailRow}
+          onPress={onOpenTags}
+          disabled={submitting}
+          accessibilityRole="button"
+          accessibilityLabel={tags.length > 0 ? `Tagged: ${tags.map((t) => t.name).join(', ')}. Tap to change` : 'Tag people'}
+        >
+          <Icon name="youTab" size={22} color={colors.text} strokeWidth={2} />
+          <Text style={[styles.detailLabel, tags.length > 0 && styles.detailValue]} numberOfLines={1}>
+            {tags.length === 0
+              ? 'Tag people'
+              : tags.length <= 2
+                ? tags.map((t) => `@${t.handle}`).join(', ')
+                : `@${tags[0].handle}, @${tags[1].handle} +${tags.length - 2}`}
+          </Text>
+          <Icon name="chevronRight" size={18} color={colors.neutral[500]} />
+        </Pressable>
+        <View style={styles.divider} />
+      </View>
+
       <View>
         <Pressable
           style={styles.detailRow}

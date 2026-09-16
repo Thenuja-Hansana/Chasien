@@ -10,6 +10,7 @@ import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
 import PostMediaCarousel, { FEED_MEDIA_MAX_HEIGHT_FRACTION } from '@/components/PostMediaCarousel';
 import PostOptionsMenu from '@/components/PostOptionsMenu';
+import { PostTagsLine, PostTagsOverlay } from '@/components/PostTags';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { relativeTime, type FeedPost } from '@/lib/posts';
@@ -36,6 +37,7 @@ export default function PostCard({
   onVote,
   onHide,
   onDelete,
+  onRemoveTag,
 }: {
   post: FeedPost;
   viewerId: string;
@@ -45,9 +47,11 @@ export default function PostCard({
   onVote: (optionId: string) => Promise<void>;
   onHide: () => void;
   onDelete: () => void;
+  onRemoveTag: () => void;
 }) {
   const isModerator = post.authorRole === 'owner' || post.authorRole === 'mod';
   const canDelete = post.authorId === viewerId || viewerIsRoomOwner;
+  const viewerIsTagged = post.tags.some((t) => t.userId === viewerId);
   const { open: openUserPreview } = useUserPreview();
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -93,6 +97,8 @@ export default function PostCard({
                 </Text>
               </View>
             )}
+            {/* No media to put the tag badge on — see PostTags.tsx. */}
+            {post.media.length === 0 && <PostTagsLine tags={post.tags} onPressPerson={openUserPreview} />}
           </View>
         </Pressable>
         <Pressable
@@ -116,6 +122,7 @@ export default function PostCard({
       {post.media.length > 0 && (
         <View style={styles.mediaWrap}>
           <PostMediaCarousel media={post.media} maxHeightFraction={FEED_MEDIA_MAX_HEIGHT_FRACTION} onPress={onPress} />
+          <PostTagsOverlay tags={post.tags} onPressPerson={openUserPreview} />
         </View>
       )}
 
@@ -163,10 +170,15 @@ export default function PostCard({
       <PostOptionsMenu
         visible={menuOpen}
         canDelete={canDelete}
+        canRemoveTag={viewerIsTagged}
         onClose={() => setMenuOpen(false)}
         onHide={() => {
           setMenuOpen(false);
           onHide();
+        }}
+        onRemoveTag={() => {
+          setMenuOpen(false);
+          onRemoveTag();
         }}
         onDelete={() => {
           setMenuOpen(false);

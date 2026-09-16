@@ -19,7 +19,7 @@ import { useAuth } from '@/lib/auth-context';
 import { fetchRoomUnreadCounts, markAllNotificationsRead, subscribeToNotifications } from '@/lib/notifications';
 import { getCachedJoinedRoom } from '@/lib/room-cache';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
-import { FEED_PAGE_SIZE, deletePost, fetchPost, fetchRoomFeed, hidePost, setLiked, votePoll, type FeedPost } from '@/lib/posts';
+import { FEED_PAGE_SIZE, deletePost, fetchPost, fetchRoomFeed, hidePost, removeMyTag, setLiked, votePoll, type FeedPost } from '@/lib/posts';
 import { fetchActiveStories, type Story } from '@/lib/stories';
 
 type LoadState = { room: Room | null; membership: Membership | null } | 'loading';
@@ -238,6 +238,16 @@ export default function RoomHome() {
       setPosts((prev) => prev?.filter((p) => p.id !== post.id) ?? prev);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete that post.');
+    }
+  }
+
+  async function handleRemoveTag(post: FeedPost) {
+    if (!userId) return;
+    try {
+      await removeMyTag(post.id, userId);
+      setPosts((prev) => prev?.map((p) => (p.id === post.id ? { ...p, tags: p.tags.filter((t) => t.userId !== userId) } : p)) ?? prev);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove your tag.');
     }
   }
 
@@ -481,6 +491,7 @@ export default function RoomHome() {
               onVote={(optionId) => handleVote(item, optionId)}
               onHide={() => handleHidePost(item)}
               onDelete={() => handleDeletePost(item)}
+              onRemoveTag={() => handleRemoveTag(item)}
             />
           )}
         />

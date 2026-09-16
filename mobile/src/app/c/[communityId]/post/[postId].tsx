@@ -21,6 +21,7 @@ import PollCard from '@/components/PollCard';
 import PostCardSkeleton from '@/components/PostCardSkeleton';
 import PostMediaCarousel from '@/components/PostMediaCarousel';
 import PostOptionsMenu from '@/components/PostOptionsMenu';
+import { PostTagsLine, PostTagsOverlay } from '@/components/PostTags';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -34,6 +35,7 @@ import {
   fetchPost,
   hidePost,
   relativeTime,
+  removeMyTag,
   setLiked,
   votePoll,
   type Comment,
@@ -155,6 +157,17 @@ export default function PostDetail() {
     }
   }
 
+  // Unlike hide/delete the post is still there afterwards, so stay on it.
+  async function handleRemoveTag() {
+    if (post === 'loading' || !post || !userId) return;
+    try {
+      await removeMyTag(post.id, userId);
+      setPost({ ...post, tags: post.tags.filter((t) => t.userId !== userId) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove your tag.');
+    }
+  }
+
   async function handleSend() {
     if (!userId || !draft.trim() || sending || post === 'loading' || !post) return;
     setSending(true);
@@ -253,6 +266,7 @@ export default function PostDetail() {
           {post.media.length > 0 && (
             <View style={styles.heroWrap}>
               <PostMediaCarousel media={post.media} maxHeightFraction={MAX_HERO_HEIGHT_FRACTION} />
+              <PostTagsOverlay tags={post.tags} onPressPerson={openUserPreview} />
             </View>
           )}
 
@@ -314,6 +328,8 @@ export default function PostDetail() {
                     </Text>
                   </View>
                 )}
+                {/* No media to put the tag badge on — see PostTags.tsx. */}
+                {post.media.length === 0 && <PostTagsLine tags={post.tags} onPressPerson={openUserPreview} style={styles.tagsLine} />}
               </View>
             </View>
 
@@ -381,6 +397,11 @@ export default function PostDetail() {
       <PostOptionsMenu
         visible={menuOpen}
         canDelete={post.authorId === userId || isRoomOwner}
+        canRemoveTag={post.tags.some((t) => t.userId === userId)}
+        onRemoveTag={() => {
+          setMenuOpen(false);
+          handleRemoveTag();
+        }}
         onClose={() => setMenuOpen(false)}
         onHide={() => {
           setMenuOpen(false);
@@ -561,6 +582,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: Fonts.bodySemibold,
     fontSize: 11.5,
     color: colors.neutral[500],
+  },
+  tagsLine: {
+    marginTop: 3,
   },
   rule: {
     height: 1,
