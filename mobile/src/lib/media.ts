@@ -1,6 +1,15 @@
 import * as ImagePicker from 'expo-image-picker';
 
-import { compressImageForUpload, randomId, signBucketUrls, uploadBase64, uploadLocalFile, type PickedImage } from '@/lib/mediaUtils';
+import {
+  compressImageForUpload,
+  randomId,
+  signBucketUrls,
+  uploadBase64,
+  uploadLocalFile,
+  type FeedShape,
+  type PhotoEdit,
+  type PickedImage,
+} from '@/lib/mediaUtils';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -53,7 +62,20 @@ export async function pickImage(options: PickImageOptions = {}): Promise<PickedI
   return { uri: asset.uri, width: asset.width, height: asset.height };
 }
 
-export type PickedMedia = ({ kind: 'image' } & PickedImage) | { kind: 'video'; uri: string };
+/**
+ * An image's `uri`/`width`/`height` always stay the untouched original.
+ * The Post composer's photo editor only ever adds `edit` (applied to that
+ * original at upload) and `previewUri` (a rendered JPEG of the result, for
+ * display only) — so re-editing always starts from full quality.
+ *
+ * `assetId` is set only on items picked from the in-app gallery grid
+ * (MediaGridPicker). It's how the grid recognises photos already in a post
+ * when the author goes back to it — ticking them again instead of adding
+ * the same photo twice.
+ */
+export type PickedMedia =
+  | ({ kind: 'image'; assetId?: string; edit?: PhotoEdit; previewUri?: string } & PickedImage)
+  | { kind: 'video'; uri: string; assetId?: string };
 
 function assetToPickedMedia(asset: ImagePicker.ImagePickerAsset): PickedMedia {
   if (asset.type === 'video') return { kind: 'video', uri: asset.uri };
@@ -102,28 +124,8 @@ export async function captureImageOrVideo(): Promise<PickedMedia | null> {
   return assetToPickedMedia(result.assets[0]);
 }
 
-/** IG's own composer cap — client-enforced only, same as MAX_POLL_OPTIONS in create-post.tsx. */
+/** IG's own composer cap — client-enforced only, same as MAX_POLL_OPTIONS in components/create/PollTabFields.tsx. Also MediaGridPicker.tsx's cap on how many gallery items can be selected for a single Post. */
 export const MAX_POST_MEDIA_ITEMS = 10;
-
-/**
- * The post composer's gallery picker — like `pickImageOrVideo()` but
- * multi-select, since a post (unlike a story) can carry a whole carousel.
- * `remaining` is the caller's `MAX_POST_MEDIA_ITEMS - current.length`, so
- * the OS picker itself refuses to let the user select past the cap.
- */
-export async function pickPostMedia(remaining: number): Promise<PickedMedia[]> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) return [];
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images', 'videos'],
-    quality: 1,
-    allowsMultipleSelection: true,
-    selectionLimit: Math.max(1, remaining),
-  });
-  if (result.canceled) return [];
-  return result.assets.map(assetToPickedMedia);
-}
 
 /**
  * Uploads one post media item (image or video) and returns its storage
@@ -137,15 +139,17 @@ export async function pickPostMedia(remaining: number): Promise<PickedMedia[]> {
  * supabase/migrations/20260814063412_post_media_storage.sql. Branches
  * exactly like stories.ts's createStory(): video is uploaded as-is (no
  * client-side video compression in this app), image goes through the
- * same 'feed' crop/compress every single-image post already used.
+ * same 'feed' crop/compress every single-image post already used — in the
+ * post's `shape` (every photo in a post shares one), with the photo
+ * editor's crop/rotate/flip applied if it has one.
  */
-export async function uploadPostMedia(media: PickedMedia, roomId: string, userId: string): Promise<string> {
+export async function uploadPostMedia(media: PickedMedia, roomId: string, userId: string, shape?: FeedShape): Promise<string> {
   if (media.kind === 'video') {
     const path = `${roomId}/${userId}/${randomId()}.mp4`;
     await uploadLocalFile(BUCKET, path, media.uri, 'video/mp4');
     return path;
   }
-  const base64 = await compressImageForUpload(media, 'feed');
+  const base64 = await compressImageForUpload(media, 'feed', { shape, edit: media.edit });
   const path = `${roomId}/${userId}/${randomId()}.jpg`;
   await uploadBase64(BUCKET, path, base64, 'image/jpeg');
   return path;

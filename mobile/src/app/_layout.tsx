@@ -4,7 +4,8 @@ import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, type ReactNode } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useTheme } from '@/hooks/use-theme';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
@@ -173,9 +174,20 @@ export default function RootLayout() {
     return null;
   }
 
+  // react-native-gesture-handler's gestures only work under this root view.
+  // The dependency shipped with the Expo template but nothing used it until
+  // the Post composer's photo editor (pinch/pan to crop).
   return (
-    <ChasienThemeProvider>
-      <AppShell />
-    </ChasienThemeProvider>
+    <GestureHandlerRootView style={rootStyles.fill}>
+      <ChasienThemeProvider>
+        <AppShell />
+      </ChasienThemeProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const rootStyles = StyleSheet.create({
+  fill: {
+    flex: 1,
+  },
+});

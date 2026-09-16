@@ -14,8 +14,19 @@ export type Poll = {
   question: string;
   options: PollOption[];
   totalVotes: number;
-  /** The option this user picked, or null if they haven't voted. One vote per poll (schema PK). */
-  myOptionId: string | null;
+  /** Whether voters can pick more than one option — supabase/migrations/20260916120000_poll_allow_multiple.sql. */
+  allowMultiple: boolean;
+  /** The option(s) this user picked — always 0 or 1 unless allowMultiple. */
+  myOptionIds: string[];
+};
+
+export type EventInfo = {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  link: string | null;
 };
 
 export type PostMediaItem = { url: string; kind: 'image' | 'video' };
@@ -31,6 +42,8 @@ export type FeedPost = {
   authorRole: 'owner' | 'mod' | 'member' | null;
   text: string | null;
   tag: string | null;
+  /** Free-text place name, 1–100 chars or null — see supabase/migrations/20260916160000_post_location.sql. */
+  location: string | null;
   createdAt: string;
   /** Signed, display-ready URLs, ordered by position. Empty when the post has no media. */
   media: PostMediaItem[];
@@ -38,6 +51,7 @@ export type FeedPost = {
   likedByMe: boolean;
   commentCount: number;
   poll: Poll | null;
+  event: EventInfo | null;
 };
 
 export type Comment = {
@@ -58,12 +72,13 @@ export type Comment = {
  * docs/phase/phase04.md §4). Always name the constraint.
  */
 const POST_SELECT = `
-  id, room_id, pinned, author_id, text, tag, created_at,
+  id, room_id, pinned, author_id, text, tag, location, created_at,
   profiles!posts_author_id_fkey(handle, name),
   post_media(url, position),
   post_likes(count),
   comments(count),
-  polls(id, question, poll_options(id, label, position, poll_votes(count)))
+  polls(id, question, allow_multiple, poll_options(id, label, position, poll_votes(count))),
+  events(id, title, starts_at, ends_at, location, link)
 ` as const;
 
 /**
@@ -83,6 +98,7 @@ type RawPost = {
   author_id: string | null;
   text: string | null;
   tag: string | null;
+  location: string | null;
   created_at: string;
   profiles: { handle: string; name: string } | null;
   post_media: { url: string; position: number }[];
@@ -100,8 +116,11 @@ type RawPost = {
   polls: {
     id: string;
     question: string;
+    allow_multiple: boolean;
     poll_options: { id: string; label: string; position: number; poll_votes: { count: number }[] }[];
   } | null;
+  /** An OBJECT, not an array — `events.post_id` is unique, same reasoning as `polls` above. */
+  events: { id: string; title: string; starts_at: string; ends_at: string | null; location: string | null; link: string | null } | null;
 };
 
 /**
@@ -129,7 +148,15 @@ async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<str
   ]);
 
   const likedPostIds = new Set((likedRes.data ?? []).map((r) => r.post_id));
-  const myVoteByPoll = new Map((votedRes.data ?? []).map((r) => [r.poll_id, r.poll_option_id]));
+  // A poll allowing multiple answers can have more than one vote row for
+  // the same (poll_id, user_id), so this groups into a list rather than
+  // the single value hydratePosts used before allow_multiple existed.
+  const myOptionIdsByPoll = new Map<string, string[]>();
+  for (const r of votedRes.data ?? []) {
+    const existing = myOptionIdsByPoll.get(r.poll_id);
+    if (existing) existing.push(r.poll_option_id);
+    else myOptionIdsByPoll.set(r.poll_id, [r.poll_option_id]);
+  }
 
   return raw.map((p): FeedPost => {
     const rawPoll = p.polls ?? null;
@@ -148,6 +175,7 @@ async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<str
       authorRole: (p.author_id && roleByUser?.get(p.author_id)) || null,
       text: p.text,
       tag: p.tag,
+      location: p.location,
       createdAt: p.created_at,
       media: p.post_media
         .slice()
@@ -166,7 +194,18 @@ async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<str
             question: rawPoll.question,
             options,
             totalVotes: options.reduce((sum, o) => sum + o.votes, 0),
-            myOptionId: myVoteByPoll.get(rawPoll.id) ?? null,
+            allowMultiple: rawPoll.allow_multiple,
+            myOptionIds: myOptionIdsByPoll.get(rawPoll.id) ?? [],
+          }
+        : null,
+      event: p.events
+        ? {
+            id: p.events.id,
+            title: p.events.title,
+            startsAt: p.events.starts_at,
+            endsAt: p.events.ends_at,
+            location: p.events.location,
+            link: p.events.link,
           }
         : null,
     };
@@ -275,7 +314,14 @@ export async function createPost(params: {
   mediaPaths: string[];
   pollQuestion: string | null;
   pollOptions: string[];
+  pollAllowMultiple?: boolean;
+  /** Free-text place name; blank or omitted means none (the RPC trims and stores NULL). */
+  location?: string | null;
 }) {
+  // Every parameter is sent on every call, `null` rather than omitted: a
+  // key left `undefined` is dropped by JSON.stringify, and a call missing
+  // parameters is exactly what turned create_event_post's leftover
+  // overload into a PGRST203 error (see 20260916130000).
   const { data, error } = await supabase.rpc('create_post', {
     p_room_id: params.roomId,
     p_text: params.text,
@@ -283,6 +329,36 @@ export async function createPost(params: {
     p_media_paths: params.mediaPaths,
     p_poll_question: params.pollQuestion,
     p_poll_options: params.pollOptions,
+    p_poll_allow_multiple: params.pollAllowMultiple ?? false,
+    p_location: params.location ?? null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/**
+ * The Event tab's own creation path — see
+ * supabase/migrations/20260915150100_create_event_post_rpc.sql for why
+ * this is a separate RPC from createPost() rather than more optional
+ * parameters on it.
+ */
+export async function createEventPost(params: {
+  roomId: string;
+  text: string;
+  title: string;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  link: string | null;
+}) {
+  const { data, error } = await supabase.rpc('create_event_post', {
+    p_room_id: params.roomId,
+    p_text: params.text,
+    p_event_title: params.title,
+    p_event_starts_at: params.startsAt,
+    p_event_location: params.location,
+    p_event_ends_at: params.endsAt,
+    p_event_link: params.link,
   });
   if (error) throw error;
   return data as string;
@@ -326,23 +402,17 @@ export async function addComment(postId: string, userId: string, text: string, p
 }
 
 /**
- * The schema allows one vote per poll (PK on poll_id, user_id) and there
- * is no UPDATE policy on poll_votes — only insert and delete-your-own. So
- * changing a vote is delete-then-insert, which is also what makes the
- * mock's "vote once, then see results" behaviour honest rather than
- * cosmetic: retracting is a real, permitted operation.
+ * Toggles this option for the caller: retracts it if already picked,
+ * otherwise picks it — replacing any previous pick for a single-choice
+ * poll, or adding alongside existing picks for a multi-select one. All of
+ * that lives server-side in vote_poll() (supabase/migrations/
+ * 20260916120200_vote_poll_rpc.sql) rather than being a client-side
+ * read-then-write, since "how many active votes are allowed" now depends
+ * on polls.allow_multiple rather than a flat schema constraint the client
+ * could safely race against.
  */
-export async function votePoll(pollId: string, optionId: string, userId: string, previousOptionId: string | null) {
-  if (previousOptionId === optionId) return;
-
-  if (previousOptionId) {
-    const { error } = await supabase.from('poll_votes').delete().eq('poll_id', pollId).eq('user_id', userId);
-    if (error) throw error;
-  }
-
-  const { error } = await supabase
-    .from('poll_votes')
-    .insert({ poll_id: pollId, poll_option_id: optionId, user_id: userId });
+export async function votePoll(pollId: string, optionId: string) {
+  const { error } = await supabase.rpc('vote_poll', { p_poll_id: pollId, p_option_id: optionId });
   if (error) throw error;
 }
 
@@ -377,7 +447,7 @@ export async function fetchLatestPostPreview(roomId: string): Promise<RoomActivi
     // post_media(id) — only its presence matters here (the 📷 prefix
     // below), not the URL: this preview never shows the image itself,
     // just the WhatsApp-style "📷 <caption>" text.
-    .select('text, created_at, profiles!posts_author_id_fkey(name), post_media(id), polls(question)')
+    .select('text, created_at, profiles!posts_author_id_fkey(name), post_media(id), polls(question), events(title)')
     .eq('room_id', roomId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -392,9 +462,12 @@ export async function fetchLatestPostPreview(roomId: string): Promise<RoomActivi
     profiles: { name: string } | null;
     post_media: { id: string }[];
     polls: { question: string } | null;
+    events: { title: string } | null;
   };
 
-  const summary = row.polls
+  const summary = row.events
+    ? `New event — ${row.events.title}`
+    : row.polls
     ? `New poll — ${row.polls.question}`
     : row.post_media.length > 0
       ? row.text
@@ -459,6 +532,19 @@ export async function fetchRecentPostsByAuthor(authorId: string, limit = 3): Pro
       hasPoll: !!row.polls,
     };
   });
+}
+
+/** "Sep 15, 2026" and "7:30 PM" — the two pills the Event tab's "Starts"/"Ends" rows render side by side. */
+export function formatEventDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+export function formatEventTime(iso: string) {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** "Sep 15, 2026 · 7:30 PM" — EventCard's single-line reading of the same date/time. */
+export function formatEventDateTime(iso: string) {
+  return `${formatEventDate(iso)} · ${formatEventTime(iso)}`;
 }
 
 /** "3h", "2d" — the compact relative stamp the mock uses on every post. */

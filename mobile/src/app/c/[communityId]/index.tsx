@@ -209,7 +209,7 @@ export default function RoomHome() {
   async function handleVote(post: FeedPost, optionId: string) {
     if (!userId || !post.poll) return;
     try {
-      await votePoll(post.poll.id, optionId, userId, post.poll.myOptionId);
+      await votePoll(post.poll.id, optionId);
       const fresh = await fetchPost(post.id, userId);
       if (fresh) setPosts((prev) => prev?.map((p) => (p.id === post.id ? fresh : p)) ?? prev);
     } catch (e) {

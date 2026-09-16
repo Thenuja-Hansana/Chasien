@@ -139,9 +139,13 @@ export async function fetchMyRooms(userId: string) {
     .filter((r): r is Room & { myRole: RoomRole; myNotificationsMuted: boolean } => r !== null);
 }
 
-// Only owners/mods can actually see every row here (RLS: "moderators see
-// every membership row in their room") — a plain member's query just
-// comes back with their own single row.
+// What comes back depends on the caller (RLS): moderators see every
+// membership row in their Room, pending and invited included; any other
+// approved member sees every *approved* row (since
+// 20260814073649_members_can_see_each_other.sql) plus their own; a
+// non-member sees at most their own row. (This comment used to say plain
+// members only get their own row — true before that migration, and
+// misleading since.)
 export async function fetchRoomMembers(roomId: string) {
   const { data, error } = await supabase
     .from('room_memberships')

@@ -7,7 +7,7 @@ import { useWindowDimensions } from 'react-native';
  * (on web) browser window shape the device actually has, instead of
  * assuming every screen is a tall phone.
  *
- * A portrait (4:5) photo laid out at full card width can otherwise grow
+ * A portrait (3:4) photo laid out at full card width can otherwise grow
  * taller than the screen itself on a short/wide viewport (a laptop
  * browser window, a tablet in landscape, a phone with a large on-screen
  * keyboard or system font eating into the usable height) — forcing a

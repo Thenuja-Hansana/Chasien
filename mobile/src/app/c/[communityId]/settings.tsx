@@ -174,7 +174,7 @@ export default function CommunitySettings() {
     const next = !notificationsMuted;
     setNotificationsMuted(next);
     try {
-      await setRoomNotificationsMuted(currentRoom.id, currentUserId, next);
+      await setRoomNotificationsMuted(currentRoom.id, next);
     } catch (e) {
       setNotificationsMuted(!next);
       setError(e instanceof Error ? e.message : 'Could not update notification settings.');

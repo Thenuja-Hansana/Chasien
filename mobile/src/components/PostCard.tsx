@@ -5,9 +5,10 @@ import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } 
 
 import Avatar from '@/components/Avatar';
 import ConfirmModal from '@/components/ConfirmModal';
+import EventCard from '@/components/EventCard';
 import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
-import PostMediaCarousel from '@/components/PostMediaCarousel';
+import PostMediaCarousel, { FEED_MEDIA_MAX_HEIGHT_FRACTION } from '@/components/PostMediaCarousel';
 import PostOptionsMenu from '@/components/PostOptionsMenu';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -15,8 +16,6 @@ import { relativeTime, type FeedPost } from '@/lib/posts';
 import { useUserPreview } from '@/lib/user-preview-context';
 
 /** Leaves the rest of the window free for the caption/actions row below and a peek of the next card, the way Instagram's own feed keeps scrolling legible. */
-const MAX_IMAGE_HEIGHT_FRACTION = 0.55;
-
 /**
  * One post in a Room feed — ported from app_reference/src/screens/Home.jsx.
  *
@@ -86,6 +85,14 @@ export default function PostCard({
             <Text style={styles.time}>
               @{post.authorHandle} · {relativeTime(post.createdAt)}
             </Text>
+            {post.location && (
+              <View style={styles.locationRow}>
+                <Icon name="location" size={12} color={colors.neutral[500]} strokeWidth={2.25} />
+                <Text style={styles.location} numberOfLines={1}>
+                  {post.location}
+                </Text>
+              </View>
+            )}
           </View>
         </Pressable>
         <Pressable
@@ -108,11 +115,12 @@ export default function PostCard({
 
       {post.media.length > 0 && (
         <View style={styles.mediaWrap}>
-          <PostMediaCarousel media={post.media} maxHeightFraction={MAX_IMAGE_HEIGHT_FRACTION} onPress={onPress} />
+          <PostMediaCarousel media={post.media} maxHeightFraction={FEED_MEDIA_MAX_HEIGHT_FRACTION} onPress={onPress} />
         </View>
       )}
 
       {post.poll && <PollCard poll={post.poll} onVote={onVote} />}
+      {post.event && <EventCard event={post.event} />}
 
       <View style={styles.actions}>
         <Pressable
@@ -227,6 +235,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   time: {
     fontFamily: Fonts.body,
+    fontSize: 11.5,
+    color: colors.neutral[500],
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 1,
+  },
+  location: {
+    flexShrink: 1,
+    fontFamily: Fonts.bodySemibold,
     fontSize: 11.5,
     color: colors.neutral[500],
   },

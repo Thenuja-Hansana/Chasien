@@ -7,7 +7,7 @@ import { useTheme } from '@/hooks/use-theme';
 import type { Poll } from '@/lib/posts';
 
 /**
- * Ported from app_reference/src/screens/Home.jsx's PollCard, with two
+ * Ported from app_reference/src/screens/Home.jsx's PollCard, with three
  * deliberate differences now that votes are real rather than local state:
  *
  * 1. Votes are optimistic — the bar moves on tap, then reverts if the
@@ -18,6 +18,11 @@ import type { Poll } from '@/lib/posts';
  *    would permanently strand a real mis-tap; the schema explicitly
  *    permits retracting ("users can retract their own vote",
  *    row_level_security.sql), so the UI honours that.
+ * 3. When `poll.allowMultiple` is set (supabase/migrations/
+ *    20260916120000_poll_allow_multiple.sql), every option behaves as an
+ *    independent checkbox — tapping any option toggles just that one,
+ *    rather than the single-choice radio behavior where tapping a new
+ *    option replaces whichever one was previously picked.
  */
 export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (optionId: string) => Promise<void> }) {
   const [optimistic, setOptimistic] = useState<Poll>(poll);
@@ -31,17 +36,27 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
   const current = busy ? optimistic : poll;
 
   async function handleVote(optionId: string) {
-    if (busy || optionId === poll.myOptionId) return;
+    if (busy) return;
+    const wasMine = poll.myOptionIds.includes(optionId);
+    // Single-choice: tapping the option you already picked is a no-op —
+    // retracting entirely is done by tapping elsewhere isn't offered here,
+    // matching the radio-button convention voters already expect.
+    if (!poll.allowMultiple && wasMine) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
-    const previous = poll.myOptionId;
+    const previous = poll.allowMultiple ? null : (poll.myOptionIds[0] ?? null);
+    const nextOptionIds = poll.allowMultiple
+      ? wasMine
+        ? poll.myOptionIds.filter((id) => id !== optionId)
+        : [...poll.myOptionIds, optionId]
+      : [optionId];
     setOptimistic({
       ...poll,
-      myOptionId: optionId,
-      totalVotes: poll.totalVotes + (previous ? 0 : 1),
+      myOptionIds: nextOptionIds,
+      totalVotes: poll.totalVotes + (wasMine ? -1 : previous ? 0 : 1),
       options: poll.options.map((o) => ({
         ...o,
-        votes: o.votes + (o.id === optionId ? 1 : o.id === previous ? -1 : 0),
+        votes: o.votes + (o.id === optionId ? (wasMine ? -1 : 1) : o.id === previous ? -1 : 0),
       })),
     });
     setBusy(true);
@@ -57,7 +72,7 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
       <Text style={styles.question}>{current.question}</Text>
       <View style={styles.options}>
         {current.options.map((option) => {
-          const isMine = option.id === current.myOptionId;
+          const isMine = current.myOptionIds.includes(option.id);
           const pct = current.totalVotes > 0 ? Math.round((option.votes / current.totalVotes) * 100) : 0;
           return (
             <Pressable
@@ -65,7 +80,7 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
               style={styles.option}
               onPress={() => handleVote(option.id)}
               disabled={busy}
-              accessibilityRole="radio"
+              accessibilityRole={current.allowMultiple ? 'checkbox' : 'radio'}
               accessibilityLabel={`${option.label}, ${option.votes} vote${option.votes === 1 ? '' : 's'}`}
               accessibilityState={{ checked: isMine }}
             >
@@ -82,7 +97,11 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
       </View>
       <Text style={styles.total}>
         {current.totalVotes} {current.totalVotes === 1 ? 'vote' : 'votes'}
-        {current.myOptionId ? ' · tap another option to change your vote' : ''}
+        {current.allowMultiple
+          ? ' · tap any option to select or unselect it'
+          : current.myOptionIds.length > 0
+            ? ' · tap another option to change your vote'
+            : ''}
       </Text>
     </View>
   );

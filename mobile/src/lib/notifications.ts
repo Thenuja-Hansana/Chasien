@@ -194,12 +194,15 @@ export async function togglePostPin(postId: string, pinned: boolean): Promise<vo
   if (error) throw error;
 }
 
-export async function setRoomNotificationsMuted(roomId: string, userId: string, muted: boolean): Promise<void> {
-  const { error } = await supabase
-    .from('room_memberships')
-    .update({ notifications_muted: muted })
-    .eq('room_id', roomId)
-    .eq('user_id', userId);
+/**
+ * Through a SECURITY DEFINER RPC, not a direct update: room_memberships is
+ * read-only to clients by design (no UPDATE policy), so the direct update
+ * this used to be matched 0 rows without an error and muting silently did
+ * nothing — see 20260916150000_lock_down_client_writable_columns.sql. The
+ * RPC can only change the caller's own row, and only this column.
+ */
+export async function setRoomNotificationsMuted(roomId: string, muted: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_room_notifications_muted', { p_room_id: roomId, p_muted: muted });
   if (error) throw error;
 }
 

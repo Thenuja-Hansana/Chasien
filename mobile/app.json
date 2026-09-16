@@ -45,7 +45,22 @@
       "expo-secure-store",
       "expo-audio",
       "expo-video",
-      "expo-image-picker"
+      "expo-image-picker",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Chasien uses your camera so you can take photos and clips to post in your Rooms.",
+          "microphonePermission": "Chasien uses your microphone to record audio for clips."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Chasien uses your photo library so you can pick photos and videos to post in your Rooms.",
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

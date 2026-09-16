@@ -186,6 +186,52 @@ const ICONS: Record<string, Shape[]> = {
     { t: 'path', d: 'M12 11v6' },
     { t: 'circle', cx: 12, cy: 7.7, r: 0.9 },
   ],
+  // Not part of app_reference/src/components/Icon.jsx's set — added for
+  // the create-post modal's Event tab (event "Starts" field, EventCard).
+  calendar: [
+    { t: 'rect', x: 4, y: 5, width: 16, height: 15, rx: 2 },
+    { t: 'path', d: 'M4 10h16M8 3v4M16 3v4' },
+  ],
+  // Not part of app_reference/src/components/Icon.jsx's set — added for
+  // the in-app camera picker's front/back flip button (MediaGridPicker.tsx).
+  flipCamera: [
+    { t: 'path', d: 'M17 2l3 3-3 3M20 5H8a5 5 0 0 0-5 5' },
+    { t: 'path', d: 'M7 22l-3-3 3-3M4 19h12a5 5 0 0 0 5-5' },
+  ],
+  // Not part of app_reference/src/components/Icon.jsx's set — added for
+  // the in-app camera picker's expand-to-full-screen toggle
+  // (MediaGridPicker.tsx). Four corner brackets, the standard
+  // "maximize"/"minimize" pictogram — paired with `minimize` below.
+  maximize: [
+    { t: 'path', d: 'M8 3H5a2 2 0 0 0-2 2v3' },
+    { t: 'path', d: 'M21 8V5a2 2 0 0 0-2-2h-3' },
+    { t: 'path', d: 'M16 21h3a2 2 0 0 0 2-2v-3' },
+    { t: 'path', d: 'M3 16v3a2 2 0 0 0 2 2h3' },
+  ],
+  minimize: [
+    { t: 'path', d: 'M8 3v3a2 2 0 0 1-2 2H3' },
+    { t: 'path', d: 'M21 8h-3a2 2 0 0 1-2-2V3' },
+    { t: 'path', d: 'M16 21v-3a2 2 0 0 1 2-2h3' },
+    { t: 'path', d: 'M3 16h3a2 2 0 0 1 2 2v3' },
+  ],
+  // Photo editor (components/create/PhotoEditor.tsx) — not in the mock.
+  crop: [
+    { t: 'path', d: 'M6 2v14a2 2 0 0 0 2 2h14' },
+    { t: 'path', d: 'M18 22V8a2 2 0 0 0-2-2H2' },
+  ],
+  rotateCw: [
+    { t: 'path', d: 'M21 12a9 9 0 1 1-9-9c2.5 0 4.9 1 6.7 2.7L21 8' },
+    { t: 'path', d: 'M21 3v5h-5' },
+  ],
+  flipHorizontal: [
+    { t: 'path', d: 'M9 7 4 12l5 5z' },
+    { t: 'path', d: 'm15 7 5 5-5 5z' },
+    { t: 'path', d: 'M12 3v2M12 9v2M12 15v2M12 21v-2' },
+  ],
+  undo: [
+    { t: 'path', d: 'M3 12a9 9 0 1 0 9-9 9.8 9.8 0 0 0-6.7 2.7L3 8' },
+    { t: 'path', d: 'M3 3v5h5' },
+  ],
 };
 
 type IconProps = {

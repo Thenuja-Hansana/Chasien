@@ -109,7 +109,7 @@ export default function PostDetail() {
   async function handleVote(optionId: string) {
     if (!userId || post === 'loading' || !post?.poll) return;
     try {
-      await votePoll(post.poll.id, optionId, userId, post.poll.myOptionId);
+      await votePoll(post.poll.id, optionId);
       const fresh = await fetchPost(post.id, userId);
       if (fresh) setPost(fresh);
     } catch (e) {
@@ -306,6 +306,14 @@ export default function PostDetail() {
                   {post.tag ? <Text style={styles.tag}> {post.tag}</Text> : null}
                 </Text>
                 <Text style={styles.time}>{relativeTime(post.createdAt)}</Text>
+                {post.location && (
+                  <View style={styles.locationRow}>
+                    <Icon name="location" size={12} color={colors.neutral[500]} strokeWidth={2.25} />
+                    <Text style={styles.location} numberOfLines={2}>
+                      {post.location}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 
@@ -541,6 +549,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 11.5,
     color: colors.neutral[500],
     marginTop: 5,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 3,
+  },
+  location: {
+    flexShrink: 1,
+    fontFamily: Fonts.bodySemibold,
+    fontSize: 11.5,
+    color: colors.neutral[500],
   },
   rule: {
     height: 1,
