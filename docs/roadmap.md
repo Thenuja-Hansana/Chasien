@@ -787,7 +787,9 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
   - [ ] Still open from that audit: client-written timestamps on likes,
         reactions, blocks, hidden posts and push tokens; direct inserts into
         `polls`/`poll_options`/`post_media`/`events` that skip
-        `create_post`'s validation; server-side `content_snapshot` capture
+        `create_post`'s validation (`post_media` is now column-granted with
+        no UPDATE, and its framing columns are CHECK-constrained — see
+        `20260917100000` — but a direct INSERT is still possible); server-side `content_snapshot` capture
         when Phase 9 builds reporting; an `edited_at` trigger alongside any
         future edit feature. Not audited: business rules outside column
         writes (e.g. starting a DM with someone who blocked you)

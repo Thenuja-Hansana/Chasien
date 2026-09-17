@@ -7,6 +7,237 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-17 — Comments/Likes sheets: no delayed dark "shadow" when closing
+
+**Problem (device report):** after swiping a sheet closed, a dark shadow
+followed it down the screen, a beat late.
+
+**Two causes, both measured on the A14:**
+1. *The delay.* The open sheet's post id lived in the feed screen's state
+   (`commentsPostId`/`likesPostId`), so closing re-rendered the whole feed
+   before the sheet could go away. Timed: release → `onClose` 2 ms, then
+   540–925 ms for the feed's render and commit (React Profiler: the post list
+   alone 266 ms on close, 329 ms on open, for no visible change). Opening
+   waited the same way.
+2. *The shadow.* The sheet relied on `<Modal animationType="slide">`, which
+   animates the Modal's whole window. The dim backdrop fills that window, so
+   once the Modal finally dismissed, the backdrop slid down the screen behind
+   a sheet that had already been dragged away. A frame-by-frame screen
+   recording showed exactly that band.
+
+**Fix:**
+- `BottomSheet` animates itself (`animationType="none"`): the sheet slides
+  up on open and off on close on the UI thread, the backdrop's opacity
+  follows the sheet's position (so it also lightens while dragging), and
+  `onClose` fires only after the sheet is off screen. Backdrop tap and the
+  back button use the same animated close.
+- `CommentsSheet` and `LikesSheet` own which post is showing and expose
+  `open(postId)` through a ref (the `forwardRef` + `useImperativeHandle`
+  pattern `MediaGridPicker` already uses). The feed and the clips viewer
+  call the handle, so opening and closing re-render only the sheet.
+
+**Verified on the A14:** a new frame-by-frame recording shows the backdrop
+fading with the drag and the sheet gone about 100 ms after release, with no
+band. The profiler shows the post list not re-rendering on open or close
+(one unrelated 3 ms update, down from 266–329 ms). Every earlier sheet check
+still passes: list scroll vs drag, closing from the list top and from the
+handle, spring-back, backdrop tap, back button, emoji/Reply taps, both
+sheets at 68.0% height, and the Comments sheet inside the clips viewer.
+
+---
+
+## 2026-09-17 — Comments/Likes sheets: swipe down closes on the first try, drag on the UI thread
+
+**Problems (device report):** swiping down didn't close the sheets, the drag
+felt laggy, and Likes was taller than Comments.
+
+**Why swipe-down did nothing:** the drag was a PanResponder on the handle
+that only asked for the touch once the finger moved
+(`onMoveShouldSetPanResponder`). React Native offers a touch when the finger
+lands, starting from the deepest view and working up the *component* tree,
+and a view above the sheet claimed it first. From then on, move events only
+ask that view's ancestors, so the handle never got the drag. Logged on the
+A14: the handle received every touch event, but its move handler was never
+called. Swiping down on the list was never wired to close the sheet at all.
+
+**Fix — `BottomSheet` rebuilt on react-native-gesture-handler + Reanimated:**
+- The sheet's position is a shared value moved on the UI thread, so it
+  follows the finger instead of trailing the JS thread.
+- Handle/title: any downward drag moves the sheet.
+- List: a downward drag moves the sheet only while the list is at its top
+  (manual activation, decided within 4 points — before Android's scroll view
+  starts dragging). Otherwise the gesture fails and the list scrolls; taps on
+  buttons and inputs inside are unaffected. Lists report their offset through
+  `BottomSheetFlatList`.
+- Close past 110 points or on a flick; otherwise spring back.
+- An RN `<Modal>` is its own window on Android, so the sheet has its own
+  `GestureHandlerRootView` — the reason the old comment gave for avoiding
+  RNGH, which turned out to be a one-line wrapper.
+- Both sheets now use 68% of the screen (the default), so the post stays
+  visible above.
+
+**Verified on the A14** with 25 temporary comments (deleted afterwards):
+swiping up scrolls the list without moving the sheet; swiping down while
+scrolled scrolls back without closing; one swipe down at the top closes; one
+swipe down on the handle closes; a short slow drag springs back to exactly
+its position; emoji and Reply taps still work; Likes opens at the same height
+and closes with one swipe on its list.
+
+---
+
+## 2026-09-17 — Clip taps that did nothing, and a clips viewer that ran out of memory
+
+Both found on the Galaxy A14; neither showed up in typecheck, lint or a
+synthetic `adb input tap`.
+
+**Tapping a clip in the feed did nothing.** Since the feed turned native
+controls off on clips, Android's `VideoView` (expo-video) takes any touch
+that lands on it and re-sends it to JS in its *own* coordinates instead of
+the screen's (logged: `pageX/pageY` equal to `locationX/locationY`). A real
+finger always moves a pixel or two, so the carousel's Pressable saw the touch
+leave its on-screen rect and cancelled the press. A synthetic tap has no
+movement, which is why it worked. **Fix:** the clip's video container is
+`pointerEvents="none"` when controls are off, so touches reach the Pressable
+through React Native's normal path (`PostMediaCarousel`). The full-screen
+viewer never had this: its tap layer sits above the video.
+
+**The clips viewer crashed with `OutOfMemoryError`** within ~7 s: Java heap
+went ~60 MB → the A14's 256 MB limit, even when paused, and Kong's log showed
+both clips re-downloaded about once a second. Cause: `loop = true` with
+expo-video's Android defaults (20 s forward buffer, byte cap sized for long
+videos). Looping makes the next repeats part of the forward buffer, so a
+~5 s clip queued several copies of itself, each a fresh download held in
+memory. Confirmed by turning looping off (heap flat, one download each).
+**Fix:** one shared `VIDEO_BUFFER_OPTIONS` (`lib/mediaUtils.ts`: 5 s ahead,
+16 MB cap) on every player — clips viewer, feed carousel, clip editor, story
+composer preview. Re-verified: 60 s+ in the viewer, heap flat at ~84 MB,
+swiping between clips stable, no crash.
+
+**Still open (cost, not a crash):** each repeat of a looping clip is still
+downloaded again from storage (~12 MB per loop for the test clip), which
+eats free-tier egress. Candidates: expo-video's `useCaching` (disk LRU, so
+repeats read from disk) or looping via `playToEnd` + seek with caching.
+
+---
+
+## 2026-09-17 — Clips fill their feed card, framed by the author; the Clip tab gets the New Post screen
+
+**Problem (device report):** clips looked small in the feed, with bars on
+both sides. The feed draws media at full card width, capped at 60% of the
+screen height; a portrait phone video (9:16) is far taller than that cap, so
+`contain` shrank it to fit.
+
+**Decision:** a clip now fills its card, cropped to one of the three post
+shapes (square / portrait 3:4 / landscape), and the author picks the shape
+and drags/pinches what shows — the same photo editor, in clip mode. Tapping
+the clip still opens the full-screen viewer, which plays the whole, uncropped
+video. The Clip tab's review is now the same New Post screen as the Post tab
+(a shared `ReviewDetails`: caption, Tag people, Add location; back arrow,
+Share pinned at the bottom, no tab switcher).
+
+**Why framing is stored, not rendered:** a photo's edit is baked into the
+uploaded JPEG, but the phone has no way to re-encode video (and adding a
+native video-processing library would be a large dependency for this). So a
+clip uploads as-is and its framing is metadata on `post_media`
+(`20260917100000_clip_framing.sql`: `crop_shape`, `crop_zoom`,
+`crop_focus_x/_y`, all-or-none, range-checked), applied at display time by
+one function, `framedVideoLayout()`, used by the composer preview, the feed
+and the post screen. Rotate/flip are left out: phone video is already
+upright and nothing could apply them to the file.
+
+**Why `video_aspect` is stored too:** expo-video reports a track's raw
+encoded size and ignores the rotation flag, and phones commonly record
+portrait as a rotated landscape stream — so after upload nothing on the
+client can tell a portrait clip from a landscape one. The composer knows:
+expo-media-library's gallery size is rotation-corrected, and a recording from
+the in-app camera is portrait because the app is locked to portrait (its long
+side is taken as the height). A clip with no stored aspect (everything posted
+before this) falls back to a centre crop with `cover` — no bars either way.
+
+**Security:** `post_media` still had `grants.sql`'s table-wide INSERT/UPDATE
+(it was on the Phase 10 list). Adding columns closed it: INSERT on exactly
+what `create_post()` writes, no UPDATE (there's no UPDATE policy and nothing
+edits media rows). `create_post()` gains `p_media_framing jsonb` (an array
+aligned with `p_media_paths`), dropped and recreated so there's still exactly
+one signature. A bad value fails the whole post.
+
+**Verified against the local stack:** framing and aspect round-trip through
+the feed's embed; refused values (unknown shape, zoom outside 1–4, focus
+outside 0–1, partial framing, aspect outside 0.2–5, non-numbers) leave no
+post behind; older callers without the new parameter still work; a
+non-author member reads the framing while a non-member and anon get zero
+rows; no UPDATE and no non-granted columns on `post_media`. The layout math
+was property-checked: the video always covers the card without distortion,
+and an exact-ratio card shows exactly the editor's crop.
+
+**Revisit if:** a video-processing library becomes worth its size (then bake
+the crop into the file like photos, and drop display-time framing), or clips
+need poster thumbnails.
+
+---
+
+## 2026-09-16 — Feed posts stop opening a page; comments and likes as sheets; a full-screen clips viewer
+
+**Decision** (Instagram's model, from screenshots):
+- Tapping a feed post no longer opens the post screen. The comment icon opens
+  a **Comments sheet**; the like *count* (not the heart) opens a **Likes
+  sheet**; tapping a **clip** opens a **full-screen clips viewer**.
+- The post screen stays, but only as the landing for notifications and
+  profile thumbnails. **Pin/Unpin moved into the post's ⋯ menu** — it had
+  lived only on the post screen, so moderators would otherwise have lost it
+  from the feed entirely.
+
+**Comments sheet:** newest top-level comments first, replies (one level, as
+before) under their parent oldest-first; Reply; an emoji bar that adds to
+the draft; a "Join the conversation…" composer that stays above the keyboard.
+Deliberately not drawn as dead controls: hearts on comments (needs a
+`comment_likes` table), photo/GIF comments (storage + RLS, and a GIPHY/Tenor
+key), translation (paid API) — candidates for later.
+
+**Likes sheet:** search + likers most-recent-first. Instagram's Follow
+becomes the app's friend action per person — Add friend / Requested (tap
+cancels) / Accept / Friends (no action, so a list tap can't unfriend) —
+optimistic with rollback, statuses loaded in one query
+(`fetchFriendshipStatuses`). No backend change: members can already read a
+post's likes.
+
+**Shared sheet shell (`BottomSheet`):** rounded, grab handle, title, close
+by backdrop tap, back button, or dragging the header down. The drag is a
+PanResponder on the header only — RNGH gestures inside an RN `<Modal>` on
+Android would need their own root view per modal, and the list needs its own
+vertical scrolling. The drag value lives in state, not a ref, because the
+React Compiler lint rejects reading `ref.current` during render.
+
+**Clips:** a clip is a post whose only media is one video (what the Clip tab
+creates); a video inside a photo carousel stays inline. In the feed a clip
+shows no native controls (they swallow taps) plus a play badge. The viewer
+(`c/[communityId]/clips`) pages vertically one clip per screen, starting on
+the tapped clip with the Room's newer clips above and older below, loading
+more older ones at the end; autoplay + loop for the visible clip, tap to
+pause, overlay with author, caption, location, like and comments (the same
+sheet). Only the visible clip and its neighbours get a video player — the
+rest are black placeholders — for memory on the Galaxy A14.
+- Query: `fetchRoomClips()` reuses the feed's keyset paging (now a shared
+  `fetchPostsPage`, which also runs `fetchRoomFeed`), adding a second,
+  aliased `clip_media:post_media!inner(url)` embed filtered to `.mp4`. That
+  narrows the page to posts with a video while POST_SELECT's own
+  `post_media` keeps every item, which is how `isClipPost` tells a clip from
+  a carousel. `nextCursor` is the last *row* read, not the last clip, so
+  paging never stalls on a page with no clips. No backend change.
+- Later, when worth it: view counts, poster thumbnails (clips show black
+  until the first frame), preloading, compression.
+
+**Verification:** lint + typecheck pass. Through the app's own supabase-js
+client (10/10): the double-embed query is accepted, returns only video posts
+with full media lists, `isClipPost` keeps single videos and drops a
+carousel, paging works both directions, likers come back with profiles, the
+friendship-statuses query runs, and an outsider gets zero clips and zero
+likers. Regressions after the paging refactor: feed paging 3/3, full feed
+query, backend smoke 30/30. Not yet checked on the A14: sheet feel and
+dragging, keyboard, clip tap in the feed, scroll/autoplay/memory in the
+viewer.
+
+
 ## 2026-09-16 — Room feed pages by cursor, not offset
 
 **Context:** Flagged while fixing the duplicate-photo warning: the Room feed
