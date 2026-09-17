@@ -1,4 +1,3 @@
-import { BlurTargetView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -76,7 +75,6 @@ export default function RoomHome() {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
-  const blurTargetRef = useRef<View>(null);
 
   const userId = session?.user.id;
 
@@ -376,7 +374,7 @@ export default function RoomHome() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <View style={styles.flex}>
       <View style={styles.header}>
         <Text style={styles.title} numberOfLines={1}>
           {room.name}
@@ -518,9 +516,9 @@ export default function RoomHome() {
           )}
         />
       )}
-      </BlurTargetView>
+      </View>
 
-      <TabBar active="Home" communityId={communityId} userId={session.user.id} blurTarget={blurTargetRef} />
+      <TabBar active="Home" communityId={communityId} userId={session.user.id} />
 
       <CommentsSheet ref={commentsSheetRef} viewerId={session.user.id} onCommentAdded={handleCommentAdded} />
       <LikesSheet ref={likesSheetRef} viewerId={session.user.id} />

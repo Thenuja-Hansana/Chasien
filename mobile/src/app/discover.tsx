@@ -1,9 +1,8 @@
-import { BlurTargetView } from 'expo-blur';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -46,7 +45,6 @@ export default function Discover() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
   const insets = useSafeAreaInsets();
-  const blurTargetRef = useRef<View>(null);
   const [rooms, setRooms] = useState<Room[] | null>(null);
   const [memberships, setMemberships] = useState<Map<string, Membership>>(new Map());
   const [filter, setFilter] = useState<CategoryFilter>('all');
@@ -107,7 +105,7 @@ export default function Discover() {
 
   return (
     <View style={styles.container}>
-      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <View style={styles.flex}>
       <ScrollView>
         {/* No top-edge SafeAreaView on the screen itself — that padded
             the status-bar area with the screen's own (white, in Light
@@ -210,10 +208,10 @@ export default function Discover() {
           )}
         </View>
       </ScrollView>
-      </BlurTargetView>
+      </View>
 
       <StartRoomFab />
-      <TabBar active="Explore" userId={session.user.id} blurTarget={blurTargetRef} />
+      <TabBar active="Explore" userId={session.user.id} />
     </View>
   );
 }

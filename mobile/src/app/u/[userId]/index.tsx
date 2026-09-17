@@ -1,7 +1,6 @@
-import { BlurTargetView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -31,7 +30,6 @@ export default function ProfileScreen() {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
-  const blurTargetRef = useRef<View>(null);
   const [profile, setProfile] = useState<Profile | null | 'loading'>('loading');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
@@ -156,7 +154,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <View style={styles.flex}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: clearance }]}>
         {profile === 'loading' ? (
           <View>
@@ -381,9 +379,9 @@ export default function ProfileScreen() {
           </>
         )}
       </ScrollView>
-      </BlurTargetView>
+      </View>
 
-      <TabBar active="You" userId={session.user.id} blurTarget={blurTargetRef} />
+      <TabBar active="You" userId={session.user.id} />
     </SafeAreaView>
   );
 }

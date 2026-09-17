@@ -1,6 +1,5 @@
-import { BlurTargetView } from 'expo-blur';
 import { Link, router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -57,8 +56,6 @@ export default function Index() {
   const [unreadByRoom, setUnreadByRoom] = useState<Map<string, number>>(new Map());
   /** The Telegram-style "Name: content" line + timestamp under each Room's name. Absent (not just null) while still loading a given Room's preview, so a row can tell "not fetched yet" apart from "genuinely no posts". */
   const [previewByRoom, setPreviewByRoom] = useState<Map<string, RoomActivityPreview | null>>(new Map());
-  /** What TabBar's blur actually blurs on Android — see TabBar's own blurTarget doc comment. */
-  const blurTargetRef = useRef<View>(null);
   const clearance = useTabBarClearance();
 
   const userId = session?.user.id;
@@ -120,7 +117,7 @@ export default function Index() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <View style={styles.flex}>
         <View style={styles.header}>
           <Text style={styles.brand}>chasien</Text>
           <Link href="/notifications" asChild>
@@ -183,9 +180,9 @@ export default function Index() {
             </View>
           </ScrollView>
         )}
-      </BlurTargetView>
+      </View>
 
-      <TabBar active="Home" userId={session.user.id} blurTarget={blurTargetRef} />
+      <TabBar active="Home" userId={session.user.id} />
     </SafeAreaView>
   );
 }

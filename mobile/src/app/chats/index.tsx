@@ -1,7 +1,6 @@
-import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -135,7 +134,6 @@ export default function Chats() {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
-  const blurTargetRef = useRef<View>(null);
   const [items, setItems] = useState<InboxItem[] | null>(null);
   const [filter, setFilter] = useState<Filter>('All');
   const [error, setError] = useState<string | null>(null);
@@ -198,7 +196,7 @@ export default function Chats() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <View style={styles.flex}>
       <View style={styles.header}>
         <Text style={styles.heading}>Chats</Text>
         <View style={styles.filterRow}>
@@ -258,9 +256,9 @@ export default function Chats() {
           )}
         </ScrollView>
       )}
-      </BlurTargetView>
+      </View>
 
-      <TabBar active="Chats" userId={session.user.id} blurTarget={blurTargetRef} />
+      <TabBar active="Chats" userId={session.user.id} />
     </SafeAreaView>
   );
 }

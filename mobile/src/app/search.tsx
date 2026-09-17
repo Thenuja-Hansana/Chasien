@@ -1,7 +1,6 @@
-import { BlurTargetView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -54,7 +53,6 @@ export default function Search() {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
-  const blurTargetRef = useRef<View>(null);
   const searchFocus = useFocusHighlight();
 
   const userId = session?.user.id;
@@ -111,7 +109,7 @@ export default function Search() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <View style={styles.flex}>
       <View style={styles.header}>
         <TextInput
           style={[styles.input, searchFocus.focused && styles.inputFocused]}
@@ -173,9 +171,9 @@ export default function Search() {
           )}
         </ScrollView>
       )}
-      </BlurTargetView>
+      </View>
 
-      <TabBar active="Explore" userId={session.user.id} blurTarget={blurTargetRef} />
+      <TabBar active="Explore" userId={session.user.id} />
     </SafeAreaView>
   );
 }

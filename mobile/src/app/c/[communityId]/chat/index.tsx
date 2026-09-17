@@ -1,6 +1,5 @@
-import { BlurTargetView } from 'expo-blur';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -48,7 +47,6 @@ export default function RoomChat() {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
-  const blurTargetRef = useRef<View>(null);
 
   const [room, setRoom] = useState<Room | null | 'loading'>('loading');
   const [canCreate, setCanCreate] = useState(false);
@@ -136,7 +134,7 @@ export default function RoomChat() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <View style={styles.flex}>
         <View style={styles.header}>
           <Pressable
             style={styles.headerSide}
@@ -192,7 +190,7 @@ export default function RoomChat() {
             })
           )}
         </ScrollView>
-      </BlurTargetView>
+      </View>
     </SafeAreaView>
   );
 }

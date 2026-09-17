@@ -7,6 +7,55 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-17 — Tab bar: no live blur on Android
+
+**Problem:** scrolling felt laggy, feed scrolling especially. A performance
+investigation on the Galaxy A14 measured frame times with
+`dumpsys gfxinfo` over a fixed script of 20 flings on the Grit Club feed,
+turning suspects off one at a time. It ran on a production JS bundle
+(`expo start --no-dev --minify`) as well as the dev bundle: the jank was the
+same in both, so it's real, not dev-mode overhead.
+
+**Cause:** the floating tab bar's frosted glass on Android was Dimezis
+BlurView (`blurMethod="dimezisBlurViewSdk31Plus"`) with each screen's
+content wrapped in a `BlurTargetView` as its blur target. That captures and
+re-blurs the content behind the bar on every frame it moves, which is
+every frame of a scroll. It was the largest single cost found; the
+`BlurTargetView` wrapper on its own cost nothing measurable.
+
+**Decision:** on Android the bar is a plain view with the theme's surface
+colour at 97% plus the existing highlight gradient, and no blur. At 94%,
+unblurred text scrolling underneath visibly competed with the icons. iOS
+keeps its system blur, which is native and cheap. The `BlurTargetView`
+wrappers and the `blurTarget` prop on eight screens are gone, since nothing
+uses them on either platform now.
+
+**Measured (production JS bundle, same script):**
+
+| | Janky frames | Median | 90th pct | 99th pct |
+|---|---|---|---|---|
+| Live blur (before) | 16.6% | 34 ms | 69 ms | 400 ms |
+| Static glass (after, two runs) | 12.2% / 12.6% | 26 ms | 46 / 48 ms | 400 / 250 ms |
+
+Checked visually in light and dark mode over photos and over list text.
+
+**Still open from the same investigation, in expected order of impact:**
+video players mounted in feed clip cards (the remaining 99th-percentile
+spikes, plus a "shared object that was already released" error during fast
+scrolls); images never cache-hit because signed URLs change on every load
+(11 photos downloaded 155 times); the React Compiler silently skipping
+29 of 61 files (`try…finally`, `eslint-disable` of react-hooks rules,
+Reanimated `.value` writes), so any feed state change re-renders every post
+card (~100 ms per like in the production bundle); and a nested horizontal
+FlatList per post card even for one photo. Note that the dev client's native
+side is a debug build, so absolute frame times are pessimistic; the simplest
+list in the app measures ~21 ms median on this phone. Compare relatively.
+
+**Revisit if:** a cheaper blur becomes available on Android, e.g. a static
+blurred snapshot, or blur only while not scrolling.
+
+---
+
 ## 2026-09-17 — Comments/Likes sheets: no delayed dark "shadow" when closing
 
 **Problem (device report):** after swiping a sheet closed, a dark shadow

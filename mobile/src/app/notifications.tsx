@@ -1,7 +1,6 @@
-import { BlurTargetView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -85,7 +84,6 @@ export default function Notifications() {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const clearance = useTabBarClearance();
-  const blurTargetRef = useRef<View>(null);
   const { roomId, roomName } = useLocalSearchParams<{ roomId?: string; roomName?: string }>();
   const [items, setItems] = useState<AppNotification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +158,7 @@ export default function Notifications() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <BlurTargetView ref={blurTargetRef} style={styles.flex}>
+      <View style={styles.flex}>
       <View style={styles.header}>
         {roomId && (
           <Pressable
@@ -244,9 +242,9 @@ export default function Notifications() {
           }}
         />
       )}
-      </BlurTargetView>
+      </View>
 
-      <TabBar active="Home" userId={session.user.id} blurTarget={blurTargetRef} />
+      <TabBar active="Home" userId={session.user.id} />
     </SafeAreaView>
   );
 }
