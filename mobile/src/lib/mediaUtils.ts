@@ -148,6 +148,53 @@ export function clampPhotoFocus(
   return [Math.min(Math.max(focusX, halfX), 1 - halfX), Math.min(Math.max(focusY, halfY), 1 - halfY)];
 }
 
+/**
+ * How a clip is cropped in the feed — the photo editor's model minus
+ * rotate/flip, stored per media row (20260917100000_clip_framing.sql) and
+ * applied at display time, since video can't be re-encoded on the phone.
+ */
+export type MediaFraming = { shape: FeedShape; zoom: number; focusX: number; focusY: number };
+
+/** A clip's box shape: the author's choice, else the shape closest to the video's own aspect, else portrait (what phones record). */
+export function clipShape(framing: MediaFraming | null | undefined, videoAspect: number | null | undefined): FeedShape {
+  if (framing) return framing.shape;
+  if (videoAspect && videoAspect > 0) return closestFeedShape(videoAspect, 1);
+  return 'portrait';
+}
+
+/**
+ * Where to draw a video inside a feed box so the box shows exactly its
+ * framed crop: the video's size and top-left offset, in the box's own
+ * points. The one layout used by the composer's preview, the feed and the
+ * post screen, so they can't drift apart.
+ *
+ * Works in "video units" (width = videoAspect, height = 1), so it needs the
+ * displayed aspect, not pixel sizes. Scales so the crop covers the box even
+ * when the box isn't exactly the shape's ratio (the feed's height cap), and
+ * clamps the centre against the crop that's actually visible, so the video
+ * never leaves a gap.
+ */
+export function framedVideoLayout(
+  boxWidth: number,
+  boxHeight: number,
+  videoAspect: number,
+  shape: FeedShape,
+  framing: MediaFraming | null | undefined,
+) {
+  const ratio = feedShapeAspectRatio(shape);
+  const zoom = framing?.zoom ?? 1;
+  const cropWidth = Math.min(videoAspect, ratio) / zoom;
+  const cropHeight = cropWidth / ratio;
+  const scale = Math.max(boxWidth / cropWidth, boxHeight / cropHeight);
+  const width = videoAspect * scale;
+  const height = scale;
+  const halfX = boxWidth / 2 / width;
+  const halfY = boxHeight / 2 / height;
+  const focusX = Math.min(Math.max(framing?.focusX ?? 0.5, halfX), 1 - halfX);
+  const focusY = Math.min(Math.max(framing?.focusY ?? 0.5, halfY), 1 - halfY);
+  return { width, height, left: boxWidth / 2 - focusX * width, top: boxHeight / 2 - focusY * height };
+}
+
 /** The pixel rect an edit selects from an image that has already been rotated and flipped per that edit. */
 function photoEditCropRect(width: number, height: number, aspectRatio: number, edit: PhotoEdit) {
   const [focusX, focusY] = clampPhotoFocus(edit.focusX, edit.focusY, edit.zoom, width, height, aspectRatio);

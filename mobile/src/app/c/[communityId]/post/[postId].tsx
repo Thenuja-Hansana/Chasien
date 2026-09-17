@@ -34,6 +34,7 @@ import {
   fetchComments,
   fetchPost,
   hidePost,
+  isClipPost,
   relativeTime,
   removeMyTag,
   setLiked,
@@ -265,7 +266,7 @@ export default function PostDetail() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {post.media.length > 0 && (
             <View style={styles.heroWrap}>
-              <PostMediaCarousel media={post.media} maxHeightFraction={MAX_HERO_HEIGHT_FRACTION} />
+              <PostMediaCarousel media={post.media} maxHeightFraction={MAX_HERO_HEIGHT_FRACTION} clipFill={isClipPost(post)} />
               <PostTagsOverlay tags={post.tags} onPressPerson={openUserPreview} />
             </View>
           )}

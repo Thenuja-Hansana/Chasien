@@ -1,16 +1,20 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import ReviewDetails from '@/components/create/ReviewDetails';
 import Icon from '@/components/Icon';
 import PostMediaCarousel, { FEED_MEDIA_MAX_HEIGHT_FRACTION, type CarouselMediaItem } from '@/components/PostMediaCarousel';
-import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Fonts, Radius, Spacing } from '@/constants/theme';
 import type { PickedMedia } from '@/lib/media';
 import { feedShapeAspectRatio, type FeedShape } from '@/lib/mediaUtils';
 import type { TaggedPerson } from '@/lib/posts';
 
 function toCarouselItem(media: PickedMedia, shape: FeedShape): CarouselMediaItem {
-  if (media.kind === 'video') return { url: media.uri, kind: 'video' };
+  // A lone video in a Post is a clip in the feed (isClipPost), so carry its
+  // displayed aspect for the same fill the feed will use.
+  if (media.kind === 'video') {
+    return { url: media.uri, kind: 'video', videoAspect: media.width && media.height ? media.width / media.height : null };
+  }
   // An edited photo's preview file is already cropped to the shape, so the
   // carousel's crop box shows all of it; an unedited one gets center-cropped
   // to the shape, exactly as the upload will.
@@ -62,8 +66,6 @@ export default function PostTabFields({
   onClearLocation: () => void;
   submitting: boolean;
 }) {
-  const colors = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
   const carouselMedia = useMemo(() => media.map((item) => toCarouselItem(item, shape)), [media, shape]);
   const [activeIndex, setActiveIndex] = useState(0);
   const currentIndex = Math.min(activeIndex, media.length - 1);
@@ -71,7 +73,13 @@ export default function PostTabFields({
   return (
     <View style={styles.wrap}>
       <View>
-        <PostMediaCarousel media={carouselMedia} maxHeightFraction={FEED_MEDIA_MAX_HEIGHT_FRACTION} onActiveIndexChange={setActiveIndex} />
+        <PostMediaCarousel
+          media={carouselMedia}
+          maxHeightFraction={FEED_MEDIA_MAX_HEIGHT_FRACTION}
+          onActiveIndexChange={setActiveIndex}
+          clipFill={media.length === 1 && media[0].kind === 'video'}
+          videoControls={!(media.length === 1 && media[0].kind === 'video')}
+        />
         {media.length > 0 && (
           <Pressable
             style={styles.remove}
@@ -100,134 +108,52 @@ export default function PostTabFields({
         )}
       </View>
 
-      {/* No box, by design — a bare writing area closed off by one hairline,
-          like Instagram's caption field. It's multiline, so it isn't
-          subject to the single-line empty-input caret bug GroupedTextInput
-          works around. */}
-      <View>
-        <TextInput
-          style={styles.caption}
-          value={text}
-          onChangeText={onChangeText}
-          placeholder="Write a caption…"
-          placeholderTextColor={colors.neutral[500]}
-          multiline
-          editable={!submitting}
-          accessibilityLabel="Caption"
-        />
-        <View style={styles.divider} />
-      </View>
-
-      {/* Instagram's detail rows: icon, label, chevron — Tag people, then
-          Add location, in Instagram's order. */}
-      <View>
-        <Pressable
-          style={styles.detailRow}
-          onPress={onOpenTags}
-          disabled={submitting}
-          accessibilityRole="button"
-          accessibilityLabel={tags.length > 0 ? `Tagged: ${tags.map((t) => t.name).join(', ')}. Tap to change` : 'Tag people'}
-        >
-          <Icon name="youTab" size={22} color={colors.text} strokeWidth={2} />
-          <Text style={[styles.detailLabel, tags.length > 0 && styles.detailValue]} numberOfLines={1}>
-            {tags.length === 0
-              ? 'Tag people'
-              : tags.length <= 2
-                ? tags.map((t) => `@${t.handle}`).join(', ')
-                : `@${tags[0].handle}, @${tags[1].handle} +${tags.length - 2}`}
-          </Text>
-          <Icon name="chevronRight" size={18} color={colors.neutral[500]} />
-        </Pressable>
-        <View style={styles.divider} />
-      </View>
-
-      <View>
-        <Pressable
-          style={styles.detailRow}
-          onPress={onOpenLocation}
-          disabled={submitting}
-          accessibilityRole="button"
-          accessibilityLabel={location ? `Location: ${location}. Tap to change` : 'Add location'}
-        >
-          <Icon name="location" size={22} color={colors.text} strokeWidth={2} />
-          <Text style={[styles.detailLabel, location.length > 0 && styles.detailValue]} numberOfLines={1}>
-            {location || 'Add location'}
-          </Text>
-          {location ? (
-            <Pressable onPress={onClearLocation} disabled={submitting} hitSlop={10} accessibilityRole="button" accessibilityLabel="Remove location">
-              <Icon name="close" size={16} color={colors.neutral[500]} />
-            </Pressable>
-          ) : (
-            <Icon name="chevronRight" size={18} color={colors.neutral[500]} />
-          )}
-        </Pressable>
-        <View style={styles.divider} />
-      </View>
+      <ReviewDetails
+        text={text}
+        onChangeText={onChangeText}
+        tags={tags}
+        onOpenTags={onOpenTags}
+        location={location}
+        onOpenLocation={onOpenLocation}
+        onClearLocation={onClearLocation}
+        submitting={submitting}
+      />
     </View>
   );
 }
 
-const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    wrap: {
-      gap: Spacing[3],
-    },
-    remove: {
-      position: 'absolute',
-      left: 10,
-      top: 10,
-      width: 28,
-      height: 28,
-      borderRadius: Radius.pill,
-      backgroundColor: 'rgba(0,0,0,0.55)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    editPill: {
-      position: 'absolute',
-      left: 10,
-      bottom: 10,
-      height: 30,
-      paddingHorizontal: 12,
-      borderRadius: Radius.pill,
-      backgroundColor: 'rgba(0,0,0,0.55)',
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    editPillText: {
-      fontFamily: Fonts.bodyBold,
-      fontSize: 12,
-      color: '#ffffff',
-    },
-    caption: {
-      minHeight: 96,
-      paddingHorizontal: 0,
-      paddingVertical: Spacing[3],
-      fontSize: 15,
-      lineHeight: 22,
-      color: colors.text,
-      fontFamily: Fonts.body,
-      textAlignVertical: 'top',
-    },
-    divider: {
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: colors.divider,
-    },
-    detailRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing[3],
-      minHeight: 56,
-      paddingVertical: Spacing[3],
-    },
-    detailLabel: {
-      flex: 1,
-      fontFamily: Fonts.body,
-      fontSize: 15.5,
-      color: colors.text,
-    },
-    detailValue: {
-      fontFamily: Fonts.bodySemibold,
-    },
-  });
+// Overlay controls sit on the media itself, so fixed white-on-dark in both
+// themes. (The theme-dependent caption and rows moved to ReviewDetails.)
+const styles = StyleSheet.create({
+  wrap: {
+    gap: Spacing[3],
+  },
+  remove: {
+    position: 'absolute',
+    left: 10,
+    top: 10,
+    width: 28,
+    height: 28,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editPill: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    height: 30,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  editPillText: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 12,
+    color: '#ffffff',
+  },
+});

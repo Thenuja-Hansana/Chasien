@@ -234,9 +234,12 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
             // false in app.json — this app has no use for photo location data).
             const uri =
               Platform.OS === 'android' ? asset.uri : ((await MediaLibrary.getAssetInfoAsync(asset)).localUri ?? asset.uri);
+            // width/height for a video too: expo-media-library's asset size
+            // is rotation-corrected (unlike expo-video's track size), which
+            // the clip framing needs — see 20260917100000_clip_framing.sql.
             resolved.push(
               asset.mediaType === 'video'
-                ? { kind: 'video', uri, assetId: asset.id }
+                ? { kind: 'video', uri, assetId: asset.id, width: asset.width, height: asset.height }
                 : { kind: 'image', uri, width: asset.width, height: asset.height, assetId: asset.id },
             );
           }

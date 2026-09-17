@@ -141,6 +141,7 @@ export default function PostCard({
             maxHeightFraction={FEED_MEDIA_MAX_HEIGHT_FRACTION}
             onPress={isClip ? onOpenClip : undefined}
             videoControls={!isClip}
+            clipFill={isClip}
           />
           {isClip && (
             <View style={styles.clipBadge} pointerEvents="none">

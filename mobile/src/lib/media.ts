@@ -7,6 +7,7 @@ import {
   uploadBase64,
   uploadLocalFile,
   type FeedShape,
+  type MediaFraming,
   type PhotoEdit,
   type PickedImage,
 } from '@/lib/mediaUtils';
@@ -75,7 +76,21 @@ export async function pickImage(options: PickImageOptions = {}): Promise<PickedI
  */
 export type PickedMedia =
   | ({ kind: 'image'; assetId?: string; edit?: PhotoEdit; previewUri?: string } & PickedImage)
-  | { kind: 'video'; uri: string; assetId?: string };
+  | {
+      kind: 'video';
+      uri: string;
+      assetId?: string;
+      /**
+       * Displayed (rotation-corrected) size, when known: expo-media-library's
+       * asset size already accounts for the rotation flag, unlike expo-video's
+       * track size. Unset for an in-app camera recording until the composer
+       * works it out (see create-post.tsx).
+       */
+      width?: number;
+      height?: number;
+      /** Clip framing from the photo editor, applied in the feed (20260917100000_clip_framing.sql). */
+      framing?: MediaFraming;
+    };
 
 function assetToPickedMedia(asset: ImagePicker.ImagePickerAsset): PickedMedia {
   if (asset.type === 'video') return { kind: 'video', uri: asset.uri };

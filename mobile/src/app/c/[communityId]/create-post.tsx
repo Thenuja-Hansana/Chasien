@@ -19,7 +19,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { deletePostMedia, MAX_POST_MEDIA_ITEMS, uploadPostMedia, type PickedMedia } from '@/lib/media';
-import { closestFeedShape, isUneditedPhoto, renderPhotoEditPreview, type FeedShape, type PhotoEdit } from '@/lib/mediaUtils';
+import { clipShape, closestFeedShape, isUneditedPhoto, renderPhotoEditPreview, type FeedShape, type PhotoEdit } from '@/lib/mediaUtils';
 import { createEventPost, createPost, type TaggedPerson } from '@/lib/posts';
 import { fetchRoomBySlug, type Room } from '@/lib/rooms';
 
@@ -53,10 +53,10 @@ function defaultEventStart(): Date {
  *
  * Post and Clip are each a two-phase flow: 'pick' renders the live camera
  * + device-photo grid (MediaGridPicker), 'review' renders the caption +
- * selected-media editor (PostTabFields/ClipTabFields). Post's review is
+ * selected-media editor (PostTabFields/ClipTabFields). Both reviews are
  * Instagram's New Post screen: a back arrow to the picker instead of the
- * close button, a Post button pinned at the bottom instead of in the
- * header, and no tab switcher.
+ * close button, the Post/Share button pinned at the bottom instead of in
+ * the header, and no tab switcher.
  *
  * The phase swap is why the body isn't unconditionally a <ScrollView> — MediaGridPicker owns its own internal scrolling (a live
  * camera plus a FlatList grid), and nesting a FlatList inside another
@@ -108,9 +108,17 @@ export default function CreatePost() {
 
   const [clipPhase, setClipPhase] = useState<PickPhase>('pick');
   const [clipText, setClipText] = useState('');
-  const [clipMedia, setClipMedia] = useState<PickedMedia | null>(null);
+  const [clipMedia, setClipMedia] = useState<Extract<PickedMedia, { kind: 'video' }> | null>(null);
   const [clipGridCount, setClipGridCount] = useState(0);
   const clipPickerRef = useRef<MediaGridPickerHandle>(null);
+  // The Clip tab's own draft details — switching tabs keeps each tab's.
+  const [clipLocation, setClipLocation] = useState('');
+  const [clipTags, setClipTags] = useState<TaggedPerson[]>([]);
+  const [editingClip, setEditingClip] = useState(false);
+  // Displayed width / height of a clip the gallery didn't size (a fresh
+  // recording), from the player's track size once it loads — see
+  // handleClipVideoSize.
+  const [clipTrackAspect, setClipTrackAspect] = useState<number | null>(null);
 
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
@@ -149,6 +157,8 @@ export default function CreatePost() {
     postMedia.length > 0 ||
     postGridCount > 0 ||
     clipText.trim().length > 0 ||
+    clipLocation.length > 0 ||
+    clipTags.length > 0 ||
     clipMedia !== null ||
     clipGridCount > 0 ||
     pollQuestion.trim().length > 0 ||
@@ -162,6 +172,11 @@ export default function CreatePost() {
 
   const isPicking = (activeTab === 'post' && postPhase === 'pick') || (activeTab === 'clip' && clipPhase === 'pick');
   const isPostReview = activeTab === 'post' && postPhase === 'review';
+  const isClipReview = activeTab === 'clip' && clipPhase === 'review';
+  // Post and Clip share the New Post review chrome: back arrow, pinned
+  // submit button, no tab switcher.
+  const isMediaReview = isPostReview || isClipReview;
+  const clipVideoAspect = clipMedia?.width && clipMedia.height ? clipMedia.width / clipMedia.height : clipTrackAspect;
 
   const firstPostPhoto = postMedia.find((item) => item.kind === 'image');
   const postShape: FeedShape =
@@ -184,7 +199,9 @@ export default function CreatePost() {
     // so coming back from review with nothing changed still allows "Next" —
     // and unticking everything correctly doesn't.
     if (activeTab === 'post' && postPhase === 'pick') return { label: 'Next', enabled: postGridCount > 0 };
-    if (activeTab === 'clip' && clipPhase === 'pick') return { label: 'Next', enabled: clipGridCount > 0 };
+    // A clip already chosen allows "Next" straight back to its review, since
+    // the grid doesn't show it ticked.
+    if (activeTab === 'clip' && clipPhase === 'pick') return { label: 'Next', enabled: clipGridCount > 0 || clipMedia !== null };
     if (activeTab === 'post') return { label: 'Post', enabled: postText.trim().length > 0 || postMedia.length > 0 };
     if (activeTab === 'clip') return { label: 'Share', enabled: clipMedia !== null };
     if (activeTab === 'poll') return { label: 'Send', enabled: pollReady };
@@ -203,6 +220,10 @@ export default function CreatePost() {
       return;
     }
     if (activeTab === 'clip' && clipPhase === 'pick') {
+      if (clipGridCount === 0) {
+        setClipPhase('review');
+        return;
+      }
       setPickerBusy(true);
       try {
         await clipPickerRef.current?.confirm();
@@ -234,15 +255,19 @@ export default function CreatePost() {
         if (editingPhotoIndex !== null) {
           // Same as the editor's own ✕ — discard this edit, keep the post.
           if (!photoEditorBusy) setEditingPhotoIndex(null);
+        } else if (editingClip) {
+          setEditingClip(false);
         } else if (isPostReview) {
           if (!submitting) setPostPhase('pick');
+        } else if (isClipReview) {
+          if (!submitting) setClipPhase('pick');
         } else {
           handleClose();
         }
         return true;
       });
       return () => subscription.remove();
-    }, [handleClose, isPostReview, submitting, editingPhotoIndex, photoEditorBusy]),
+    }, [handleClose, isPostReview, isClipReview, submitting, editingPhotoIndex, photoEditorBusy, editingClip]),
   );
 
   if (!session) return null;
@@ -303,7 +328,27 @@ export default function CreatePost() {
 
   function removeClipMedia() {
     setClipMedia(null);
+    setClipTrackAspect(null);
     setClipPhase('pick');
+  }
+
+  // Only needed when the gallery didn't size the clip. The player's track
+  // size is the raw encoded size and ignores the rotation flag phones record
+  // with, so it can't tell portrait from landscape. A recording from this
+  // app's own camera is portrait, though — the app is locked to portrait
+  // (app.json) — so its long side is the height. A gallery clip that somehow
+  // came without a size gets the track size as-is.
+  function handleClipVideoSize(width: number, height: number) {
+    if (!clipMedia || width <= 0 || height <= 0) return;
+    if (clipMedia.width && clipMedia.height) return;
+    const aspect = clipMedia.assetId ? width / height : Math.min(width, height) / Math.max(width, height);
+    setClipTrackAspect((prev) => (prev === aspect ? prev : aspect));
+  }
+
+  // Framing is metadata, not a render, so this is instant — no busy state.
+  function handleClipEditDone(edit: PhotoEdit, shape: FeedShape) {
+    setClipMedia((prev) => (prev ? { ...prev, framing: { shape, zoom: edit.zoom, focusX: edit.focusX, focusY: edit.focusY } } : prev));
+    setEditingClip(false);
   }
 
   function updatePollOption(index: number, value: string) {
@@ -340,6 +385,12 @@ export default function CreatePost() {
             pollOptions: [],
             location: postLocation || null,
             taggedUserIds: postTags.map((t) => t.userId),
+            // A video's displayed aspect, when the gallery gave it one: a lone
+            // video post shows in the feed as a clip, cropped by that aspect.
+            // Photos are already cropped into their files.
+            mediaFraming: postMedia.map((item) =>
+              item.kind === 'video' ? { framing: null, videoAspect: item.width && item.height ? item.width / item.height : null } : null,
+            ),
           });
         } catch (e) {
           // Media lands in storage before the post row exists, so a
@@ -354,7 +405,16 @@ export default function CreatePost() {
         const path = await uploadPostMedia(clipMedia, room.id, userId);
         try {
           setStatusLine('Posting…');
-          await createPost({ roomId: room.id, text: clipText, mediaPaths: [path], pollQuestion: null, pollOptions: [] });
+          await createPost({
+            roomId: room.id,
+            text: clipText,
+            mediaPaths: [path],
+            pollQuestion: null,
+            pollOptions: [],
+            location: clipLocation || null,
+            taggedUserIds: clipTags.map((t) => t.userId),
+            mediaFraming: [{ framing: clipMedia.framing ?? null, videoAspect: clipVideoAspect }],
+          });
         } catch (e) {
           await deletePostMedia(path);
           throw e;
@@ -399,7 +459,7 @@ export default function CreatePost() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <PhotoEditor
-          photo={editingPhoto}
+          media={editingPhoto}
           initialShape={postShape}
           isCarousel={postMedia.length > 1}
           busy={photoEditorBusy}
@@ -411,12 +471,36 @@ export default function CreatePost() {
     );
   }
 
+  // Same editor in clip mode: the frame the feed crops the clip to.
+  if (editingClip && clipMedia && clipVideoAspect) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <PhotoEditor
+          media={clipMedia}
+          videoAspect={clipVideoAspect}
+          initialShape={clipShape(clipMedia.framing, clipVideoAspect)}
+          isCarousel={false}
+          busy={false}
+          error={null}
+          onCancel={() => setEditingClip(false)}
+          onDone={handleClipEditDone}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
-          {isPostReview ? (
-            <Pressable onPress={() => setPostPhase('pick')} disabled={submitting} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back to photos">
+          {isMediaReview ? (
+            <Pressable
+              onPress={() => (isPostReview ? setPostPhase('pick') : setClipPhase('pick'))}
+              disabled={submitting}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={isPostReview ? 'Back to photos' : 'Back to videos'}
+            >
               <Icon name="back" size={22} color={colors.text} />
             </Pressable>
           ) : (
@@ -425,8 +509,8 @@ export default function CreatePost() {
             </Pressable>
           )}
           <Text style={styles.headingText}>{heading}</Text>
-          {isPostReview ? (
-            // Keeps the title centered; the Post button lives in the footer on this screen.
+          {isMediaReview ? (
+            // Keeps the title centered; the submit button lives in the footer on this screen.
             <View style={styles.headerSpacer} />
           ) : (
             <Pressable onPress={handleHeaderPress} disabled={!canSubmit}>
@@ -468,15 +552,20 @@ export default function CreatePost() {
                 mode="clip"
                 onSelectionChange={setClipGridCount}
                 onConfirm={(items) => {
-                  if (items[0]) setClipMedia(items[0]);
+                  const picked = items[0];
+                  if (picked?.kind === 'video') {
+                    // A different clip: its framing and size start over.
+                    setClipMedia(picked);
+                    setClipTrackAspect(null);
+                  }
                   setClipGridCount(0);
-                  setClipPhase('review');
+                  if (picked || clipMedia) setClipPhase('review');
                 }}
               />
             )}
           </View>
         ) : (
-          <ScrollView contentContainerStyle={[styles.content, isPostReview && styles.postReviewContent]} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={[styles.content, isMediaReview && styles.postReviewContent]} keyboardShouldPersistTaps="handled">
             {activeTab === 'post' && (
               <PostTabFields
                 text={postText}
@@ -498,10 +587,15 @@ export default function CreatePost() {
                 text={clipText}
                 onChangeText={setClipText}
                 media={clipMedia}
+                videoAspect={clipVideoAspect}
+                onVideoNaturalSize={handleClipVideoSize}
                 onRemoveMedia={removeClipMedia}
-                focusedField={focusedField}
-                onFocusField={setFocusedField}
-                onBlurField={clearFocus}
+                onEditClip={() => setEditingClip(true)}
+                tags={clipTags}
+                onOpenTags={() => setTagSheetOpen(true)}
+                location={clipLocation}
+                onOpenLocation={() => setLocationSheetOpen(true)}
+                onClearLocation={() => setClipLocation('')}
                 submitting={submitting}
               />
             )}
@@ -544,15 +638,15 @@ export default function CreatePost() {
               />
             )}
 
-            {!isPostReview && statusLine && <Text style={styles.status}>{statusLine}</Text>}
-            {!isPostReview && error && <Text style={styles.error}>{error}</Text>}
+            {!isMediaReview && statusLine && <Text style={styles.status}>{statusLine}</Text>}
+            {!isMediaReview && error && <Text style={styles.error}>{error}</Text>}
           </ScrollView>
         )}
 
         {/* Upload progress and errors sit with the button that caused them,
             not at the end of a scroll a tall photo can push off-screen. The
             SafeAreaView's bottom edge already keeps this above the nav bar. */}
-        {isPostReview && (
+        {isMediaReview && (
           <View style={styles.footer}>
             {statusLine && <Text style={styles.status}>{statusLine}</Text>}
             {error && <Text style={styles.error}>{error}</Text>}
@@ -563,13 +657,13 @@ export default function CreatePost() {
               accessibilityRole="button"
               accessibilityState={{ disabled: !canSubmit, busy: submitting }}
             >
-              {submitting ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.submitButtonText}>Post</Text>}
+              {submitting ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.submitButtonText}>{headerMeta.label}</Text>}
             </Pressable>
           </View>
         )}
       </KeyboardAvoidingView>
 
-      {!isPostReview && <CreateTabSwitcher active={activeTab} onChange={setActiveTab} disabled={submitting} />}
+      {!isMediaReview && <CreateTabSwitcher active={activeTab} onChange={setActiveTab} disabled={submitting} />}
 
       <ConfirmModal
         visible={showDiscardConfirm}
@@ -586,9 +680,10 @@ export default function CreatePost() {
           visible={tagSheetOpen}
           roomId={room.id}
           userId={userId}
-          value={postTags}
+          value={activeTab === 'clip' ? clipTags : postTags}
           onDone={(people) => {
-            setPostTags(people);
+            if (activeTab === 'clip') setClipTags(people);
+            else setPostTags(people);
             setTagSheetOpen(false);
           }}
           onClose={() => setTagSheetOpen(false)}
@@ -597,9 +692,10 @@ export default function CreatePost() {
 
       <LocationSheet
         visible={locationSheetOpen}
-        value={postLocation}
+        value={activeTab === 'clip' ? clipLocation : postLocation}
         onDone={(location) => {
-          setPostLocation(location);
+          if (activeTab === 'clip') setClipLocation(location);
+          else setPostLocation(location);
           setLocationSheetOpen(false);
         }}
         onClose={() => setLocationSheetOpen(false)}

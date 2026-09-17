@@ -1,5 +1,5 @@
 import { signMediaUrls } from '@/lib/media';
-import { mediaKindFromPath } from '@/lib/mediaUtils';
+import { mediaKindFromPath, type FeedShape, type MediaFraming } from '@/lib/mediaUtils';
 import { supabase } from '@/lib/supabase';
 
 export type PollOption = {
@@ -29,7 +29,11 @@ export type EventInfo = {
   link: string | null;
 };
 
-export type PostMediaItem = { url: string; kind: 'image' | 'video' };
+/**
+ * `framing`/`videoAspect` are only ever set on clip videos — how the feed
+ * crops them and the video's displayed aspect (20260917100000_clip_framing.sql).
+ */
+export type PostMediaItem = { url: string; kind: 'image' | 'video'; framing?: MediaFraming | null; videoAspect?: number | null };
 
 /** A person tagged in a post — also the shape the composer's people picker selects. */
 export type TaggedPerson = { userId: string; handle: string; name: string };
@@ -82,7 +86,7 @@ export type Comment = {
 const POST_SELECT = `
   id, room_id, pinned, author_id, text, tag, location, created_at,
   profiles!posts_author_id_fkey(handle, name),
-  post_media(url, position),
+  post_media(url, position, crop_shape, crop_zoom, crop_focus_x, crop_focus_y, video_aspect),
   post_likes(count),
   comments(count),
   polls(id, question, allow_multiple, poll_options(id, label, position, poll_votes(count))),
@@ -110,7 +114,15 @@ type RawPost = {
   location: string | null;
   created_at: string;
   profiles: { handle: string; name: string } | null;
-  post_media: { url: string; position: number }[];
+  post_media: {
+    url: string;
+    position: number;
+    crop_shape: FeedShape | null;
+    crop_zoom: number | null;
+    crop_focus_x: number | null;
+    crop_focus_y: number | null;
+    video_aspect: number | null;
+  }[];
   post_likes: { count: number }[];
   comments: { count: number }[];
   /**
@@ -196,7 +208,13 @@ async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<str
         .sort((a, b) => a.position - b.position)
         .map((m): PostMediaItem | null => {
           const url = signedUrls.get(m.url);
-          return url ? { url, kind: mediaKindFromPath(m.url) } : null;
+          if (!url) return null;
+          // The CHECKs guarantee all four crop columns are set together.
+          const framing =
+            m.crop_shape && m.crop_zoom != null && m.crop_focus_x != null && m.crop_focus_y != null
+              ? { shape: m.crop_shape, zoom: m.crop_zoom, focusX: m.crop_focus_x, focusY: m.crop_focus_y }
+              : null;
+          return { url, kind: mediaKindFromPath(m.url), framing, videoAspect: m.video_aspect };
         })
         .filter((m): m is PostMediaItem => m !== null),
       likeCount: p.post_likes[0]?.count ?? 0,
@@ -416,6 +434,12 @@ export async function createPost(params: {
    * error ever reveals a block.
    */
   taggedUserIds?: string[];
+  /**
+   * One entry per mediaPaths item (null for "nothing to store"): a clip's
+   * feed framing and its displayed aspect. See
+   * 20260917100000_clip_framing.sql.
+   */
+  mediaFraming?: ({ framing: MediaFraming | null; videoAspect: number | null } | null)[];
 }) {
   // Every parameter is sent on every call, `null` rather than omitted: a
   // key left `undefined` is dropped by JSON.stringify, and a call missing
@@ -431,6 +455,9 @@ export async function createPost(params: {
     p_poll_allow_multiple: params.pollAllowMultiple ?? false,
     p_location: params.location ?? null,
     p_tagged_user_ids: params.taggedUserIds ?? [],
+    p_media_framing: params.mediaFraming
+      ? params.mediaFraming.map((m) => (m ? { ...(m.framing ?? {}), videoAspect: m.videoAspect } : null))
+      : null,
   });
   if (error) throw error;
   return data as string;

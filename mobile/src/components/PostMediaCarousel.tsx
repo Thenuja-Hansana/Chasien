@@ -6,6 +6,7 @@ import { FlatList, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, ty
 import { Fonts, Radius, type ThemeColors } from '@/constants/theme';
 import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useTheme } from '@/hooks/use-theme';
+import { clipShape, feedShapeAspectRatio, framedVideoLayout, type FeedShape, type MediaFraming } from '@/lib/mediaUtils';
 import type { PostMediaItem } from '@/lib/posts';
 
 /** Never depends on props/state, so a module-level constant is stable across every render without a ref. */
@@ -64,10 +65,27 @@ export default function PostMediaCarousel({
   onPress,
   onActiveIndexChange,
   videoControls = true,
+  clipFill = false,
+  onVideoNaturalSize,
 }: {
   media: CarouselMediaItem[];
   maxHeightFraction: number;
   onPress?: () => void;
+  /**
+   * The post is a clip: fill the box with the video, cropped to its framing
+   * (or centre-cropped to its closest shape), instead of letterboxing it.
+   * Letterboxing a portrait phone video under the feed's height cap is what
+   * made clips look small with side borders — see
+   * 20260917100000_clip_framing.sql.
+   */
+  clipFill?: boolean;
+  /**
+   * The first slide's video track size once it loads. Raw — expo-video
+   * ignores the rotation flag — so it's only a fallback for a clip with no
+   * rotation-corrected size of its own (an in-app camera recording; see
+   * create-post.tsx).
+   */
+  onVideoNaturalSize?: (width: number, height: number) => void;
   /**
    * Native playback controls on video slides. The feed turns them off for a
    * clip: native controls swallow taps, and a tap on a clip should open the
@@ -94,7 +112,9 @@ export default function PostMediaCarousel({
   // A known crop ratio wins over the natural-size state below, and is read
   // fresh every render, so removing the first slide in the composer
   // reshapes the box to the new first slide immediately.
-  const boxAspectRatio = media[0]?.cropAspectRatio ?? aspectRatio;
+  const fillsClip = clipFill && media[0]?.kind === 'video';
+  const clipBoxShape = fillsClip ? clipShape(media[0].framing, media[0].videoAspect) : null;
+  const boxAspectRatio = clipBoxShape ? feedShapeAspectRatio(clipBoxShape) : (media[0]?.cropAspectRatio ?? aspectRatio);
   // Removing the last slide can leave activeIndex one past the end until
   // FlatList reports the new visible slide.
   const shownIndex = Math.min(activeIndex, Math.max(media.length - 1, 0));
@@ -109,7 +129,10 @@ export default function PostMediaCarousel({
     if (media[0]?.kind === 'image') setAspectRatio(event.source.width / event.source.height);
   };
   const handleFirstVideoSize = (width: number, height: number) => {
-    if (media[0]?.kind === 'video') setAspectRatio(width / height);
+    if (media[0]?.kind === 'video') {
+      setAspectRatio(width / height);
+      onVideoNaturalSize?.(width, height);
+    }
   };
 
   // setActiveIndex's own identity is stable across renders (a guarantee
@@ -132,6 +155,11 @@ export default function PostMediaCarousel({
             style={slideStyle}
             controls={videoControls}
             onNaturalSize={index === 0 ? handleFirstVideoSize : undefined}
+            fill={
+              clipBoxShape
+                ? { shape: clipBoxShape, framing: item.framing ?? null, videoAspect: item.videoAspect ?? null, boxWidth: cardWidth, boxHeight: cardHeight }
+                : undefined
+            }
           />
         );
       }
@@ -159,8 +187,8 @@ export default function PostMediaCarousel({
         />
       );
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleFirst*/media[0] are stable for a given card; only the layout size, activeIndex and videoControls actually vary what's rendered.
-    [cardWidth, cardHeight, activeIndex, videoControls],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleFirst*/media[0] are stable for a given card; only the layout size, activeIndex, videoControls and the clip's shape actually vary what's rendered.
+    [cardWidth, cardHeight, activeIndex, videoControls, clipBoxShape],
   );
 
   if (media.length === 0) return null;
@@ -204,12 +232,15 @@ function CarouselVideoSlide({
   style,
   controls,
   onNaturalSize,
+  fill,
 }: {
   uri: string;
   active: boolean;
   style: { width: number; height: number | '100%' };
   controls: boolean;
   onNaturalSize?: (width: number, height: number) => void;
+  /** A clip filling its box — see the carousel's `clipFill`. */
+  fill?: { shape: FeedShape; framing: MediaFraming | null; videoAspect: number | null; boxWidth: number; boxHeight: number };
 }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
@@ -233,8 +264,37 @@ function CarouselVideoSlide({
     if (!active) player.pause();
   }, [active, player]);
 
+  if (fill) {
+    // With a known displayed aspect, draw the video at its framed size and
+    // offset (larger than the box) and let the box clip it. Without one (a
+    // clip posted before framing existed), `cover` still fills the box with
+    // a centre crop — no side bars either way. `cover` rather than `fill` on
+    // the sized view too, so a slightly-off stored aspect can't stretch it.
+    // textureView: Android's default SurfaceView doesn't honour its parent's
+    // clipping, so an oversized video would spill out of the card.
+    const layout =
+      fill.videoAspect && fill.boxHeight > 0 ? framedVideoLayout(fill.boxWidth, fill.boxHeight, fill.videoAspect, fill.shape, fill.framing) : null;
+    return (
+      <View style={[style, slideStyles.clipSlide]}>
+        <VideoView
+          player={player}
+          style={layout ? { position: 'absolute', width: layout.width, height: layout.height, left: layout.left, top: layout.top } : StyleSheet.absoluteFill}
+          contentFit="cover"
+          nativeControls={controls}
+          surfaceType="textureView"
+        />
+      </View>
+    );
+  }
+
   return <VideoView player={player} style={style} contentFit="contain" nativeControls={controls} />;
 }
+
+const slideStyles = StyleSheet.create({
+  clipSlide: {
+    overflow: 'hidden',
+  },
+});
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({

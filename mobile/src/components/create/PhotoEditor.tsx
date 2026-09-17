@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -20,6 +21,7 @@ import {
 } from '@/lib/mediaUtils';
 
 export type EditablePhoto = Extract<PickedMedia, { kind: 'image' }>;
+export type EditableClip = Extract<PickedMedia, { kind: 'video' }>;
 
 const SHAPE_OPTIONS: { shape: FeedShape; label: string }[] = [
   { shape: 'square', label: 'Square' },
@@ -55,9 +57,17 @@ const FRAME_INSET = Spacing[4];
  * Pan and pinch run as worklets on the UI thread and only ever write shared
  * values — no React state per frame — which is what keeps dragging smooth
  * on a low-end phone.
+ *
+ * Clips use the same editor for their feed framing (shape + drag/pinch).
+ * The video plays muted inside the frame; there's no rotate/flip (phone
+ * video is already upright, and nothing re-encodes it). The geometry runs
+ * on the clip's displayed aspect in abstract units instead of photo pixels
+ * — the result is the same relative crop, stored as the clip's framing
+ * (20260917100000_clip_framing.sql) rather than rendered into a file.
  */
 export default function PhotoEditor({
-  photo,
+  media,
+  videoAspect,
   initialShape,
   isCarousel,
   busy,
@@ -65,7 +75,9 @@ export default function PhotoEditor({
   onCancel,
   onDone,
 }: {
-  photo: EditablePhoto;
+  media: EditablePhoto | EditableClip;
+  /** Clips only: the video's displayed (rotation-corrected) width / height. */
+  videoAspect?: number;
   initialShape: FeedShape;
   /** Whether the post has more than one item — shows that the shape applies to all of them. */
   isCarousel: boolean;
@@ -76,13 +88,23 @@ export default function PhotoEditor({
 }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const startingEdit = photo.edit ?? UNEDITED_PHOTO;
+  const isClip = media.kind === 'video';
+  const startingEdit: PhotoEdit =
+    media.kind === 'video'
+      ? media.framing
+        ? { rotation: 0, flipped: false, zoom: media.framing.zoom, focusX: media.framing.focusX, focusY: media.framing.focusY }
+        : UNEDITED_PHOTO
+      : (media.edit ?? UNEDITED_PHOTO);
 
   const [shape, setShape] = useState(initialShape);
   const [rotation, setRotation] = useState(startingEdit.rotation);
   const [flipped, setFlipped] = useState(startingEdit.flipped);
-  const [working, setWorking] = useState<PickedImage | null>(null);
+  const [workingImage, setWorkingImage] = useState<PickedImage | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  // A clip needs no decoded copy: its "working size" is just its aspect in
+  // abstract units (1000 tall), which is all the frame geometry uses.
+  const working: PickedImage | null =
+    media.kind === 'video' ? (videoAspect ? { uri: media.uri, width: videoAspect * 1000, height: 1000 } : null) : workingImage;
   const [stageWidth, setStageWidth] = useState(0);
   const [stageHeight, setStageHeight] = useState(0);
 
@@ -94,10 +116,11 @@ export default function PhotoEditor({
   const lastPinchScale = useSharedValue(1);
 
   useEffect(() => {
+    if (media.kind !== 'image') return;
     let cancelled = false;
-    loadPhotoForEditing(photo)
+    loadPhotoForEditing(media)
       .then((image) => {
-        if (!cancelled) setWorking(image);
+        if (!cancelled) setWorkingImage(image);
       })
       .catch(() => {
         if (!cancelled) setLoadFailed(true);
@@ -105,7 +128,7 @@ export default function PhotoEditor({
     return () => {
       cancelled = true;
     };
-  }, [photo]);
+  }, [media]);
 
   const aspectRatio = feedShapeAspectRatio(shape);
   const quarterTurn = rotation === 90 || rotation === 270;
@@ -236,7 +259,7 @@ export default function PhotoEditor({
         <Pressable onPress={onCancel} disabled={busy} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel editing">
           <Icon name="close" size={20} color={colors.text} />
         </Pressable>
-        <Text style={styles.title}>Edit photo</Text>
+        <Text style={styles.title}>{isClip ? 'Edit clip' : 'Edit photo'}</Text>
         <Pressable onPress={handleDone} disabled={controlsDisabled} hitSlop={8} accessibilityRole="button">
           {busy ? (
             <ActivityIndicator color={colors.accent.DEFAULT} />
@@ -252,22 +275,26 @@ export default function PhotoEditor({
             <>
               <Animated.View style={[styles.photoLayer, { width: displayWidth, height: displayHeight }, photoTransformStyle]}>
                 <View style={[StyleSheet.absoluteFill, flipped && styles.mirrored]}>
-                  <Image
-                    source={{ uri: working.uri }}
-                    // Decode at full working resolution, not at this view's
-                    // unzoomed size, so the photo stays sharp when zoomed in.
-                    allowDownscaling={false}
-                    contentFit="fill"
-                    style={{
-                      position: 'absolute',
-                      width: working.width * baseScale,
-                      height: working.height * baseScale,
-                      left: (displayWidth - working.width * baseScale) / 2,
-                      top: (displayHeight - working.height * baseScale) / 2,
-                      transform: [{ rotate: `${rotation}deg` }],
-                    }}
-                    accessibilityLabel="Photo being cropped. Drag to move it, pinch to zoom."
-                  />
+                  {isClip ? (
+                    <EditorClipVideo uri={working.uri} />
+                  ) : (
+                    <Image
+                      source={{ uri: working.uri }}
+                      // Decode at full working resolution, not at this view's
+                      // unzoomed size, so the photo stays sharp when zoomed in.
+                      allowDownscaling={false}
+                      contentFit="fill"
+                      style={{
+                        position: 'absolute',
+                        width: working.width * baseScale,
+                        height: working.height * baseScale,
+                        left: (displayWidth - working.width * baseScale) / 2,
+                        top: (displayHeight - working.height * baseScale) / 2,
+                        transform: [{ rotate: `${rotation}deg` }],
+                      }}
+                      accessibilityLabel="Photo being cropped. Drag to move it, pinch to zoom."
+                    />
+                  )}
                 </View>
               </Animated.View>
 
@@ -286,6 +313,8 @@ export default function PhotoEditor({
             </>
           ) : loadFailed ? (
             <Text style={styles.message}>Couldn&apos;t open this photo for editing.</Text>
+          ) : isClip && !videoAspect ? (
+            <Text style={styles.message}>Couldn&apos;t read this clip&apos;s size yet — try again in a moment.</Text>
           ) : (
             <ActivityIndicator color={colors.accent.DEFAULT} />
           )}
@@ -313,14 +342,39 @@ export default function PhotoEditor({
           })}
         </View>
         {isCarousel && <Text style={styles.note}>Every photo in this post uses the same shape.</Text>}
+        {isClip && <Text style={styles.note}>This is how the clip shows in the feed. Opening it plays the whole video.</Text>}
 
         <View style={styles.toolRow}>
-          <ToolButton icon="rotateCw" label="Rotate" onPress={rotate} disabled={controlsDisabled} />
-          <ToolButton icon="flipHorizontal" label="Flip" onPress={flip} disabled={controlsDisabled} />
+          {!isClip && <ToolButton icon="rotateCw" label="Rotate" onPress={rotate} disabled={controlsDisabled} />}
+          {!isClip && <ToolButton icon="flipHorizontal" label="Flip" onPress={flip} disabled={controlsDisabled} />}
           <ToolButton icon="undo" label="Reset" onPress={reset} disabled={controlsDisabled} />
         </View>
       </View>
     </View>
+  );
+}
+
+/**
+ * The clip playing muted inside the editor's frame. It fills the photo layer
+ * (sized to the clip's aspect), so the layer's pan/zoom transform frames it
+ * exactly like a photo. textureView: Android's default SurfaceView ignores
+ * the transform and clipping the frame relies on.
+ */
+function EditorClipVideo({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
+  return (
+    <VideoView
+      player={player}
+      style={StyleSheet.absoluteFill}
+      contentFit="cover"
+      nativeControls={false}
+      surfaceType="textureView"
+      accessibilityLabel="Clip being framed. Drag to move it, pinch to zoom."
+    />
   );
 }
 
