@@ -15,6 +15,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { startDm } from '@/lib/chat';
 import { useAuth } from '@/lib/auth-context';
 import { acceptFriendRequest, fetchFriendCount, fetchFriendshipStatus, removeFriendship, sendFriendRequest, type FriendshipStatus } from '@/lib/friends';
+import { cachedImageSource } from '@/lib/mediaUtils';
 import { signProfileMediaUrls } from '@/lib/profileMedia';
 import { fetchProfile, formatLastActive, type Profile } from '@/lib/profiles';
 import { fetchRecentPostsByAuthor, type AuthorPostPreview } from '@/lib/posts';
@@ -180,7 +181,7 @@ export default function ProfileScreen() {
               <View style={styles.bannerEmpty} />
               {bannerUrl && (
                 <Image
-                  source={{ uri: bannerUrl }}
+                  source={cachedImageSource(bannerUrl)}
                   style={[StyleSheet.absoluteFill, styles.bannerImage]}
                   contentFit="cover"
                   cachePolicy="memory-disk"
@@ -358,7 +359,7 @@ export default function ProfileScreen() {
                             </View>
                           ) : url ? (
                             <Image
-                              source={{ uri: url }}
+                              source={cachedImageSource(url)}
                               style={styles.postThumbImage}
                               contentFit="cover"
                               cachePolicy="memory-disk"

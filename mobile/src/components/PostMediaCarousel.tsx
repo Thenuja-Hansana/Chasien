@@ -6,7 +6,7 @@ import { FlatList, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, ty
 import { Fonts, Radius, type ThemeColors } from '@/constants/theme';
 import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useTheme } from '@/hooks/use-theme';
-import { clipShape, feedShapeAspectRatio, framedVideoLayout, VIDEO_BUFFER_OPTIONS, type FeedShape, type MediaFraming } from '@/lib/mediaUtils';
+import { cachedImageSource, clipShape, feedShapeAspectRatio, framedVideoLayout, VIDEO_BUFFER_OPTIONS, type FeedShape, type MediaFraming } from '@/lib/mediaUtils';
 import type { PostMediaItem } from '@/lib/posts';
 
 /** Never depends on props/state, so a module-level constant is stable across every render without a ref. */
@@ -172,13 +172,13 @@ export default function PostMediaCarousel({
           crop >= cardWidth / cardHeight ? { width: cardWidth, height: cardWidth / crop } : { width: cardHeight * crop, height: cardHeight };
         return (
           <View style={[slideStyle, styles.cropSlide]}>
-            <Image source={{ uri: item.url }} style={cropBox} contentFit="cover" />
+            <Image source={cachedImageSource(item.url)} style={cropBox} contentFit="cover" />
           </View>
         );
       }
       return (
         <Image
-          source={{ uri: item.url }}
+          source={cachedImageSource(item.url)}
           style={slideStyle}
           contentFit="contain"
           transition={150}

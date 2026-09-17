@@ -14,6 +14,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { cachedImageSource } from '@/lib/mediaUtils';
 import { cacheJoinedRoom } from '@/lib/room-cache';
 import {
   fetchDiscoverRooms,
@@ -279,7 +280,7 @@ function RoomCard({
       <View style={[styles.cardBanner, { backgroundColor: accent }]}>
         {bannerUrl && (
           <Image
-            source={{ uri: bannerUrl }}
+            source={cachedImageSource(bannerUrl)}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             cachePolicy="memory-disk"
@@ -306,7 +307,7 @@ function RoomCard({
                 <Text style={styles.cardLogoLetter}>{room.name.charAt(0).toUpperCase()}</Text>
               </View>
               <Image
-                source={{ uri: avatarUrl }}
+                source={cachedImageSource(avatarUrl)}
                 style={[StyleSheet.absoluteFill, styles.cardLogoFill]}
                 contentFit="cover"
                 cachePolicy="memory-disk"

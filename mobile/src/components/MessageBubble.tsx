@@ -8,6 +8,7 @@ import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Message } from '@/lib/chat';
+import { cachedImageSource } from '@/lib/mediaUtils';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -76,7 +77,7 @@ export default function MessageBubble({
             screen's onPress never got the touch. */}
         <Pressable onPress={onPress} onLongPress={() => onReact('❤️')}>
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.mineImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+            <Image source={cachedImageSource(imageUrl)} style={styles.mineImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
           ) : voiceUrl ? (
             <View style={[styles.bubble, styles.mineBubble, styles.voiceBubble]}>
               <VoicePlayer uri={voiceUrl} mine />
@@ -111,7 +112,7 @@ export default function MessageBubble({
         <Pressable onPress={onPress} onLongPress={() => onReact('❤️')}>
           {imageUrl ? (
             <View style={styles.theirsImageWrap}>
-              <Image source={{ uri: imageUrl }} style={styles.theirsImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+              <Image source={cachedImageSource(imageUrl)} style={styles.theirsImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
               <Text style={styles.imageTime}>{formatTime(message.created_at)}</Text>
             </View>
           ) : voiceUrl ? (

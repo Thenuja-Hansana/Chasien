@@ -8,6 +8,7 @@ import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Shadows, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { signMediaUrls } from '@/lib/media';
+import { cachedImageSource } from '@/lib/mediaUtils';
 import { fetchRecentPostsByAuthor, type AuthorPostPreview } from '@/lib/posts';
 import { formatLastActive } from '@/lib/profiles';
 import { supabase } from '@/lib/supabase';
@@ -104,7 +105,7 @@ export default function UserPreviewCard({ userId, visible, onClose }: { userId: 
                           </View>
                         ) : url ? (
                           <Image
-                            source={{ uri: url }}
+                            source={cachedImageSource(url)}
                             style={styles.postThumbImage}
                             contentFit="cover"
                             cachePolicy="memory-disk"

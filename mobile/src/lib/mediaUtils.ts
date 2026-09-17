@@ -393,6 +393,29 @@ export function mediaKindFromPath(path: string): 'image' | 'video' {
 export const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 /**
+ * An expo-image `source` for a media URL, cached by what the URL points at
+ * rather than by the URL itself.
+ *
+ * Every signed URL carries a fresh token, so each feed load, refresh or page
+ * produced a new URL for the same photo, and expo-image, which caches by URL,
+ * never got a hit: on a Galaxy A14, 11 photos were downloaded 155 times over
+ * a day of use, and one scroll through the Grit Club feed re-downloaded 9
+ * photos 21 times. The cache key is the bucket and path from the signed URL.
+ * That's safe because every upload path ends in a fresh `randomId()`, so a
+ * path never points at different bytes. Signing still gates access: without
+ * a URL the app can't show the image at all.
+ *
+ * Anything that isn't a signed storage URL (a local file:// or content://
+ * URI from the picker or camera) is passed through, cached by URI as before.
+ * Tied to Supabase Storage's `/object/sign/<bucket>/<path>` URL shape, which
+ * is why it lives next to signBucketUrls: the R2 migration changes both.
+ */
+export function cachedImageSource(uri: string): { uri: string; cacheKey?: string } {
+  const match = /\/storage\/v1\/object\/sign\/([^?]+)/.exec(uri);
+  return match ? { uri, cacheKey: decodeURIComponent(match[1]) } : { uri };
+}
+
+/**
  * Batch-signs storage paths for display. Returns a path -> URL map;
  * paths that fail to sign are simply absent, so a single broken item
  * degrades to a missing image/voice note rather than failing a whole

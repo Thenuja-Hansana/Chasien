@@ -10,6 +10,7 @@ import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import { Fonts, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { cachedImageSource } from '@/lib/mediaUtils';
 import { fetchRoomBySlug } from '@/lib/rooms';
 import { relativeTime } from '@/lib/posts';
 import { fetchActiveStories, signStoryUrls, type Story } from '@/lib/stories';
@@ -191,7 +192,7 @@ export default function StoryViewer() {
         story.kind === 'video' ? (
           <StoryVideo key={story.id} uri={url} onProgress={handleVideoProgress} onEnd={next} />
         ) : (
-          <Image source={{ uri: url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+          <Image source={cachedImageSource(url)} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={150} />
         )
       )}
       <LinearGradient colors={['rgba(0,0,0,.65)', 'transparent']} style={styles.topShade} />

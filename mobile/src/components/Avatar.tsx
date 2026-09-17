@@ -5,6 +5,7 @@ import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import { Fonts, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { cachedImageSource } from '@/lib/mediaUtils';
 
 // Ported from app_reference/src/components/Avatar.jsx, then regraded for
 // the Bones Phase's black/white brand — every gradient is now a pair of
@@ -93,7 +94,7 @@ export default function Avatar({ gradient, color, imageUrl, letter, size = 40, s
     <View style={styles.fill}>
       {fallback}
       <Image
-        source={{ uri: imageUrl }}
+        source={cachedImageSource(imageUrl)}
         style={[styles.fill, StyleSheet.absoluteFill, { borderRadius: radius }]}
         contentFit="cover"
         cachePolicy="memory-disk"

@@ -14,6 +14,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchInbox, subscribeToInbox, type InboxItem } from '@/lib/chat';
+import { cachedImageSource } from '@/lib/mediaUtils';
 import { signMessageMediaUrls } from '@/lib/messageMedia';
 
 const FILTERS = ['All', 'Unread', 'Rooms', 'DMs'] as const;
@@ -53,7 +54,7 @@ function RowPreview({ text, imagePath, mediaUrls }: { text: string; imagePath: s
 
   return (
     <View style={styles.previewLine}>
-      {url && <Image source={{ uri: url }} style={styles.previewThumb} contentFit="cover" cachePolicy="memory-disk" />}
+      {url && <Image source={cachedImageSource(url)} style={styles.previewThumb} contentFit="cover" cachePolicy="memory-disk" />}
       <Text style={styles.rowPreview} numberOfLines={1}>
         {text}
       </Text>

@@ -7,6 +7,47 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-17 — Images cache by storage path, not by signed URL
+
+**Problem:** the 2026-09-15 image pass set `cachePolicy="memory-disk"` on
+every remote image, but the cache almost never hit. expo-image caches by
+URL, and every signed URL carries a fresh token, so each feed load, refresh
+and page gave the same photo a new URL. Measured from Kong's access log:
+11 photos downloaded 155 times over a day, and one scroll through the Grit
+Club feed downloaded its 9 photos 21 times, every visit.
+
+**Decision:** `cachedImageSource(uri)` in `lib/mediaUtils.ts` returns an
+expo-image source with `cacheKey` set to the bucket and path parsed out of
+the signed URL (`/storage/v1/object/sign/<bucket>/<path>`). Every
+`<Image>` that can show a signed URL uses it: feed carousel, avatars,
+chat bubbles, inbox thumbnails, story viewer, profile, Explore, Room
+settings, profile edit, and the user preview card. Local picker and camera
+files pass through unchanged.
+
+**Why it's safe:**
+- *Same bytes:* every upload path in the app (posts, stories, chat, profile,
+  Room media) ends in a fresh `randomId()`, so a path never points at
+  different bytes. A replaced avatar gets a new path, not new contents.
+- *Access:* signing still gates it. The app can't show an image without
+  first getting a signed URL, which needs membership. The only change is
+  what's reused on the device after that.
+- *Storage move:* the helper sits next to `signBucketUrls`, because it
+  depends on Supabase Storage's URL shape. The R2 migration changes both.
+
+**Verified on the A14** (Kong log, fresh app launch, same scroll through
+the feed each time): 21 photo downloads per visit before. After: 9 on the
+first visit (the old cache entries were keyed by URL), then 0 and 0. The
+feed still signs 5 times per visit, and photos, Explore banners and icons
+render from cache. Typecheck and lint are clean, and the React Compiler
+compiles the same 71 functions as before.
+
+**Not covered:** clips. Video requests stayed at 35 per visit; expo-video
+has its own cache (`useCaching`), which belongs with moving feed clips to
+poster images. Right-sized image variants remain the open third of the
+09-15 checklist item.
+
+---
+
 ## 2026-09-17 — Tab bar: no live blur on Android
 
 **Problem:** scrolling felt laggy, feed scrolling especially. A performance

@@ -10,6 +10,7 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { pickImage, type PickedImage } from '@/lib/media';
+import { cachedImageSource } from '@/lib/mediaUtils';
 import { signProfileMediaUrls, uploadProfileAvatar, uploadProfileBanner } from '@/lib/profileMedia';
 import { fetchProfile, updateProfile } from '@/lib/profiles';
 
@@ -140,7 +141,7 @@ export default function EditProfile() {
           >
             {bannerUri ? (
               <>
-                <Image source={{ uri: bannerUri }} style={styles.bannerImage} contentFit="cover" cachePolicy="memory-disk" />
+                <Image source={cachedImageSource(bannerUri)} style={styles.bannerImage} contentFit="cover" cachePolicy="memory-disk" />
                 <View style={styles.bannerEditButton}>
                   <Icon name="camera" size={18} color="#ffffff" />
                 </View>
@@ -162,7 +163,7 @@ export default function EditProfile() {
             accessibilityLabel="Change profile photo"
           >
             {avatarUri ? (
-              <Image source={{ uri: avatarUri }} style={styles.avatarImage} contentFit="cover" cachePolicy="memory-disk" />
+              <Image source={cachedImageSource(avatarUri)} style={styles.avatarImage} contentFit="cover" cachePolicy="memory-disk" />
             ) : (
               <View style={[styles.avatarImage, styles.avatarPlaceholder]}>
                 <Text style={styles.avatarPlaceholderLetter}>{name.trim().charAt(0).toUpperCase() || '?'}</Text>

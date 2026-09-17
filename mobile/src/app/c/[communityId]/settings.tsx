@@ -11,6 +11,7 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { pickImage, type PickedImage } from '@/lib/media';
+import { cachedImageSource } from '@/lib/mediaUtils';
 import { fetchRoomNotificationsMuted, setRoomNotificationsMuted } from '@/lib/notifications';
 import { signRoomMediaUrls, uploadRoomAvatar, uploadRoomBanner } from '@/lib/roomMedia';
 import { PUBLIC_OPTION, PRIVATE_JOIN_TYPES, isValidDomain } from '@/lib/roomVisibility';
@@ -340,7 +341,7 @@ export default function CommunitySettings() {
             {bannerImage || existingBannerUrl ? (
               <>
                 <Image
-                  source={{ uri: bannerImage?.uri ?? existingBannerUrl! }}
+                  source={cachedImageSource(bannerImage?.uri ?? existingBannerUrl!)}
                   style={styles.previewBannerImage}
                   contentFit="cover"
                   cachePolicy="memory-disk"
@@ -368,7 +369,7 @@ export default function CommunitySettings() {
             >
               {avatarImage || existingAvatarUrl ? (
                 <Image
-                  source={{ uri: avatarImage?.uri ?? existingAvatarUrl! }}
+                  source={cachedImageSource(avatarImage?.uri ?? existingAvatarUrl!)}
                   style={styles.previewAvatar}
                   contentFit="cover"
                   cachePolicy="memory-disk"
