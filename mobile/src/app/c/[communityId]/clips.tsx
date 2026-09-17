@@ -11,6 +11,7 @@ import CommentsSheet, { type CommentsSheetHandle } from '@/components/CommentsSh
 import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
+import { VIDEO_BUFFER_OPTIONS } from '@/lib/mediaUtils';
 import { cursorOf, fetchPost, fetchRoomClips, isClipPost, setLiked, type FeedCursor, type FeedPost } from '@/lib/posts';
 
 const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 80 };
@@ -278,6 +279,7 @@ function ClipSlide({
 function ClipVideo({ uri, playing }: { uri: string; playing: boolean }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
+    p.bufferOptions = VIDEO_BUFFER_OPTIONS;
   });
 
   useEffect(() => {

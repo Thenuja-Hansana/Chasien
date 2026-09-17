@@ -11,6 +11,7 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { captureImageOrVideo, pickImageOrVideo, type PickedMedia } from '@/lib/media';
+import { VIDEO_BUFFER_OPTIONS } from '@/lib/mediaUtils';
 import { fetchRoomBySlug, type Room } from '@/lib/rooms';
 import { createStory } from '@/lib/stories';
 
@@ -162,6 +163,7 @@ function StoryVideoPreview({ uri }: { uri: string }) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
+    p.bufferOptions = VIDEO_BUFFER_OPTIONS;
     p.play();
   });
   return <VideoView player={player} style={styles.media} contentFit="cover" nativeControls={false} />;

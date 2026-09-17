@@ -15,6 +15,7 @@ import {
   loadPhotoForEditing,
   MAX_PHOTO_ZOOM,
   UNEDITED_PHOTO,
+  VIDEO_BUFFER_OPTIONS,
   type FeedShape,
   type PhotoEdit,
   type PickedImage,
@@ -364,6 +365,7 @@ function EditorClipVideo({ uri }: { uri: string }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
     p.muted = true;
+    p.bufferOptions = VIDEO_BUFFER_OPTIONS;
     p.play();
   });
   return (

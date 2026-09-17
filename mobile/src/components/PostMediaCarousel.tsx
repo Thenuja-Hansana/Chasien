@@ -6,7 +6,7 @@ import { FlatList, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, ty
 import { Fonts, Radius, type ThemeColors } from '@/constants/theme';
 import { useCappedMediaHeight } from '@/hooks/use-capped-media-height';
 import { useTheme } from '@/hooks/use-theme';
-import { clipShape, feedShapeAspectRatio, framedVideoLayout, type FeedShape, type MediaFraming } from '@/lib/mediaUtils';
+import { clipShape, feedShapeAspectRatio, framedVideoLayout, VIDEO_BUFFER_OPTIONS, type FeedShape, type MediaFraming } from '@/lib/mediaUtils';
 import type { PostMediaItem } from '@/lib/posts';
 
 /** Never depends on props/state, so a module-level constant is stable across every render without a ref. */
@@ -244,6 +244,7 @@ function CarouselVideoSlide({
 }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
+    p.bufferOptions = VIDEO_BUFFER_OPTIONS;
   });
 
   useEffect(() => {
@@ -272,10 +273,18 @@ function CarouselVideoSlide({
     // the sized view too, so a slightly-off stored aspect can't stretch it.
     // textureView: Android's default SurfaceView doesn't honour its parent's
     // clipping, so an oversized video would spill out of the card.
+    //
+    // pointerEvents none without controls: Android's VideoView takes any
+    // touch that lands on it and re-sends it to JS in its own coordinates
+    // instead of the screen's, so the first few pixels a finger moves during
+    // a tap look like leaving the card and the carousel's onPress (open the
+    // clips viewer) is cancelled. Found on the A14; a synthetic no-movement
+    // tap still worked, which hid it. Keeping touches off the video sends
+    // them to the Pressable the normal way.
     const layout =
       fill.videoAspect && fill.boxHeight > 0 ? framedVideoLayout(fill.boxWidth, fill.boxHeight, fill.videoAspect, fill.shape, fill.framing) : null;
     return (
-      <View style={[style, slideStyles.clipSlide]}>
+      <View style={[style, slideStyles.clipSlide]} pointerEvents={controls ? 'auto' : 'none'}>
         <VideoView
           player={player}
           style={layout ? { position: 'absolute', width: layout.width, height: layout.height, left: layout.left, top: layout.top } : StyleSheet.absoluteFill}

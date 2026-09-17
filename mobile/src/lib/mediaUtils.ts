@@ -6,6 +6,7 @@ import 'react-native-get-random-values';
 
 import { decode } from 'base64-arraybuffer';
 import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator';
+import type { BufferOptions } from 'expo-video';
 
 import { supabase } from '@/lib/supabase';
 
@@ -147,6 +148,23 @@ export function clampPhotoFocus(
   const halfY = cropHeight / 2 / height;
   return [Math.min(Math.max(focusX, halfX), 1 - halfX), Math.min(Math.max(focusY, halfY), 1 - halfY)];
 }
+
+/**
+ * Buffering limits for every in-app video player (set in each
+ * useVideoPlayer setup). expo-video's Android defaults buffer 20 s ahead
+ * with a byte cap sized for long videos (over 100 MB per player). With
+ * `loop` on, "ahead" includes the next repeats: a 5 s phone clip queued
+ * four more copies of itself, each downloaded again and held in memory,
+ * even while paused. Three looping players in the clips viewer took the
+ * Galaxy A14's 256 MB Java heap from ~60 MB to out-of-memory in about 7 s,
+ * re-downloading both clips every second. Capped, a looping clip holds at
+ * most one extra repeat. 16 MB still fits 5 s of a 17 Mbps 1080p phone
+ * recording, so playback doesn't stall.
+ */
+export const VIDEO_BUFFER_OPTIONS: BufferOptions = {
+  preferredForwardBufferDuration: 5,
+  maxBufferBytes: 16 * 1024 * 1024,
+};
 
 /**
  * How a clip is cropped in the feed — the photo editor's model minus
