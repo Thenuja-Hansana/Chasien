@@ -247,6 +247,41 @@ export type FeedCursor = { createdAt: string; id: string };
  * a page boundary either.
  */
 export async function fetchRoomFeed(roomId: string, userId: string, after: FeedCursor | null = null) {
+  return fetchPostsPage(roomId, userId, after, 'older', false);
+}
+
+/** A clip is what the Clip tab creates: a post whose only media is one video. A video inside a multi-photo post stays part of that post. */
+export function isClipPost(post: Pick<FeedPost, 'media'>) {
+  return post.media.length === 1 && post.media[0].kind === 'video';
+}
+
+export function cursorOf(post: Pick<FeedPost, 'createdAt' | 'id'>): FeedCursor {
+  return { createdAt: post.createdAt, id: post.id };
+}
+
+/**
+ * One page of a Room's clips for the full-screen viewer, in feed order, on
+ * either side of `from`: 'older' continues down the feed, 'newer' goes back
+ * up it (returned newest-first, like everything else). `nextCursor` is the
+ * last *row* read in that direction — not the last clip — so paging keeps
+ * moving even when a page's posts filter down to no clips.
+ */
+export async function fetchRoomClips(
+  roomId: string,
+  userId: string,
+  from: FeedCursor,
+  direction: 'older' | 'newer',
+): Promise<{ clips: FeedPost[]; nextCursor: FeedCursor | null; reachedEnd: boolean }> {
+  const page = await fetchPostsPage(roomId, userId, from, direction, true);
+  const edge = direction === 'older' ? page[page.length - 1] : page[0];
+  return {
+    clips: page.filter(isClipPost),
+    nextCursor: edge ? cursorOf(edge) : null,
+    reachedEnd: page.length < FEED_PAGE_SIZE,
+  };
+}
+
+async function fetchPostsPage(roomId: string, userId: string, cursor: FeedCursor | null, direction: 'older' | 'newer', videosOnly: boolean) {
   // Hidden posts are excluded before pagination (not filtered out of an
   // already-paged result afterward), so a page never comes back short just
   // because some of what it fetched happened to be hidden. A separate
@@ -256,22 +291,35 @@ export async function fetchRoomFeed(roomId: string, userId: string, after: FeedC
   const hiddenRes = await supabase.from('hidden_posts').select('post_id').eq('user_id', userId);
   const hiddenIds = (hiddenRes.data ?? []).map((r) => r.post_id as string);
 
+  // For clips, a second, filtered embed of post_media under its own alias
+  // (`!inner` = only posts with a matching row) narrows the page to posts
+  // with a video, while POST_SELECT's own post_media still returns every
+  // item — which isClipPost() needs to tell a clip from a carousel.
   let postsQuery = supabase
     .from('posts')
-    .select(POST_SELECT)
+    .select(videosOnly ? `${POST_SELECT}, clip_media:post_media!inner(url)` : POST_SELECT)
     .eq('room_id', roomId)
     .is('deleted_at', null)
     .is(LIVE_COMMENTS_ONLY, null);
+  if (videosOnly) {
+    postsQuery = postsQuery.like('clip_media.url', '%.mp4');
+  }
   if (hiddenIds.length > 0) {
     postsQuery = postsQuery.not('id', 'in', `(${hiddenIds.join(',')})`);
   }
-  if (after) {
+  if (cursor) {
     // Quoted: a timestamp's ':' and '+' are otherwise read as PostgREST syntax.
-    postsQuery = postsQuery.or(`created_at.lt."${after.createdAt}",and(created_at.eq."${after.createdAt}",id.lt.${after.id})`);
+    postsQuery =
+      direction === 'older'
+        ? postsQuery.or(`created_at.lt."${cursor.createdAt}",and(created_at.eq."${cursor.createdAt}",id.lt.${cursor.id})`)
+        : postsQuery.or(`created_at.gt."${cursor.createdAt}",and(created_at.eq."${cursor.createdAt}",id.gt.${cursor.id})`);
   }
+  // 'newer' reads upward from the cursor (ascending) so the rows nearest to
+  // it come first, then flips back to feed order below.
+  const ascending = direction === 'newer';
 
   const [postsRes, membersRes] = await Promise.all([
-    postsQuery.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(FEED_PAGE_SIZE),
+    postsQuery.order('created_at', { ascending }).order('id', { ascending }).limit(FEED_PAGE_SIZE),
     // Powers the OWNER/MOD badge. Every approved member can read the
     // other approved members of a Room they're in (see
     // 20260814073649_members_can_see_each_other.sql) — before that
@@ -286,7 +334,22 @@ export async function fetchRoomFeed(roomId: string, userId: string, after: FeedC
     (membersRes.data ?? []).map((m) => [m.user_id as string, m.role as 'owner' | 'mod' | 'member']),
   );
 
-  return hydratePosts((postsRes.data ?? []) as unknown as RawPost[], userId, roleByUser);
+  const rows = (postsRes.data ?? []) as unknown as RawPost[];
+  return hydratePosts(ascending ? [...rows].reverse() : rows, userId, roleByUser);
+}
+
+/** Everyone who liked a post, most recent first. Room members can read a post's likes (post_likes' SELECT policy); nobody else gets rows. */
+export async function fetchPostLikers(postId: string): Promise<TaggedPerson[]> {
+  const { data, error } = await supabase
+    .from('post_likes')
+    .select('user_id, created_at, profiles(handle, name)')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const profile = row.profiles as unknown as { handle: string; name: string } | null;
+    return { userId: row.user_id as string, handle: profile?.handle ?? 'unknown', name: profile?.name ?? 'Deleted user' };
+  });
 }
 
 export async function fetchPost(postId: string, userId: string) {

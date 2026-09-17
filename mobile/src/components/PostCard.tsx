@@ -13,7 +13,7 @@ import PostOptionsMenu from '@/components/PostOptionsMenu';
 import { PostTagsLine, PostTagsOverlay } from '@/components/PostTags';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { relativeTime, type FeedPost } from '@/lib/posts';
+import { isClipPost, relativeTime, type FeedPost } from '@/lib/posts';
 import { useUserPreview } from '@/lib/user-preview-context';
 
 /** Leaves the rest of the window free for the caption/actions row below and a peek of the next card, the way Instagram's own feed keeps scrolling legible. */
@@ -32,25 +32,36 @@ export default function PostCard({
   post,
   viewerId,
   viewerIsRoomOwner,
-  onPress,
+  viewerCanModerate,
+  onOpenComments,
+  onOpenLikes,
+  onOpenClip,
   onToggleLike,
   onVote,
   onHide,
   onDelete,
   onRemoveTag,
+  onTogglePin,
 }: {
   post: FeedPost;
   viewerId: string;
   viewerIsRoomOwner: boolean;
-  onPress: () => void;
+  /** Owner/admin/mod — can pin. Pinning used to live only on the post screen, which the feed no longer opens. */
+  viewerCanModerate: boolean;
+  onOpenComments: () => void;
+  onOpenLikes: () => void;
+  /** Only called for clips (isClipPost). */
+  onOpenClip: () => void;
   onToggleLike: () => void;
   onVote: (optionId: string) => Promise<void>;
   onHide: () => void;
   onDelete: () => void;
   onRemoveTag: () => void;
+  onTogglePin: () => void;
 }) {
   const isModerator = post.authorRole === 'owner' || post.authorRole === 'mod';
   const canDelete = post.authorId === viewerId || viewerIsRoomOwner;
+  const isClip = isClipPost(post);
   const viewerIsTagged = post.tags.some((t) => t.userId === viewerId);
   const { open: openUserPreview } = useUserPreview();
   const colors = useTheme();
@@ -121,7 +132,21 @@ export default function PostCard({
 
       {post.media.length > 0 && (
         <View style={styles.mediaWrap}>
-          <PostMediaCarousel media={post.media} maxHeightFraction={FEED_MEDIA_MAX_HEIGHT_FRACTION} onPress={onPress} />
+          {/* Tapping a post no longer opens the post screen. A clip is the
+              exception: it opens the full-screen clips viewer, so it's shown
+              without native controls (they'd swallow the tap) and with a
+              play badge saying so. */}
+          <PostMediaCarousel
+            media={post.media}
+            maxHeightFraction={FEED_MEDIA_MAX_HEIGHT_FRACTION}
+            onPress={isClip ? onOpenClip : undefined}
+            videoControls={!isClip}
+          />
+          {isClip && (
+            <View style={styles.clipBadge} pointerEvents="none">
+              <Icon name="play" size={22} color="#ffffff" />
+            </View>
+          )}
           <PostTagsOverlay tags={post.tags} onPressPerson={openUserPreview} />
         </View>
       )}
@@ -130,34 +155,45 @@ export default function PostCard({
       {post.event && <EventCard event={post.event} />}
 
       <View style={styles.actions}>
+        {/* The heart likes; the number next to it opens who liked (Instagram's
+            split). Two tap targets, so the count doesn't also toggle a like. */}
+        <View style={styles.action}>
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              if (!post.likedByMe) {
+                // eslint-disable-next-line react-hooks/immutability -- a Reanimated shared value's .value is deliberately mutable, the same escape hatch Skeleton.tsx's Animated.Value ref already needs — the compiler's static analysis has no way to know that.
+                likeScale.value = withSequence(withTiming(1.3, { duration: 100 }), withTiming(1, { duration: 120 }));
+              }
+              onToggleLike();
+            }}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={post.likedByMe ? 'Unlike' : 'Like'}
+            accessibilityState={{ selected: post.likedByMe }}
+          >
+            <Animated.View style={likeAnimatedStyle}>
+              <Icon
+                name="heart"
+                size={21}
+                filled={post.likedByMe}
+                color={post.likedByMe ? colors.accent.DEFAULT : colors.text}
+              />
+            </Animated.View>
+          </Pressable>
+          <Pressable
+            onPress={onOpenLikes}
+            disabled={post.likeCount === 0}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`${post.likeCount} like${post.likeCount === 1 ? '' : 's'}, see who liked this`}
+          >
+            <Text style={styles.actionCount}>{post.likeCount}</Text>
+          </Pressable>
+        </View>
         <Pressable
           style={styles.action}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            if (!post.likedByMe) {
-              // eslint-disable-next-line react-hooks/immutability -- a Reanimated shared value's .value is deliberately mutable, the same escape hatch Skeleton.tsx's Animated.Value ref already needs — the compiler's static analysis has no way to know that.
-              likeScale.value = withSequence(withTiming(1.3, { duration: 100 }), withTiming(1, { duration: 120 }));
-            }
-            onToggleLike();
-          }}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={`Like, ${post.likeCount} like${post.likeCount === 1 ? '' : 's'}`}
-          accessibilityState={{ selected: post.likedByMe }}
-        >
-          <Animated.View style={likeAnimatedStyle}>
-            <Icon
-              name="heart"
-              size={21}
-              filled={post.likedByMe}
-              color={post.likedByMe ? colors.accent.DEFAULT : colors.text}
-            />
-          </Animated.View>
-          <Text style={styles.actionCount}>{post.likeCount}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.action}
-          onPress={onPress}
+          onPress={onOpenComments}
           hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel={`Comment, ${post.commentCount} comment${post.commentCount === 1 ? '' : 's'}`}
@@ -171,6 +207,12 @@ export default function PostCard({
         visible={menuOpen}
         canDelete={canDelete}
         canRemoveTag={viewerIsTagged}
+        canPin={viewerCanModerate}
+        pinned={post.pinned}
+        onTogglePin={() => {
+          setMenuOpen(false);
+          onTogglePin();
+        }}
         onClose={() => setMenuOpen(false)}
         onHide={() => {
           setMenuOpen(false);
@@ -273,6 +315,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   mediaWrap: {
     marginTop: Spacing[2],
+  },
+  clipBadge: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 52,
+    height: 52,
+    marginTop: -26,
+    marginLeft: -26,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actions: {
     flexDirection: 'row',

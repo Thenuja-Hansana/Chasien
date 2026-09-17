@@ -23,6 +23,25 @@ export async function fetchFriendshipStatus(myId: string, otherId: string): Prom
   return data.requested_by === myId ? 'pending_sent' : 'pending_received';
 }
 
+/**
+ * fetchFriendshipStatus() for many people at once (a likes list), in one
+ * query: every friendship row involving `myId`, which RLS lets the viewer
+ * read, mapped to each other person's status. Anyone without a row is 'none'.
+ */
+export async function fetchFriendshipStatuses(myId: string): Promise<Map<string, FriendshipStatus>> {
+  const { data, error } = await supabase
+    .from('friendships')
+    .select('user_a, user_b, status, requested_by')
+    .or(`user_a.eq.${myId},user_b.eq.${myId}`);
+  if (error) throw error;
+  const statuses = new Map<string, FriendshipStatus>();
+  for (const row of data ?? []) {
+    const other = row.user_a === myId ? (row.user_b as string) : (row.user_a as string);
+    statuses.set(other, row.status === 'accepted' ? 'friends' : row.requested_by === myId ? 'pending_sent' : 'pending_received');
+  }
+  return statuses;
+}
+
 export async function sendFriendRequest(myId: string, otherId: string): Promise<void> {
   const [user_a, user_b] = orderedPair(myId, otherId);
   const { error } = await supabase.from('friendships').insert({ user_a, user_b, requested_by: myId });

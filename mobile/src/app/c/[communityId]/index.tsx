@@ -6,8 +6,10 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Tex
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import CommentsSheet, { type CommentsSheetHandle } from '@/components/CommentsSheet';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LikesSheet, { type LikesSheetHandle } from '@/components/LikesSheet';
 import PostCard from '@/components/PostCard';
 import PostCardSkeleton from '@/components/PostCardSkeleton';
 import PostFab, { FAB_SIZE } from '@/components/PostFab';
@@ -16,7 +18,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
-import { fetchRoomUnreadCounts, markAllNotificationsRead, subscribeToNotifications } from '@/lib/notifications';
+import { fetchRoomUnreadCounts, markAllNotificationsRead, subscribeToNotifications, togglePostPin } from '@/lib/notifications';
 import { getCachedJoinedRoom } from '@/lib/room-cache';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
 import { FEED_PAGE_SIZE, deletePost, fetchPost, fetchRoomFeed, hidePost, removeMyTag, setLiked, votePoll, type FeedPost } from '@/lib/posts';
@@ -57,6 +59,11 @@ export default function RoomHome() {
 
   const [posts, setPosts] = useState<FeedPost[] | null>(null);
   const [reachedEnd, setReachedEnd] = useState(false);
+  // One Comments and one Likes sheet for the whole feed (not one per card),
+  // opened on whichever post was tapped. Which post is open lives in each
+  // sheet, not here, so opening and closing one doesn't re-render the feed.
+  const commentsSheetRef = useRef<CommentsSheetHandle>(null);
+  const likesSheetRef = useRef<LikesSheetHandle>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -237,6 +244,22 @@ export default function RoomHome() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete that post.');
     }
+  }
+
+  // Moved here from the post screen, which the feed no longer opens.
+  async function handleTogglePin(post: FeedPost) {
+    const nextPinned = !post.pinned;
+    setPosts((prev) => prev?.map((p) => (p.id === post.id ? { ...p, pinned: nextPinned } : p)) ?? prev);
+    try {
+      await togglePostPin(post.id, nextPinned);
+    } catch (e) {
+      setPosts((prev) => prev?.map((p) => (p.id === post.id ? { ...p, pinned: post.pinned } : p)) ?? prev);
+      setError(e instanceof Error ? e.message : 'Could not update the pin.');
+    }
+  }
+
+  function handleCommentAdded(postId: string) {
+    setPosts((prev) => prev?.map((p) => (p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p)) ?? prev);
   }
 
   async function handleRemoveTag(post: FeedPost) {
@@ -481,17 +504,16 @@ export default function RoomHome() {
               post={item}
               viewerId={session.user.id}
               viewerIsRoomOwner={membership.role === 'owner'}
-              onPress={() =>
-                router.push({
-                  pathname: '/c/[communityId]/post/[postId]',
-                  params: { communityId, postId: item.id },
-                })
-              }
+              viewerCanModerate={membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'}
+              onOpenComments={() => commentsSheetRef.current?.open(item.id)}
+              onOpenLikes={() => likesSheetRef.current?.open(item.id)}
+              onOpenClip={() => router.push({ pathname: '/c/[communityId]/clips', params: { communityId, postId: item.id } })}
               onToggleLike={() => handleToggleLike(item)}
               onVote={(optionId) => handleVote(item, optionId)}
               onHide={() => handleHidePost(item)}
               onDelete={() => handleDeletePost(item)}
               onRemoveTag={() => handleRemoveTag(item)}
+              onTogglePin={() => handleTogglePin(item)}
             />
           )}
         />
@@ -499,6 +521,9 @@ export default function RoomHome() {
       </BlurTargetView>
 
       <TabBar active="Home" communityId={communityId} userId={session.user.id} blurTarget={blurTargetRef} />
+
+      <CommentsSheet ref={commentsSheetRef} viewerId={session.user.id} onCommentAdded={handleCommentAdded} />
+      <LikesSheet ref={likesSheetRef} viewerId={session.user.id} />
       {canPost && <PostFab communityId={communityId} />}
     </SafeAreaView>
   );

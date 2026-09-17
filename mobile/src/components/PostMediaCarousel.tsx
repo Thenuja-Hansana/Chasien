@@ -63,10 +63,17 @@ export default function PostMediaCarousel({
   maxHeightFraction,
   onPress,
   onActiveIndexChange,
+  videoControls = true,
 }: {
   media: CarouselMediaItem[];
   maxHeightFraction: number;
   onPress?: () => void;
+  /**
+   * Native playback controls on video slides. The feed turns them off for a
+   * clip: native controls swallow taps, and a tap on a clip should open the
+   * full-screen clips viewer (onPress) instead of playing it inline.
+   */
+  videoControls?: boolean;
   /** Fires with the visible slide's index, so a parent can act on "the current slide" (the composer's remove button). */
   onActiveIndexChange?: (index: number) => void;
 }) {
@@ -123,6 +130,7 @@ export default function PostMediaCarousel({
             uri={item.url}
             active={index === activeIndex}
             style={slideStyle}
+            controls={videoControls}
             onNaturalSize={index === 0 ? handleFirstVideoSize : undefined}
           />
         );
@@ -151,8 +159,8 @@ export default function PostMediaCarousel({
         />
       );
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleFirst*/media[0] are stable for a given card; only the layout size and activeIndex actually vary what's rendered.
-    [cardWidth, cardHeight, activeIndex],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleFirst*/media[0] are stable for a given card; only the layout size, activeIndex and videoControls actually vary what's rendered.
+    [cardWidth, cardHeight, activeIndex, videoControls],
   );
 
   if (media.length === 0) return null;
@@ -194,11 +202,13 @@ function CarouselVideoSlide({
   uri,
   active,
   style,
+  controls,
   onNaturalSize,
 }: {
   uri: string;
   active: boolean;
   style: { width: number; height: number | '100%' };
+  controls: boolean;
   onNaturalSize?: (width: number, height: number) => void;
 }) {
   const player = useVideoPlayer(uri, (p) => {
@@ -223,7 +233,7 @@ function CarouselVideoSlide({
     if (!active) player.pause();
   }, [active, player]);
 
-  return <VideoView player={player} style={style} contentFit="contain" nativeControls />;
+  return <VideoView player={player} style={style} contentFit="contain" nativeControls={controls} />;
 }
 
 const makeStyles = (colors: ThemeColors) =>

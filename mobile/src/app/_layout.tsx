@@ -146,6 +146,8 @@ function AppShell() {
                 Snapchat's own story viewers use a cross-fade for, not a
                 sheet rising over the Room feed underneath it. */}
             <Stack.Screen name="c/[communityId]/story" options={{ animation: 'fade' }} />
+            {/* Same "step into the media" beat as stories, for the full-screen clips viewer. */}
+            <Stack.Screen name="c/[communityId]/clips" options={{ animation: 'fade' }} />
           </Stack>
           </UserPreviewProvider>
         </AuthGate>

@@ -20,19 +20,26 @@ export default function PostOptionsMenu({
   visible,
   canDelete,
   canRemoveTag = false,
+  canPin = false,
+  pinned = false,
   onClose,
   onHide,
   onDelete,
   onRemoveTag,
+  onTogglePin,
 }: {
   visible: boolean;
   canDelete: boolean;
   /** The viewer is tagged in this post — they can take themselves off it (RLS allows only their own tag). */
   canRemoveTag?: boolean;
+  /** Owner/admin/mod of the Room — toggle_post_pin() checks the same thing server-side. */
+  canPin?: boolean;
+  pinned?: boolean;
   onClose: () => void;
   onHide: () => void;
   onDelete: () => void;
   onRemoveTag?: () => void;
+  onTogglePin?: () => void;
 }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
@@ -44,6 +51,13 @@ export default function PostOptionsMenu({
         {/* Swallows the backdrop's onPress so tapping inside the sheet doesn't close it. */}
         <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + Spacing[4] }]} onPress={() => {}}>
           <View style={styles.grabber} />
+
+          {canPin && onTogglePin && (
+            <Pressable style={styles.row} onPress={onTogglePin} accessibilityRole="button">
+              <Icon name="pin" size={19} color={colors.text} filled={pinned} />
+              <Text style={styles.rowText}>{pinned ? 'Unpin post' : 'Pin post'}</Text>
+            </Pressable>
+          )}
 
           <Pressable style={styles.row} onPress={onHide} accessibilityRole="button">
             <Icon name="eyeOff" size={19} color={colors.text} />
