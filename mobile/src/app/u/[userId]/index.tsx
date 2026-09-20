@@ -54,33 +54,34 @@ export default function ProfileScreen() {
       setBannerUrl(null);
       setRooms(null);
       setPosts(null);
-      (async () => {
-        try {
-          const [p, roomList, postList] = await Promise.all([
-            fetchProfile(userId),
-            fetchMyRooms(userId),
-            fetchRecentPostsByAuthor(userId, 9),
-          ]);
-          setProfile(p);
-          setRooms(roomList);
-          setPosts(postList);
+      // .catch() rather than try/catch: the React Compiler can't compile the
+      // conditionals below inside a `try`, and skips the whole screen.
+      const loadProfile = async () => {
+        const [p, roomList, postList] = await Promise.all([
+          fetchProfile(userId),
+          fetchMyRooms(userId),
+          fetchRecentPostsByAuthor(userId, 9),
+        ]);
+        setProfile(p);
+        setRooms(roomList);
+        setPosts(postList);
 
-          const profileMediaPaths = [p?.avatar_url, p?.banner_url].filter((path): path is string => !!path);
-          if (profileMediaPaths.length > 0) {
-            const signed = await signProfileMediaUrls(profileMediaPaths);
-            setAvatarUrl(p?.avatar_url ? (signed.get(p.avatar_url) ?? null) : null);
-            setBannerUrl(p?.banner_url ? (signed.get(p.banner_url) ?? null) : null);
-          }
-
-          const roomPaths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((path): path is string => !!path);
-          if (roomPaths.length > 0) signRoomMediaUrls(roomPaths).then(setRoomMediaUrls).catch(() => {});
-
-          const postPaths = postList.map((post) => post.mediaPath).filter((path): path is string => !!path);
-          if (postPaths.length > 0) signMediaUrls(postPaths).then(setPostMediaUrls).catch(() => {});
-        } catch (e) {
-          setError(e instanceof Error ? e.message : 'Failed to load this profile.');
+        const profileMediaPaths = [p?.avatar_url, p?.banner_url].filter((path): path is string => !!path);
+        if (profileMediaPaths.length > 0) {
+          const signed = await signProfileMediaUrls(profileMediaPaths);
+          setAvatarUrl(p?.avatar_url ? (signed.get(p.avatar_url) ?? null) : null);
+          setBannerUrl(p?.banner_url ? (signed.get(p.banner_url) ?? null) : null);
         }
-      })();
+
+        const roomPaths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((path): path is string => !!path);
+        if (roomPaths.length > 0) signRoomMediaUrls(roomPaths).then(setRoomMediaUrls).catch(() => {});
+
+        const postPaths = postList.map((post) => post.mediaPath).filter((path): path is string => !!path);
+        if (postPaths.length > 0) signMediaUrls(postPaths).then(setPostMediaUrls).catch(() => {});
+      };
+      loadProfile().catch((e) => {
+        setError(e instanceof Error ? e.message : 'Failed to load this profile.');
+      });
     }, [userId]),
   );
 
@@ -100,14 +101,16 @@ export default function ProfileScreen() {
     if (!userId) return;
     setMessaging(true);
     setError(null);
+    // No `finally` in components: the React Compiler skips a whole component
+    // that has one. The catch handles every error, so this is equivalent —
+    // same for the three friend-action handlers below.
     try {
       const conversationId = await startDm(userId);
       router.push({ pathname: '/chats/[chatId]', params: { chatId: conversationId } });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start that conversation.');
-    } finally {
-      setMessaging(false);
     }
+    setMessaging(false);
   }
 
   async function handleAddFriend() {
@@ -119,9 +122,8 @@ export default function ProfileScreen() {
       setFriendshipStatus('pending_sent');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send that friend request.');
-    } finally {
-      setFriendActionBusy(false);
     }
+    setFriendActionBusy(false);
   }
 
   async function handleCancelRequest() {
@@ -133,9 +135,8 @@ export default function ProfileScreen() {
       setFriendshipStatus('none');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not cancel that request.');
-    } finally {
-      setFriendActionBusy(false);
     }
+    setFriendActionBusy(false);
   }
 
   async function handleAcceptRequest() {
@@ -148,9 +149,8 @@ export default function ProfileScreen() {
       setFriendCount((c) => (c ?? 0) + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not accept that request.');
-    } finally {
-      setFriendActionBusy(false);
     }
+    setFriendActionBusy(false);
   }
 
   return (

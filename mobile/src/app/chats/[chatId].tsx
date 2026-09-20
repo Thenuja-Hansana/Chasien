@@ -144,15 +144,19 @@ export default function ChatView() {
     setReplyTo(null);
     setSending(true);
     setError(null);
+    // Outside the try, and no `finally`: the React Compiler can't compile
+    // `?.` inside a try, and skips a component that has a `finally`. The
+    // catch handles every error, so this is equivalent — same for
+    // handleAttachImage and the voice send below.
+    const replyToId = pendingReply?.id;
     try {
-      const sent = await sendMessage({ conversationId: chatId, authorId: userId, text, replyToId: pendingReply?.id });
+      const sent = await sendMessage({ conversationId: chatId, authorId: userId, text, replyToId });
       setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send that message.');
       setDraft(text);
-    } finally {
-      setSending(false);
     }
+    setSending(false);
   }
 
   async function handleAttachImage() {
@@ -167,9 +171,8 @@ export default function ChatView() {
       setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send that photo.');
-    } finally {
-      setSending(false);
     }
+    setSending(false);
   }
 
   async function handleMicPress() {
@@ -198,9 +201,8 @@ export default function ChatView() {
       setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send that voice message.');
-    } finally {
-      setSending(false);
     }
+    setSending(false);
   }
 
   async function handleReact(message: Message, emoji: string) {

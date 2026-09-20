@@ -77,16 +77,21 @@ export default function CreateStory() {
     if (!canSubmit || !room || !userId || !media) return;
     setSubmitting(true);
     setError(null);
-    try {
-      setStatusLine(media.kind === 'video' ? 'Uploading video…' : 'Compressing and uploading…');
+    // Computed before the try: the React Compiler can't compile a `?:` inside
+    // one, or a `finally` (hence the promise .finally() below).
+    setStatusLine(media.kind === 'video' ? 'Uploading video…' : 'Compressing and uploading…');
+    const doSubmit = async () => {
       await createStory(room.id, userId, media, caption);
       router.replace({ pathname: '/c/[communityId]', params: { communityId } });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not share that story.');
-    } finally {
-      setSubmitting(false);
-      setStatusLine(null);
-    }
+    };
+    await doSubmit()
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Could not share that story.');
+      })
+      .finally(() => {
+        setSubmitting(false);
+        setStatusLine(null);
+      });
   }
 
   return (

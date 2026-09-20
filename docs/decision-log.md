@@ -7,6 +7,91 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-20 — The rest of the app compiles, and CI now enforces it
+
+Batch 2 of the React Compiler work, split in two. This entry is the first
+half: every remaining `try`-shaped skip, plus the CI check. The hook
+suppressions and the one ref-during-render are deliberately held back to
+their own commit, since those change behaviour rather than just structure.
+
+**Where it started:** 18 files still had at least one skipped component,
+83 compiled. Now 97 compile and 5 files remain, all of them in the second
+half's scope.
+
+**The fixes were mostly one transform.** Batch 1 found the rules
+piecemeal; applied together they collapse into a single rewrite that
+handles `finally`, conditionals inside a `try`, `throw` inside a `try`,
+and `try` without a `catch` all at once — move the body into a nested
+`async` function and attach `.catch()`/`.finally()` to the returned
+promise. Where a `try` body had no conditionals and its `catch` already
+handled everything, the smaller edit (drop the `finally`, put the cleanup
+after the `try/catch`) was used instead.
+
+**Three things the mechanical version of that would have broken:**
+
+1. *Early `return`s inside a `try` with a `finally`.* `notifications.tsx`'s
+   request-response handler and `u/[userId]/edit.tsx`'s loader both return
+   early on missing data, and the `finally` still cleared their busy state.
+   Moving the cleanup after the `try/catch` would have left those rows
+   spinning forever. Promise `.finally()` keeps the original semantics,
+   because an early return still resolves.
+2. *`create-post.tsx`'s rollbacks.* Its submit had two inner `try/catch`
+   blocks whose `catch` deletes already-uploaded media and re-`throw`s, so
+   a failed post doesn't strand objects in storage. `throw` inside a `try`
+   is one of the things the compiler refuses, so those became
+   `.catch(async (e) => { ...cleanup...; throw e; })` — a throw from inside
+   a nested function, which is allowed, and still rejects onward.
+3. *`?.`/`??` inside a `try`.* Hoisted to a `const` above it, as batch 1
+   did in CommentsSheet.
+
+**Plain `if` statements inside a `try` are fine** — only *value* blocks
+(`?:`, `&&`, `??`, `?.`) are rejected. Confirmed by a handler that has an
+`if` inside its `try` and was never reported.
+
+**One skip wasn't a `try` at all.** With settings.tsx's four `finally`s
+gone, it still failed: `[PruneHoistedContexts] Rewrite hoisted function
+references`, pointing at `handleLeave`. It's a `function` declaration used
+by JSX in the non-moderator early return above it — a hoisted reference
+the compiler won't rewrite. Moved up beside `handleToggleMute`, which was
+already declared above that early return for the same reason. Pre-existing,
+and only visible once the errors in front of it were gone; the compiler
+reports one per component, so this work is necessarily iterative.
+
+**CI check (`npm run check:compiler`,
+`mobile/scripts/check-react-compiler.js`).** Runs the compiler over `src`
+and fails on a skipped component. This is the part that makes the rest
+stick — lint and typecheck both pass on a skipped component, which is how
+26 files drifted unnoticed. It carries a `BASELINE` of the 5 files still
+skipped, and is a ratchet in both directions: a file that skips and isn't
+listed fails, and a listed file that *stopped* skipping also fails, so the
+list can't rot. Both failure paths were exercised by hand before commit,
+not assumed.
+
+**Verified on the A14** against the live local stack, since a green
+typecheck proves nothing here by construction:
+- Discover: requested to join a request-to-join Room — button went
+  Request → Requested, spinner cleared, and the `pending` row landed via
+  the Edge Function;
+- create-post: posted a poll — composer, media grid and zoom slider all
+  mounted, post landed, feed showed it "just now";
+- Room settings: rendered both moderator and member sections, made a
+  member a Mod (role changed in UI and DB, no stuck spinner), Leave Room
+  row present — i.e. the moved `handleLeave` is wired in both branches;
+- profile and chat thread: loaded, and a sent message persisted with a
+  null `reply_to_id`, confirming the hoisted `replyToId`.
+
+All test data removed afterwards — including four notifications the test
+poll and join request fanned out, since deleting a post does *not* cascade
+its notifications. Counts back to the seed baseline (31 posts, 4 messages,
+81 notifications).
+
+**Not exercised:** create-community, create-story, the sub-group creator,
+verify-email, post detail and profile edit. Each got the same transform
+already exercised on the four screens above, and all pass the compiler
+check; they're worth a pass the next time they're touched for real.
+
+---
+
 ## 2026-09-17 — React Compiler actually compiles the feed (batch 1 of 2)
 
 **Problem:** `reactCompiler: true` is on and much of the code assumes its

@@ -212,11 +212,11 @@ export default function CreatePost() {
   async function handleHeaderPress() {
     if (activeTab === 'post' && postPhase === 'pick') {
       setPickerBusy(true);
-      try {
-        await postPickerRef.current?.confirm();
-      } finally {
-        setPickerBusy(false);
-      }
+      // Promise.finally rather than try/finally, which the React Compiler
+      // can't compile. Promise.resolve wraps it because `?.` yields undefined
+      // when the picker isn't mounted, which still has to clear the busy
+      // state — as the `finally` did. A rejection still propagates, as before.
+      await Promise.resolve(postPickerRef.current?.confirm()).finally(() => setPickerBusy(false));
       return;
     }
     if (activeTab === 'clip' && clipPhase === 'pick') {
@@ -225,11 +225,7 @@ export default function CreatePost() {
         return;
       }
       setPickerBusy(true);
-      try {
-        await clipPickerRef.current?.confirm();
-      } finally {
-        setPickerBusy(false);
-      }
+      await Promise.resolve(clipPickerRef.current?.confirm()).finally(() => setPickerBusy(false));
       return;
     }
     handleSubmit();
@@ -296,7 +292,10 @@ export default function CreatePost() {
     if (editingPhotoIndex === null) return;
     setPhotoEditorBusy(true);
     setPhotoEditorError(null);
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, or the
+    // conditionals in this body inside a `try`, and skips the whole screen.
+    const applyEdit = async () => {
       const next: PickedMedia[] = [];
       for (let i = 0; i < postMedia.length; i++) {
         const item = postMedia[i];
@@ -319,11 +318,12 @@ export default function CreatePost() {
       setPostMedia(next);
       setPostShapeChoice(shape);
       setEditingPhotoIndex(null);
-    } catch (e) {
-      setPhotoEditorError(e instanceof Error ? e.message : 'Could not apply that edit.');
-    } finally {
-      setPhotoEditorBusy(false);
-    }
+    };
+    await applyEdit()
+      .catch((e) => {
+        setPhotoEditorError(e instanceof Error ? e.message : 'Could not apply that edit.');
+      })
+      .finally(() => setPhotoEditorBusy(false));
   }
 
   function removeClipMedia() {
@@ -368,10 +368,16 @@ export default function CreatePost() {
     setSubmitting(true);
     setError(null);
 
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, the
+    // conditionals in this body inside a `try`, or the rollback `throw`s
+    // below — and skips the whole composer. The rollbacks now throw from
+    // inside a .catch() callback, which is a nested function, so they still
+    // reject onward into the outer handler exactly as they did.
+    const doSubmit = async () => {
       if (activeTab === 'post') {
         const uploadedPaths: string[] = [];
-        try {
+        const publishPost = async () => {
           for (let i = 0; i < postMedia.length; i++) {
             setStatusLine(postMedia.length > 1 ? `Uploading ${i + 1} of ${postMedia.length}…` : 'Uploading…');
             uploadedPaths.push(await uploadPostMedia(postMedia[i], room.id, userId, postShape));
@@ -392,18 +398,19 @@ export default function CreatePost() {
               item.kind === 'video' ? { framing: null, videoAspect: item.width && item.height ? item.width / item.height : null } : null,
             ),
           });
-        } catch (e) {
-          // Media lands in storage before the post row exists, so a
-          // failure here would otherwise strand every object already
-          // uploaded, not just the last one.
+        };
+        // Media lands in storage before the post row exists, so a failure
+        // here would otherwise strand every object already uploaded, not
+        // just the last one.
+        await publishPost().catch(async (e) => {
           if (uploadedPaths.length > 0) await Promise.allSettled(uploadedPaths.map((p) => deletePostMedia(p)));
           throw e;
-        }
+        });
       } else if (activeTab === 'clip') {
         if (!clipMedia) return;
         setStatusLine('Uploading…');
         const path = await uploadPostMedia(clipMedia, room.id, userId);
-        try {
+        const publishClip = async () => {
           setStatusLine('Posting…');
           await createPost({
             roomId: room.id,
@@ -415,10 +422,11 @@ export default function CreatePost() {
             taggedUserIds: clipTags.map((t) => t.userId),
             mediaFraming: [{ framing: clipMedia.framing ?? null, videoAspect: clipVideoAspect }],
           });
-        } catch (e) {
+        };
+        await publishClip().catch(async (e) => {
           await deletePostMedia(path);
           throw e;
-        }
+        });
       } else if (activeTab === 'poll') {
         setStatusLine('Posting…');
         await createPost({
@@ -443,12 +451,15 @@ export default function CreatePost() {
       }
 
       router.replace({ pathname: '/c/[communityId]', params: { communityId } });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not publish that.');
-    } finally {
-      setSubmitting(false);
-      setStatusLine(null);
-    }
+    };
+    await doSubmit()
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Could not publish that.');
+      })
+      .finally(() => {
+        setSubmitting(false);
+        setStatusLine(null);
+      });
   }
 
   // Replaces the composer rather than covering it: unmounting the review

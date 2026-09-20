@@ -61,7 +61,9 @@ export default function RoomChat() {
 
   const load = useCallback(async () => {
     if (!userId) return;
-    try {
+    // .catch() rather than try/catch: the React Compiler can't compile the
+    // conditionals below inside a `try`, and skips the whole screen.
+    const loadChat = async () => {
       const r = await fetchRoomBySlug(communityId);
       setRoom(r);
       if (!r) return;
@@ -79,9 +81,10 @@ export default function RoomChat() {
 
       setSubgroups(allSubgroups);
       setParticipations(await fetchMySubgroupParticipations(allSubgroups.map((s) => s.id), userId));
-    } catch (e) {
+    };
+    await loadChat().catch((e) => {
       setError(e instanceof Error ? e.message : "Failed to load this Room's chat.");
-    }
+    });
   }, [communityId, userId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -92,18 +95,22 @@ export default function RoomChat() {
     const invited = participations.get(subgroup.id)?.join_state === 'invited';
     setJoiningId(subgroup.id);
     setError(null);
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, or the
+    // conditional in this body inside a `try`, and skips the whole screen.
+    const doJoin = async () => {
       if (invited) {
         await respondToSubgroupInvite(subgroup.id, true);
       } else {
         await joinSubgroup(subgroup.id);
       }
       await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not join that sub-group.');
-    } finally {
-      setJoiningId(null);
-    }
+    };
+    await doJoin()
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Could not join that sub-group.');
+      })
+      .finally(() => setJoiningId(null));
   }
 
   if (room === 'loading' || subgroups === null) {

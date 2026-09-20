@@ -72,7 +72,9 @@ export default function PostDetail() {
 
   const load = useCallback(async () => {
     if (!userId) return;
-    try {
+    // .catch() rather than try/catch: the React Compiler can't compile the
+    // conditionals below inside a `try`, and skips the whole screen.
+    const loadPost = async () => {
       const [fresh, freshComments] = await Promise.all([fetchPost(postId, userId), fetchComments(postId)]);
       setPost(fresh);
       setComments(freshComments);
@@ -82,10 +84,11 @@ export default function PostDetail() {
         setIsModerator(approved && (membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'));
         setIsRoomOwner(approved && membership.role === 'owner');
       }
-    } catch (e) {
+    };
+    await loadPost().catch((e) => {
       setError(e instanceof Error ? e.message : 'Failed to load this post.');
       setPost(null);
-    }
+    });
   }, [postId, userId]);
 
   useFocusEffect(
@@ -125,14 +128,15 @@ export default function PostDetail() {
     const nextPinned = !post.pinned;
     setPinning(true);
     setError(null);
+    // No `finally` in components: the React Compiler skips a whole component
+    // that has one. The catch handles every error, so this is equivalent.
     try {
       await togglePostPin(post.id, nextPinned);
       setPost({ ...post, pinned: nextPinned });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update the pin.');
-    } finally {
-      setPinning(false);
     }
+    setPinning(false);
   }
 
   // Hiding or deleting the post the viewer is currently looking at leaves
@@ -173,8 +177,10 @@ export default function PostDetail() {
     if (!userId || !draft.trim() || sending || post === 'loading' || !post) return;
     setSending(true);
     setError(null);
+    // Outside the try: the React Compiler can't compile `?.`/`??` inside one.
+    const parentId = replyTo?.id ?? null;
     try {
-      await addComment(post.id, userId, draft, replyTo?.id ?? null);
+      await addComment(post.id, userId, draft, parentId);
       setDraft('');
       setReplyTo(null);
       const [fresh, freshComments] = await Promise.all([fetchPost(post.id, userId), fetchComments(post.id)]);
@@ -182,9 +188,8 @@ export default function PostDetail() {
       setComments(freshComments);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not post that comment.');
-    } finally {
-      setSending(false);
     }
+    setSending(false);
   }
 
   if (post === 'loading') {

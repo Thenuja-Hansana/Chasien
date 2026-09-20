@@ -87,19 +87,23 @@ export default function Discover() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setJoiningId(room.id);
     setError(null);
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, or the
+    // conditionals in this body inside a `try`, and skips the whole screen.
+    const doJoin = async () => {
       await joinRoom(room.id);
       const join_state = room.visibility === 'public' ? 'approved' : 'pending';
       setMemberships((prev) => new Map(prev).set(room.id, { role: 'member', join_state }));
       if (join_state === 'approved') {
         router.push({ pathname: '/c/[communityId]', params: { communityId: room.slug } });
       }
-    } catch (e) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      setError(e instanceof Error ? e.message : 'Could not join that Room.');
-    } finally {
-      setJoiningId(null);
-    }
+    };
+    await doJoin()
+      .catch((e) => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        setError(e instanceof Error ? e.message : 'Could not join that Room.');
+      })
+      .finally(() => setJoiningId(null));
   }
 
   const filteredRooms = rooms?.filter((r) => filter === 'all' || r.category === filter) ?? null;

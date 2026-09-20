@@ -124,7 +124,10 @@ export default function CreateCommunity() {
     if (!canSubmit || submitting || !session) return;
     setSubmitting(true);
     setError(null);
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, or the
+    // conditionals in this body inside a `try`, and skips the whole screen.
+    const doCreate = async () => {
       const room = await createRoom({
         slug,
         name: name.trim(),
@@ -152,17 +155,18 @@ export default function CreateCommunity() {
       }
 
       router.replace({ pathname: '/c/[communityId]', params: { communityId: room.slug } });
-    } catch (e) {
-      setError(
-        e instanceof Error && e.message.includes('duplicate')
-          ? 'A Room with that name already exists — try another.'
-          : e instanceof Error
-            ? e.message
-            : 'Could not create that Room.',
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    };
+    await doCreate()
+      .catch((e) => {
+        setError(
+          e instanceof Error && e.message.includes('duplicate')
+            ? 'A Room with that name already exists — try another.'
+            : e instanceof Error
+              ? e.message
+              : 'Could not create that Room.',
+        );
+      })
+      .finally(() => setSubmitting(false));
   }
 
   return (

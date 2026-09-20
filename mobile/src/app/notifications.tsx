@@ -137,7 +137,11 @@ export default function Notifications() {
   async function respond(n: AppNotification, approve: boolean) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setBusyId(n.id);
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, or the
+    // conditionals in this body inside a `try`. The early returns below still
+    // clear the busy state, exactly as the `finally` used to.
+    const doRespond = async () => {
       if (n.type === 'friend_request') {
         if (!n.actor_id || !userId) return;
         await (approve ? acceptFriendRequest(userId, n.actor_id) : removeFriendship(userId, n.actor_id));
@@ -148,12 +152,13 @@ export default function Notifications() {
       }
       await deleteNotification(n.id);
       load();
-    } catch (e) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      setError(e instanceof Error ? e.message : 'Could not respond to that request.');
-    } finally {
-      setBusyId(null);
-    }
+    };
+    await doRespond()
+      .catch((e) => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        setError(e instanceof Error ? e.message : 'Could not respond to that request.');
+      })
+      .finally(() => setBusyId(null));
   }
 
   return (

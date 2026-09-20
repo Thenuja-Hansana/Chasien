@@ -28,3 +28,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      # Lint and typecheck both pass on a component the React Compiler has
+      # silently skipped, so neither catches the regression this does.
+      - run: npm run check:compiler

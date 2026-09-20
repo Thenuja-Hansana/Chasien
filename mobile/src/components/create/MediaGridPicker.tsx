@@ -207,7 +207,10 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
     () => ({
       confirm: async () => {
         setBusy(true);
-        try {
+        // A nested function with promise .finally() rather than try/finally,
+        // which the React Compiler can't compile; a failure still rejects
+        // onward to the caller, as before.
+        const resolveSelection = async () => {
           const resolved: PickedMedia[] = [];
           for (const id of selectedAssetIds) {
             // Already in the post: keep that exact item, edits and all. Also
@@ -244,9 +247,8 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
             );
           }
           onConfirm([...resolved, ...stagedCaptures, ...capturedItems]);
-        } finally {
-          setBusy(false);
-        }
+        };
+        await resolveSelection().finally(() => setBusy(false));
       },
     }),
     [selectedAssetIds, stagedMedia, stagedCaptures, assets, capturedItems, onConfirm],
@@ -272,14 +274,15 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
     if (mode === 'post') {
       if (isCapturingPhoto || selectedAssetIds.length + stagedCaptures.length + capturedItems.length >= maxSelectable) return;
       setIsCapturingPhoto(true);
+      // No `finally`: the React Compiler skips a component that has one, and
+      // the catch swallows every error, so this is equivalent.
       try {
         const photo = await cameraRef.current.takePictureAsync({ quality: 1 });
         if (photo) setCapturedItems((prev) => [...prev, { kind: 'image', uri: photo.uri, width: photo.width, height: photo.height }]);
       } catch {
         // Camera hardware/permission failure — nothing added, user can retry.
-      } finally {
-        setIsCapturingPhoto(false);
       }
+      setIsCapturingPhoto(false);
       return;
     }
 
@@ -298,9 +301,8 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
       if (video) setCapturedItems([{ kind: 'video', uri: video.uri }]);
     } catch {
       // Recording failure — capturedItems stays empty, user can retry.
-    } finally {
-      setIsRecording(false);
     }
+    setIsRecording(false);
   }
 
   const showCamera = cameraPermission?.granted;

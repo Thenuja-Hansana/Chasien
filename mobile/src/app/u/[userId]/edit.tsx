@@ -51,25 +51,28 @@ export default function EditProfile() {
   useFocusEffect(
     useCallback(() => {
       if (!isOwnProfile) return;
-      (async () => {
-        try {
-          const profile = await fetchProfile(userId);
-          if (!profile) return;
-          setName(profile.name);
-          setBio(profile.bio ?? '');
+      // A nested function with promise .catch()/.finally() rather than
+      // try/catch/finally: the React Compiler can't compile a `finally`, or
+      // the conditionals in this body inside a `try`. The early return below
+      // still marks the screen loaded, exactly as the `finally` used to.
+      const loadProfile = async () => {
+        const profile = await fetchProfile(userId);
+        if (!profile) return;
+        setName(profile.name);
+        setBio(profile.bio ?? '');
 
-          const mediaPaths = [profile.avatar_url, profile.banner_url].filter((p): p is string => !!p);
-          if (mediaPaths.length > 0) {
-            const signed = await signProfileMediaUrls(mediaPaths);
-            setExistingAvatarUrl(profile.avatar_url ? (signed.get(profile.avatar_url) ?? null) : null);
-            setExistingBannerUrl(profile.banner_url ? (signed.get(profile.banner_url) ?? null) : null);
-          }
-        } catch (e) {
-          setError(e instanceof Error ? e.message : 'Failed to load your profile.');
-        } finally {
-          setLoaded(true);
+        const mediaPaths = [profile.avatar_url, profile.banner_url].filter((p): p is string => !!p);
+        if (mediaPaths.length > 0) {
+          const signed = await signProfileMediaUrls(mediaPaths);
+          setExistingAvatarUrl(profile.avatar_url ? (signed.get(profile.avatar_url) ?? null) : null);
+          setExistingBannerUrl(profile.banner_url ? (signed.get(profile.banner_url) ?? null) : null);
         }
-      })();
+      };
+      loadProfile()
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : 'Failed to load your profile.');
+        })
+        .finally(() => setLoaded(true));
     }, [userId, isOwnProfile]),
   );
 
@@ -89,7 +92,10 @@ export default function EditProfile() {
     if (!name.trim() || saving) return;
     setSaving(true);
     setError(null);
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, or the
+    // conditionals in this body inside a `try`, and skips the whole screen.
+    const doSave = async () => {
       const [avatar_url, banner_url] = await Promise.all([
         avatarImage ? uploadProfileAvatar(avatarImage, userId) : Promise.resolve(undefined),
         bannerImage ? uploadProfileBanner(bannerImage, userId) : Promise.resolve(undefined),
@@ -101,11 +107,12 @@ export default function EditProfile() {
         ...(banner_url ? { banner_url } : {}),
       });
       router.back();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save your profile.');
-    } finally {
-      setSaving(false);
-    }
+    };
+    await doSave()
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Could not save your profile.');
+      })
+      .finally(() => setSaving(false));
   }
 
   const avatarUri = avatarImage?.uri ?? existingAvatarUrl;

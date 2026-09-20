@@ -36,16 +36,21 @@ export default function CreateSubgroup() {
     }
     setBusy(true);
     setError(null);
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, nor a
+    // `throw` inside a `try`, and skips the whole screen. The throw below
+    // still lands in the same handler, now via the rejected promise.
+    const doCreate = async () => {
       const room = await fetchRoomBySlug(communityId);
       if (!room) throw new Error('Room not found.');
       await createSubgroup(room.id, name.trim(), visibility, description.trim() || undefined);
       router.back();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create that sub-group.');
-    } finally {
-      setBusy(false);
-    }
+    };
+    await doCreate()
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Could not create that sub-group.');
+      })
+      .finally(() => setBusy(false));
   }
 
   return (

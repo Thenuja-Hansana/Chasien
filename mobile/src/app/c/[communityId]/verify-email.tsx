@@ -40,24 +40,25 @@ export default function VerifyEmail() {
   useFocusEffect(
     useCallback(() => {
       if (!userId) return;
-      (async () => {
-        try {
-          const r = await fetchRoomBySlug(communityId);
-          setRoom(r);
-          if (!r) return;
+      // .catch() rather than try/catch: the React Compiler can't compile the
+      // conditionals below inside a `try`, and skips the whole screen.
+      const loadRoom = async () => {
+        const r = await fetchRoomBySlug(communityId);
+        setRoom(r);
+        if (!r) return;
 
-          const membership = await fetchMyMembership(r.id, userId);
-          if (membership?.join_state === 'approved') {
-            router.replace({ pathname: '/c/[communityId]', params: { communityId } });
-            return;
-          }
-
-          const existing = await fetchMyVerificationStatus(r.id, userId);
-          setStatus(existing);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : 'Failed to load this Room.');
+        const membership = await fetchMyMembership(r.id, userId);
+        if (membership?.join_state === 'approved') {
+          router.replace({ pathname: '/c/[communityId]', params: { communityId } });
+          return;
         }
-      })();
+
+        const existing = await fetchMyVerificationStatus(r.id, userId);
+        setStatus(existing);
+      };
+      loadRoom().catch((e) => {
+        setError(e instanceof Error ? e.message : 'Failed to load this Room.');
+      });
     }, [communityId, userId]),
   );
 
@@ -67,14 +68,15 @@ export default function VerifyEmail() {
     if (room === 'loading' || !room || !email.trim() || sending) return;
     setSending(true);
     setError(null);
+    // No `finally`: the React Compiler skips a component that has one, and
+    // the catch handles every error, so this is equivalent.
     try {
       await requestRoomVerification(room.id, email.trim());
       setStatus({ email: email.trim().toLowerCase(), verifiedAt: null, expiresAt: new Date(Date.now() + 3600_000).toISOString() });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send that verification email.');
-    } finally {
-      setSending(false);
     }
+    setSending(false);
   }
 
   return (

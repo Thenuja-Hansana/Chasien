@@ -182,6 +182,22 @@ export default function CommunitySettings() {
     }
   }
 
+  // Declared up here with handleToggleMute, above the non-moderator early
+  // return below, because both that branch's JSX and the moderator one use
+  // it. Referenced before its declaration, the React Compiler can't rewrite
+  // the hoisted reference and skips the whole screen.
+  async function handleLeave() {
+    setLeaving(true);
+    setError(null);
+    try {
+      await leaveRoom(currentRoom.id);
+      router.replace('/discover');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not leave this Room.');
+      setLeaving(false);
+    }
+  }
+
   if (!isModerator) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -236,7 +252,10 @@ export default function CommunitySettings() {
   async function handleSave() {
     setSaving(true);
     setError(null);
-    try {
+    // A nested function with promise .catch()/.finally() rather than
+    // try/catch/finally: the React Compiler can't compile a `finally`, or the
+    // conditionals in this body inside a `try`, and skips the whole screen.
+    const doSave = async () => {
       const [avatar_url, banner_url] = await Promise.all([
         avatarImage ? uploadRoomAvatar(avatarImage, currentRoom.id, currentUserId) : Promise.resolve(undefined),
         bannerImage ? uploadRoomBanner(bannerImage, currentRoom.id, currentUserId) : Promise.resolve(undefined),
@@ -251,24 +270,27 @@ export default function CommunitySettings() {
         ...(banner_url ? { banner_url } : {}),
       });
       router.back();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save changes.');
-    } finally {
-      setSaving(false);
-    }
+    };
+    await doSave()
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Could not save changes.');
+      })
+      .finally(() => setSaving(false));
   }
 
   async function handleRespond(targetUserId: string, approve: boolean) {
     setBusyUserId(targetUserId);
     setError(null);
+    // No `finally` in components: the React Compiler skips a whole component
+    // that has one. The catch handles every error, so this is equivalent —
+    // same for handleRoleChange and handleRemove below.
     try {
       await respondToRequest(currentRoom.id, targetUserId, approve);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not respond to that request.');
-    } finally {
-      setBusyUserId(null);
     }
+    setBusyUserId(null);
   }
 
   async function handleRoleChange(targetUserId: string, newRole: RoomRole) {
@@ -280,9 +302,8 @@ export default function CommunitySettings() {
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not change that member’s role.');
-    } finally {
-      setBusyUserId(null);
     }
+    setBusyUserId(null);
   }
 
   async function handleRemove(targetUserId: string) {
@@ -294,21 +315,8 @@ export default function CommunitySettings() {
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not remove that member.');
-    } finally {
-      setBusyUserId(null);
     }
-  }
-
-  async function handleLeave() {
-    setLeaving(true);
-    setError(null);
-    try {
-      await leaveRoom(currentRoom.id);
-      router.replace('/discover');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not leave this Room.');
-      setLeaving(false);
-    }
+    setBusyUserId(null);
   }
 
   const approvedMembers = members.filter((m) => m.join_state === 'approved');
