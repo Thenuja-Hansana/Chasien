@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, View, type DimensionValue } from 'react-native';
 
 import { useTheme } from '@/hooks/use-theme';
@@ -27,8 +27,9 @@ export default function Skeleton({
   const colors = useTheme();
   const { mode } = useThemeContext();
   const [blockWidth, setBlockWidth] = useState(0);
-  // eslint-disable-next-line react-hooks/refs -- read via .interpolate() during render, the standard idiomatic use of an Animated.Value.
-  const anim = useRef(new Animated.Value(0)).current;
+  // Created once in state rather than a ref: reading `ref.current` during
+  // render makes the React Compiler skip the component.
+  const [anim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -38,7 +39,6 @@ export default function Skeleton({
     return () => loop.stop();
   }, [anim]);
 
-  // eslint-disable-next-line react-hooks/refs
   const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [-blockWidth, blockWidth] });
 
   return (

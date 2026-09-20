@@ -99,7 +99,10 @@ export default function RoomHome() {
     const immediateFeed = cached
       ? Promise.all([loadFeed(cached.room.id), fetchActiveStories(cached.room.id).then(setActiveStories)])
       : null;
-    try {
+    // A nested function, so the try block itself holds no conditionals: the
+    // React Compiler can't compile `?:`, `&&`, `??` or `?.` directly inside
+    // a try, and skips the whole component when it meets one.
+    const openRoom = async () => {
       const room = await fetchRoomBySlug(communityId);
       const membership = room ? await fetchMyMembership(room.id, userId) : null;
       setState({ room, membership });
@@ -116,6 +119,9 @@ export default function RoomHome() {
           .then(() => setUnreadCount(0))
           .catch(() => {});
       }
+    };
+    try {
+      await openRoom();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load this Room.');
     }
@@ -156,15 +162,16 @@ export default function RoomHome() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setBusy(true);
     setError(null);
+    // No `finally` in components: the React Compiler skips a whole component
+    // that has one. The catch handles every error, so this is equivalent.
     try {
       await joinRoom(room.id);
       await load();
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       setError(e instanceof Error ? e.message : 'Could not join.');
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   }
 
   async function handleInviteResponse(room: Room, accept: boolean) {
@@ -177,9 +184,8 @@ export default function RoomHome() {
       else router.replace('/discover');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not respond to the invite.');
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   }
 
   // Optimistic: the count moves on tap and reverts if the write is
@@ -273,27 +279,25 @@ export default function RoomHome() {
   async function handleLoadMore(roomId: string) {
     if (loadingMore || reachedEnd || !posts || !userId) return;
     setLoadingMore(true);
+    // Continue after the last post still in the list — correct even after
+    // hides/deletes removed rows, which offset paging wasn't.
+    const last = posts[posts.length - 1];
+    const cursor = last ? { createdAt: last.createdAt, id: last.id } : null;
     try {
-      // Continue after the last post still in the list — correct even after
-      // hides/deletes removed rows, which offset paging wasn't.
-      const last = posts[posts.length - 1];
-      const next = await fetchRoomFeed(roomId, userId, last ? { createdAt: last.createdAt, id: last.id } : null);
+      const next = await fetchRoomFeed(roomId, userId, cursor);
       setPosts([...posts, ...next]);
       if (next.length < FEED_PAGE_SIZE) setReachedEnd(true);
     } catch {
       setReachedEnd(true);
-    } finally {
-      setLoadingMore(false);
     }
+    setLoadingMore(false);
   }
 
   async function handleRefresh(roomId: string) {
     setRefreshing(true);
-    try {
-      await loadFeed(roomId);
-    } finally {
-      setRefreshing(false);
-    }
+    // Promise.finally rather than try/finally, which the React Compiler can't
+    // compile; a failed refresh still rejects, as before.
+    await loadFeed(roomId).finally(() => setRefreshing(false));
   }
 
   if (state === 'loading') {
@@ -371,6 +375,29 @@ export default function RoomHome() {
   }
 
   const canPost = room.members_can_post || membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod';
+
+  // Its own variable, not inline in the FlatList: the React Compiler
+  // memoizes an inline renderItem together with the whole list element,
+  // which depends on `posts`, so every like gave it a new identity and
+  // re-rendered every visible card. Declared here, it only changes when
+  // what it reads changes (the handlers are stable on userId).
+  const renderPost = ({ item }: { item: FeedPost }) => (
+    <PostCard
+      post={item}
+      viewerId={session.user.id}
+      viewerIsRoomOwner={membership.role === 'owner'}
+      viewerCanModerate={membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'}
+      onOpenComments={() => commentsSheetRef.current?.open(item.id)}
+      onOpenLikes={() => likesSheetRef.current?.open(item.id)}
+      onOpenClip={() => router.push({ pathname: '/c/[communityId]/clips', params: { communityId, postId: item.id } })}
+      onToggleLike={() => handleToggleLike(item)}
+      onVote={(optionId) => handleVote(item, optionId)}
+      onHide={() => handleHidePost(item)}
+      onDelete={() => handleDeletePost(item)}
+      onRemoveTag={() => handleRemoveTag(item)}
+      onTogglePin={() => handleTogglePin(item)}
+    />
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -463,6 +490,12 @@ export default function RoomHome() {
         <FlatList
           data={posts}
           keyExtractor={(post) => post.id}
+          // Without strictMode, FlatList wraps renderItem in a new function
+          // on every render, so a like re-rendered every visible post card.
+          // With it, cells whose post didn't change are skipped. That relies
+          // on renderItem keeping its identity, which the React Compiler
+          // provides now that this screen compiles.
+          strictMode
           contentContainerStyle={[
             styles.feedContent,
             { paddingBottom: canPost ? clearance + FAB_SIZE + Spacing[3] : clearance },
@@ -497,23 +530,7 @@ export default function RoomHome() {
           }
           onEndReached={() => handleLoadMore(room.id)}
           onEndReachedThreshold={0.4}
-          renderItem={({ item }) => (
-            <PostCard
-              post={item}
-              viewerId={session.user.id}
-              viewerIsRoomOwner={membership.role === 'owner'}
-              viewerCanModerate={membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'}
-              onOpenComments={() => commentsSheetRef.current?.open(item.id)}
-              onOpenLikes={() => likesSheetRef.current?.open(item.id)}
-              onOpenClip={() => router.push({ pathname: '/c/[communityId]/clips', params: { communityId, postId: item.id } })}
-              onToggleLike={() => handleToggleLike(item)}
-              onVote={(optionId) => handleVote(item, optionId)}
-              onHide={() => handleHidePost(item)}
-              onDelete={() => handleDeletePost(item)}
-              onRemoveTag={() => handleRemoveTag(item)}
-              onTogglePin={() => handleTogglePin(item)}
-            />
-          )}
+          renderItem={renderPost}
         />
       )}
       </View>

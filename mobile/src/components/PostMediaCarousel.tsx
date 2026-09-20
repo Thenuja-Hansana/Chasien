@@ -143,53 +143,52 @@ export default function PostMediaCarousel({
     if (first != null) setActiveIndex(first);
   }, []);
 
-  const renderItem = useCallback(
-    ({ item, index }: { item: CarouselMediaItem; index: number }) => {
-      if (cardWidth === 0) return null;
-      const slideStyle = { width: cardWidth, height: '100%' as const };
-      if (item.kind === 'video') {
-        return (
-          <CarouselVideoSlide
-            uri={item.url}
-            active={index === activeIndex}
-            style={slideStyle}
-            controls={videoControls}
-            onNaturalSize={index === 0 ? handleFirstVideoSize : undefined}
-            fill={
-              clipBoxShape
-                ? { shape: clipBoxShape, framing: item.framing ?? null, videoAspect: item.videoAspect ?? null, boxWidth: cardWidth, boxHeight: cardHeight }
-                : undefined
-            }
-          />
-        );
-      }
-      if (item.cropAspectRatio && cardHeight > 0) {
-        // `contain` for the crop box, `cover` for the photo inside it —
-        // together they draw exactly the centered crop the upload will
-        // make, letterboxed the way the posted file will be.
-        const crop = item.cropAspectRatio;
-        const cropBox =
-          crop >= cardWidth / cardHeight ? { width: cardWidth, height: cardWidth / crop } : { width: cardHeight * crop, height: cardHeight };
-        return (
-          <View style={[slideStyle, styles.cropSlide]}>
-            <Image source={cachedImageSource(item.url)} style={cropBox} contentFit="cover" />
-          </View>
-        );
-      }
+  // Memoized by the React Compiler on what it actually reads. It used to be a
+  // useCallback with an eslint-disable'd dependency list, and that
+  // suppression made the compiler skip this whole component.
+  const renderItem = ({ item, index }: { item: CarouselMediaItem; index: number }) => {
+    if (cardWidth === 0) return null;
+    const slideStyle = { width: cardWidth, height: '100%' as const };
+    if (item.kind === 'video') {
       return (
-        <Image
-          source={cachedImageSource(item.url)}
+        <CarouselVideoSlide
+          uri={item.url}
+          active={index === activeIndex}
           style={slideStyle}
-          contentFit="contain"
-          transition={150}
-          cachePolicy="memory-disk"
-          onLoad={index === 0 ? handleFirstImageLoad : undefined}
+          controls={videoControls}
+          onNaturalSize={index === 0 ? handleFirstVideoSize : undefined}
+          fill={
+            clipBoxShape
+              ? { shape: clipBoxShape, framing: item.framing ?? null, videoAspect: item.videoAspect ?? null, boxWidth: cardWidth, boxHeight: cardHeight }
+              : undefined
+          }
         />
       );
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleFirst*/media[0] are stable for a given card; only the layout size, activeIndex, videoControls and the clip's shape actually vary what's rendered.
-    [cardWidth, cardHeight, activeIndex, videoControls, clipBoxShape],
-  );
+    }
+    if (item.cropAspectRatio && cardHeight > 0) {
+      // `contain` for the crop box, `cover` for the photo inside it —
+      // together they draw exactly the centered crop the upload will
+      // make, letterboxed the way the posted file will be.
+      const crop = item.cropAspectRatio;
+      const cropBox =
+        crop >= cardWidth / cardHeight ? { width: cardWidth, height: cardWidth / crop } : { width: cardHeight * crop, height: cardHeight };
+      return (
+        <View style={[slideStyle, styles.cropSlide]}>
+          <Image source={cachedImageSource(item.url)} style={cropBox} contentFit="cover" />
+        </View>
+      );
+    }
+    return (
+      <Image
+        source={cachedImageSource(item.url)}
+        style={slideStyle}
+        contentFit="contain"
+        transition={150}
+        cachePolicy="memory-disk"
+        onLoad={index === 0 ? handleFirstImageLoad : undefined}
+      />
+    );
+  };
 
   if (media.length === 0) return null;
 

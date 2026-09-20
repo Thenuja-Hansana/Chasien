@@ -77,7 +77,7 @@ export default function PostCard({
   // 2026-09-15 — react-native-reanimated was already a dependency but had
   // no real call site anywhere in the app until this one.
   const likeScale = useSharedValue(1);
-  const likeAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: likeScale.value }] }));
+  const likeAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: likeScale.get() }] }));
 
   return (
     <View style={styles.container}>
@@ -163,8 +163,9 @@ export default function PostCard({
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
               if (!post.likedByMe) {
-                // eslint-disable-next-line react-hooks/immutability -- a Reanimated shared value's .value is deliberately mutable, the same escape hatch Skeleton.tsx's Animated.Value ref already needs — the compiler's static analysis has no way to know that.
-                likeScale.value = withSequence(withTiming(1.3, { duration: 100 }), withTiming(1, { duration: 120 }));
+                // .set(), not `.value =`: the React Compiler treats a write to
+                // `.value` as mutating a hook value and skips the whole card.
+                likeScale.set(withSequence(withTiming(1.3, { duration: 100 }), withTiming(1, { duration: 120 })));
               }
               onToggleLike();
             }}

@@ -86,17 +86,19 @@ const CommentsSheet = forwardRef<CommentsSheetHandle, { viewerId: string; onComm
     if (!postId || !text || sending) return;
     setSending(true);
     setError(null);
+    // Outside the try: the React Compiler can't compile `?.`/`??` inside one,
+    // or a `finally` (the catch handles every error, so none is needed).
+    const parentId = replyTo?.id ?? null;
     try {
-      await addComment(postId, viewerId, text, replyTo?.id ?? null);
+      await addComment(postId, viewerId, text, parentId);
       setDraft('');
       setReplyTo(null);
       setComments(await fetchComments(postId));
       onCommentAdded(postId);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not post your comment.');
-    } finally {
-      setSending(false);
     }
+    setSending(false);
   }
 
   return (

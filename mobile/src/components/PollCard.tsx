@@ -60,11 +60,9 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
       })),
     });
     setBusy(true);
-    try {
-      await onVote(optionId);
-    } finally {
-      setBusy(false);
-    }
+    // Promise.finally rather than try/finally, which the React Compiler can't
+    // compile; a failed vote still rejects, as before.
+    await onVote(optionId).finally(() => setBusy(false));
   }
 
   return (

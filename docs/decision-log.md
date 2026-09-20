@@ -7,6 +7,82 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-17 — React Compiler actually compiles the feed (batch 1 of 2)
+
+**Problem:** `reactCompiler: true` is on and much of the code assumes its
+memoization, but running `babel-plugin-react-compiler` over `src` with a
+logger showed it skipping every component in 26 of 85 files. Nothing
+reports this: Metro still logs "React Compiler enabled", and lint and
+typecheck pass. On the feed, that meant every state change re-rendered
+every mounted post card. Profiled on the A14 (dev bundle): one like
+re-rendered 10 cards (5 visible, twice each), 295 ms of card renders, with
+a 323 ms feed-list commit.
+
+**What the compiler can't handle (1.0.0), and the rewrites used:**
+- *`try … finally`, or `try` without `catch`.* Where the `catch` handles
+  every error, the cleanup moves after the try/catch. Otherwise it becomes
+  `promise.finally(...)`.
+- *Conditionals inside a `try` block* (`?:`, `&&` in an `if`, `??`, `?.`).
+  These are fine inside `catch`, nested functions, and promise `.then`/
+  `.catch`. Either the value is computed before the `try`, or the body
+  moves into a nested async function. Found only once the `finally` was
+  gone, because the compiler reports the first problem per component.
+- *Any `eslint-disable` of a react-hooks rule* skips the whole component.
+- *Reanimated `sharedValue.value = …`* counts as mutating a hook value; use
+  `.set()` and `.get()`.
+- *Reading `useRef(...).current` during render* (for an `Animated.Value`);
+  use `useState(() => new Animated.Value(0))`.
+
+**Two more fixes before a like re-rendered one card:**
+1. FlatList wraps `renderItem` in a new function on every render unless
+   `strictMode` is set. The prop is real (documented in FlatList.js) but
+   missing from RN's TypeScript types, so it's declared in
+   `src/types/react-native.d.ts`.
+2. The compiler memoizes an inline `renderItem={…}` together with the whole
+   `<FlatList>` element, which depends on `posts`, so it still got a new
+   identity per like. It's now a separate `renderPost` variable; its
+   handlers are memoized on `userId` alone.
+
+**Changed (8 files):** feed screen, PostCard, PostMediaCarousel, PollCard,
+CommentsSheet, clips viewer, Skeleton, PostFab. All compile now, 18 files
+still have skips, and behaviour is unchanged.
+
+**Measured on the A14:**
+
+| One like (dev bundle, React Profiler) | Before | After |
+|---|---|---|
+| Post cards re-rendered | 10 | 1 |
+| Card render time | 295 ms | 46 ms |
+| Feed list commit | 323 ms | 64 ms |
+
+Plain scrolling is unchanged (production bundle, 20-fling script: 12.9% /
+12.6% janky before, 13.2% / 12.6% after, median 26 ms). Scrolling alone
+doesn't re-render the feed; the win is on state changes (likes, votes,
+load more, refresh, realtime updates).
+
+**Verified on the device**, with 12 temporary posts and two temporary
+Rooms, all deleted afterwards (notification count back to 81):
+- skeleton while loading, load more past page 20, pull to refresh;
+- like/unlike, poll vote and vote back (restored exactly);
+- pin, unpin, comment (the card's count updates), hide, delete with its
+  confirmation;
+- the post button opens New Post;
+- clips viewer loading and its "clip isn't available" error;
+- joining a public Room, accepting an invite.
+
+Not exercised: the clips viewer's `loadOlder`. Its query counts only posts
+with a video, so it needs more than 20 clips in a Room; its rewrite is the
+same as the feed's load-more, which was exercised.
+
+**Next (batch 2):** the other 18 files (create/post composer, chat,
+settings, profile, notifications, search, Explore, verify-email, story
+viewer, MediaGridPicker, UserPreviewCard), then a CI check that runs the
+compiler and fails on any skipped component. The lint rules only catch part
+of this (`react-hooks/todo` flags the try/finally cases, not the
+suppression or mutation skips).
+
+---
+
 ## 2026-09-17 — Images cache by storage path, not by signed URL
 
 **Problem:** the 2026-09-15 image pass set `cachePolicy="memory-disk"` on

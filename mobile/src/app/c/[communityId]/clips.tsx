@@ -53,27 +53,28 @@ export default function Clips() {
   useEffect(() => {
     if (!userId || !postId) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const start = await fetchPost(postId, userId);
-        if (!start || !isClipPost(start)) {
-          if (!cancelled) setError('This clip isn’t available any more.');
-          return;
-        }
-        const [newer, older] = await Promise.all([
-          fetchRoomClips(start.roomId, userId, cursorOf(start), 'newer'),
-          fetchRoomClips(start.roomId, userId, cursorOf(start), 'older'),
-        ]);
-        if (cancelled) return;
-        setClips([...newer.clips, start, ...older.clips]);
-        setInitialIndex(newer.clips.length);
-        setActiveIndex(newer.clips.length);
-        setOlderCursor(older.nextCursor);
-        setReachedEnd(older.reachedEnd);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load clips.');
+    // .catch() rather than try/catch: the React Compiler can't compile the
+    // conditionals below inside a try, and skips the whole screen.
+    const loadAround = async () => {
+      const start = await fetchPost(postId, userId);
+      if (!start || !isClipPost(start)) {
+        if (!cancelled) setError('This clip isn’t available any more.');
+        return;
       }
-    })();
+      const [newer, older] = await Promise.all([
+        fetchRoomClips(start.roomId, userId, cursorOf(start), 'newer'),
+        fetchRoomClips(start.roomId, userId, cursorOf(start), 'older'),
+      ]);
+      if (cancelled) return;
+      setClips([...newer.clips, start, ...older.clips]);
+      setInitialIndex(newer.clips.length);
+      setActiveIndex(newer.clips.length);
+      setOlderCursor(older.nextCursor);
+      setReachedEnd(older.reachedEnd);
+    };
+    loadAround().catch((e) => {
+      if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load clips.');
+    });
     return () => {
       cancelled = true;
     };
@@ -89,6 +90,8 @@ export default function Clips() {
   async function loadOlder() {
     if (!userId || !clips || reachedEnd || loadingMore || !olderCursor) return;
     setLoadingMore(true);
+    // No `finally`: the React Compiler skips a component that has one, and
+    // the catch handles every error, so this is equivalent.
     try {
       const roomId = clips[0].roomId;
       const page = await fetchRoomClips(roomId, userId, olderCursor, 'older');
@@ -97,9 +100,8 @@ export default function Clips() {
       setReachedEnd(page.reachedEnd);
     } catch {
       setReachedEnd(true);
-    } finally {
-      setLoadingMore(false);
     }
+    setLoadingMore(false);
   }
 
   async function toggleLike(post: FeedPost) {

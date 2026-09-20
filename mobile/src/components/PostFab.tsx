@@ -29,14 +29,14 @@ export default function PostFab({ communityId }: { communityId: string }) {
   // that Pressable's own comment on why its style has to stay one flat
   // object). Animation polish pass, 2026-09-15.
   const scale = useSharedValue(1);
-  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  // get()/set() rather than `.value`: the React Compiler treats a `.value`
+  // write as mutating a hook value and skips the component.
+  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
   const pressIn = () => {
-    // eslint-disable-next-line react-hooks/immutability -- a Reanimated shared value's .value is deliberately mutable, the same escape hatch Skeleton.tsx's Animated.Value ref already needs — the compiler's static analysis has no way to know that.
-    scale.value = withTiming(0.88, { duration: 80 });
+    scale.set(withTiming(0.88, { duration: 80 }));
   };
   const pressOut = () => {
-    // eslint-disable-next-line react-hooks/immutability
-    scale.value = withTiming(1, { duration: 120 });
+    scale.set(withTiming(1, { duration: 120 }));
   };
 
   return (
