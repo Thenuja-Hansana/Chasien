@@ -595,7 +595,16 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
       static analysis has no way to know a shared value's `.value` is
       deliberately mutable, the same class of false positive
       `Skeleton.tsx`'s `Animated.Value` ref already needed a suppression
-      comment for. Suppressed the same way, not worked around. Further
+      comment for. Suppressed the same way, not worked around.
+      **Superseded, 2026-09-17/20:** those suppressions turned out to be
+      expensive — *any* react-hooks suppression makes the React Compiler
+      skip the whole component silently, which is how 26 of 85 files ended
+      up uncompiled while lint, typecheck and Metro all stayed green. Both
+      are now written the compiler's way instead (`.get()`/`.set()` on
+      shared values, `useState(() => new Animated.Value(0))` for the refs),
+      every suppression is gone, all 102 components compile, and
+      `npm run check:compiler` runs in CI so a new skip fails the build.
+      See decision-log, 2026-09-17 and both 2026-09-20 entries. Further
       "polish" (more micro-interactions, custom screen transitions) has
       no natural finish line and isn't pursued further here — this item's
       three named things (screen transitions, tab switches, modal/sheet

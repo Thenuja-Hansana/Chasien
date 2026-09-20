@@ -7,7 +7,6 @@ import {
   BackHandler,
   FlatList,
   LayoutAnimation,
-  PanResponder,
   Platform,
   Pressable,
   StyleSheet,
@@ -499,31 +498,37 @@ function CameraSurface({
  * convention.
  */
 function ZoomSlider({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  const valueRef = useRef(value);
-  useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
-  const startValueRef = useRef(value);
-
-  const panResponder = useRef(
-    // eslint-disable-next-line react-hooks/refs -- PanResponder.create().panHandlers is RN's own documented pattern for a stable gesture responder in a function component; its callbacks are genuine touch-event handlers, not render logic (mirrors Skeleton.tsx's Animated.Value.current use below).
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        startValueRef.current = valueRef.current;
-      },
-      onPanResponderMove: (_event, gestureState) => {
-        const next = Math.min(1, Math.max(0, startValueRef.current - gestureState.dy / ZOOM_TRAVEL));
-        onChange(next);
-      },
-    }),
-  ).current;
+  // Where the drag started. Written and read only inside the responder
+  // handlers below — never during render — which is exactly what a ref is
+  // for, and what the React Compiler allows in an event handler.
+  //
+  // These are the View's own responder props rather than
+  // `PanResponder.create().panHandlers`, because that handle has to be
+  // built during render: held in a ref, reading `.current` for the spread
+  // is a render-time ref read, and moving it into `useState`'s initializer
+  // just moves the same closure into render. Either way the compiler skips
+  // the component, and it can't tell that the refs the closure captures are
+  // only ever touched at gesture time. Raw responder props need no such
+  // handle. `value` is read directly at grant time, so the separate
+  // value-mirroring ref and its effect are gone too.
+  const startValue = useRef(value);
+  const startY = useRef(0);
 
   const thumbOffset = (1 - value) * ZOOM_TRAVEL;
 
   return (
-    // eslint-disable-next-line react-hooks/refs -- same PanResponder handle as above.
-    <View style={zoomStyles.hitArea} {...panResponder.panHandlers}>
+    <View
+      style={zoomStyles.hitArea}
+      onStartShouldSetResponder={() => true}
+      onResponderGrant={(event) => {
+        startValue.current = value;
+        startY.current = event.nativeEvent.pageY;
+      }}
+      onResponderMove={(event) => {
+        const dy = event.nativeEvent.pageY - startY.current;
+        onChange(Math.min(1, Math.max(0, startValue.current - dy / ZOOM_TRAVEL)));
+      }}
+    >
       <View style={zoomStyles.track} />
       <View style={[zoomStyles.thumb, { transform: [{ translateY: thumbOffset }] }]} />
       <Text style={[zoomStyles.label, { transform: [{ translateY: thumbOffset - 6 }] }]}>{(1 + value).toFixed(1)}x</Text>

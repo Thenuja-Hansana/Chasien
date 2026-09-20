@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import Avatar from '@/components/Avatar';
@@ -52,14 +52,24 @@ export default function UserPreviewCard({ userId, visible, onClose }: { userId: 
       .catch(() => setPostsResult({ userId, posts: [] }));
   }, [userId, visible]);
 
+  // Paths already handed to the signer. A ref rather than reading
+  // `mediaUrls`, which this effect also writes: depending on `mediaUrls`
+  // would loop forever over any path that fails to sign, because
+  // signBucketUrls omits failures from its result instead of throwing, so
+  // the path would stay unsigned and re-trigger the effect on every pass.
+  // Reading a ref inside an effect is fine — only during render it isn't —
+  // so this needs no eslint-disable, which would make the React Compiler
+  // skip the whole component.
+  const requestedPaths = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const paths = (posts ?? []).map((p) => p.mediaPath).filter((p): p is string => !!p);
-    const unsigned = paths.filter((p) => !mediaUrls.has(p));
+    const unsigned = paths.filter((p) => !requestedPaths.current.has(p));
     if (unsigned.length === 0) return;
+    for (const path of unsigned) requestedPaths.current.add(path);
     signMediaUrls(unsigned)
       .then((signed) => setMediaUrls((prev) => new Map([...prev, ...signed])))
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [posts]);
 
   function handleVisitProfile() {

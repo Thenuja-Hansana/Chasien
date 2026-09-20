@@ -81,16 +81,24 @@ export default function ChatView() {
   // Sign every image/voice path this conversation's currently-loaded
   // messages reference, whenever the message list changes — new sends
   // included, since sendMessage()'s own result needs a URL too.
+  // Paths already handed to the signer. A ref rather than reading
+  // `mediaUrls`, which this effect also writes: depending on `mediaUrls`
+  // would loop forever over any path that fails to sign, because
+  // signBucketUrls omits failures from its result instead of throwing, so
+  // the path would stay unsigned and re-trigger the effect on every pass.
+  // Reading a ref inside an effect is fine — only during render it isn't —
+  // so this needs no eslint-disable, which would make the React Compiler
+  // skip the whole screen.
+  const requestedPaths = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const paths = (messages ?? []).flatMap((m) => [m.image_url, m.voice_url].filter((p): p is string => !!p));
-    const unsigned = paths.filter((p) => !mediaUrls.has(p));
+    const unsigned = paths.filter((p) => !requestedPaths.current.has(p));
     if (unsigned.length === 0) return;
+    for (const path of unsigned) requestedPaths.current.add(path);
     signMessageMediaUrls(unsigned)
       .then((signed) => setMediaUrls((prev) => new Map([...prev, ...signed])))
       .catch(() => {});
-    // mediaUrls intentionally excluded — it's the thing this effect
-    // grows, not something a change to it should re-run the effect for.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -141,16 +141,24 @@ export default function Chats() {
   const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
   const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
 
+  // Paths already handed to the signer. A ref rather than reading
+  // `mediaUrls`, which this effect also writes: depending on `mediaUrls`
+  // would loop forever over any path that fails to sign, because
+  // signBucketUrls omits failures from its result instead of throwing, so
+  // the path would stay unsigned and re-trigger the effect on every pass.
+  // Reading a ref inside an effect is fine — only during render it isn't —
+  // so this needs no eslint-disable, which would make the React Compiler
+  // skip the whole screen.
+  const requestedPaths = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const paths = (items ?? []).map((i) => i.last_message_image_url).filter((p): p is string => !!p);
-    const unsigned = paths.filter((p) => !mediaUrls.has(p));
+    const unsigned = paths.filter((p) => !requestedPaths.current.has(p));
     if (unsigned.length === 0) return;
+    for (const path of unsigned) requestedPaths.current.add(path);
     signMessageMediaUrls(unsigned)
       .then((signed) => setMediaUrls((prev) => new Map([...prev, ...signed])))
       .catch(() => {});
-    // mediaUrls intentionally excluded — it's the thing this effect grows,
-    // not something a change to it should re-run the effect for.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
   const toggleExpand = useCallback((roomId: string) => {

@@ -7,6 +7,83 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-20 — The last five: hook suppressions, and 0 skipped components
+
+Second half of batch 2, and the end of this work: **102 components, 0
+skips**, `BASELINE` in the CI check now empty. These five were split out
+because, unlike the rest, they change behaviour rather than structure.
+
+**The media-signing effect, three times over** (`chats/index.tsx`,
+`chats/[chatId].tsx`, `UserPreviewCard.tsx`). Each reads `mediaUrls` to
+filter out already-signed paths while deliberately omitting it from its
+deps, under an `exhaustive-deps` suppression — and any react-hooks
+suppression makes the compiler skip the whole component.
+
+The obvious fix is wrong. Adding `mediaUrls` to the deps *looks* safe,
+since the effect early-returns once nothing is unsigned — but
+`signBucketUrls` documents that paths which fail to sign are **absent**
+from the returned map rather than throwing. One broken path would leave
+itself unsigned forever, re-triggering the effect on every pass: an
+infinite render loop, and a worse bug than the one being fixed. Instead
+each now tracks already-requested paths in a ref. Reading a ref inside an
+effect is fine — only during render it isn't — so the dep list is honest
+(`[messages]` / `[items]` / `[posts]`) with nothing suppressed.
+
+**The story viewer** needed two changes. Its `progressAnim` was
+`useRef(new Animated.Value(0)).current`, read during render for the
+progress bar's `scaleX` — Skeleton's problem from batch 1, same fix
+(`useState(() => …)`), and it removes a second suppression on the JSX too.
+Its auto-advance effect depended on `[currentStoryId]` alone because
+`next` takes a new identity every time the story index moves, so depending
+on it would restart the very timer that had just advanced the story. `next`
+is now read through a ref, and the real dependencies — the displayed
+story's id and kind — are listed properly.
+
+**`ZoomSlider` was the one that didn't have a tidy fix.** Its
+`PanResponder.create()` handle has to exist during render for the
+`panHandlers` spread. Held in a ref, reading `.current` is a render-time
+ref read; moved into `useState`'s initializer, the compiler still refuses
+it ("Passing a ref to a function may read its value during render") —
+correctly, in the sense that `useState`'s initializer *does* run during
+render, even though the refs it captures are only touched at gesture time.
+Rather than contrive something to satisfy the check, the component now
+uses the View's own `onStartShouldSetResponder`/`onResponderGrant`/
+`onResponderMove` props, which need no handle built during render and
+where ref access is plainly allowed. `PanResponder` is gone from the file,
+along with the ref that mirrored `value` and its effect — `value` is read
+directly at grant time now, so it can't go stale.
+
+**One more `try` surfaced** in story.tsx once its suppression was gone, and
+got the same treatment as the rest of batch 2.
+
+**The CI check earned itself immediately**: after the three signing fixes
+it failed, reporting that those files compile now and must leave
+`BASELINE`. That's the reverse direction of the ratchet working on its
+first real use, not a hypothetical.
+
+**Verified on the A14**, all against the live local stack, and the story
+and chat-image cases needed real media created first since the seed data
+had neither:
+- shared a photo story (which also exercised create-story's rewrite from
+  the previous entry), then opened the viewer: the progress bar was part
+  filled at ~2.5s of its 5s duration, and it auto-advanced and returned
+  home at the end — the `nextRef` behaviour preserved exactly;
+- sent a chat photo: it rendered in the thread *and* as the inbox
+  thumbnail, which is the signing effect in both rewritten files;
+- dragged the zoom slider: 1.0x → 1.8x, so grab, drag and value tracking
+  all survive the PanResponder removal.
+
+All of it removed afterwards, storage objects included — those need the
+Storage API, since direct `DELETE` on `storage.objects` is blocked by a
+trigger. Back to the seed baseline (31 posts, 4 messages, 0 stories, 81
+notifications, 23 memberships).
+
+**Not directly exercised:** `UserPreviewCard`'s signing effect, which
+would need a profile whose recent posts have media. It's the same shape as
+the two that were verified, and the component itself renders.
+
+---
+
 ## 2026-09-20 — The rest of the app compiles, and CI now enforces it
 
 Batch 2 of the React Compiler work, split in two. This entry is the first

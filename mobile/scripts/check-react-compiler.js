@@ -12,14 +12,16 @@
  * So this runs the compiler over `src` the way Metro would and treats a
  * skipped component as a build failure. Run it with `npm run check:compiler`.
  *
- * BASELINE holds the files known to still skip, so this can land before
- * they're all fixed. It's a ratchet, not a dumping ground: a file listed
- * here that no longer skips is *also* an error, so the list can only
- * shrink. Don't add to it to make a build pass — fix the component. The
- * rewrites the compiler needs (no `try/finally`, no conditionals or
- * `throw` inside a `try`, no react-hooks eslint-disable, `.get()`/`.set()`
- * on Reanimated shared values, no reading a ref during render) are written
- * up in decision-log, 2026-09-17.
+ * BASELINE is empty, and the whole app compiles. It exists for the case
+ * where a component genuinely can't be written the way the compiler needs;
+ * it's a ratchet, not a dumping ground, since a file listed here that no
+ * longer skips is *also* an error, so the list can only shrink. Don't add
+ * to it to make a build pass — fix the component. The rewrites the
+ * compiler needs (no `try/finally`, no conditionals or `throw` inside a
+ * `try`, no react-hooks eslint-disable, `.get()`/`.set()` on Reanimated
+ * shared values, no reading a ref during render, and no passing a
+ * ref-capturing closure to a hook that runs during render) are written up
+ * in decision-log, 2026-09-17 and 2026-09-20.
  */
 const fs = require('fs');
 const path = require('path');
@@ -28,13 +30,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const SRC = path.join(PROJECT_ROOT, 'src');
 
 // Files whose components the compiler still can't handle. Must only shrink.
-const BASELINE = [
-  'app/c/[communityId]/story.tsx',
-  'app/chats/[chatId].tsx',
-  'app/chats/index.tsx',
-  'components/UserPreviewCard.tsx',
-  'components/create/MediaGridPicker.tsx',
-];
+const BASELINE = [];
 
 const babel = require('@babel/core');
 

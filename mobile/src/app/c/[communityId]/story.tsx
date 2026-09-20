@@ -64,11 +64,16 @@ export default function StoryViewer() {
   const [storyIndex, setStoryIndex] = useState(0);
   const [roomName, setRoomName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  // Created once in state rather than a ref, as Skeleton.tsx's is: the
+  // progress bar reads this during render for its scaleX, and reading
+  // `ref.current` during render makes the React Compiler skip the screen.
+  const [progressAnim] = useState(() => new Animated.Value(0));
   const runningAnimation = useRef<Animated.CompositeAnimation | null>(null);
 
   const load = useCallback(async () => {
-    try {
+    // .catch() rather than try/catch: the React Compiler can't compile the
+    // conditionals below inside a `try`, and skips the whole screen.
+    const loadStories = async () => {
       const room = await fetchRoomBySlug(communityId);
       if (!room) return;
       setRoomName(room.name);
@@ -83,9 +88,10 @@ export default function StoryViewer() {
       const startAt = authorId ? authorOrder.indexOf(authorId) : 0;
       setAuthorIndex(startAt >= 0 ? startAt : 0);
       setStoryIndex(0);
-    } catch (e) {
+    };
+    await loadStories().catch((e) => {
       setError(e instanceof Error ? e.message : 'Failed to load stories.');
-    }
+    });
   }, [communityId, authorId]);
 
   useFocusEffect(
@@ -125,6 +131,16 @@ export default function StoryViewer() {
   }, [storyIndex, authorIndex, groups]);
 
   const currentStoryId = groups[authorIndex]?.[1][storyIndex]?.id;
+  const currentStoryKind = groups[authorIndex]?.[1][storyIndex]?.kind;
+
+  // The latest `next`, so the auto-advance effect below doesn't depend on
+  // it. `next` takes a new identity every time the story index moves, so
+  // depending on it would restart the very timer that just advanced the
+  // story — which is what the old eslint-disable was really avoiding.
+  const nextRef = useRef(next);
+  useEffect(() => {
+    nextRef.current = next;
+  }, [next]);
 
   // setValue() is a direct mutation, not a React setState call — no
   // re-render, and nothing for react-hooks/set-state-in-effect to flag.
@@ -137,8 +153,7 @@ export default function StoryViewer() {
     runningAnimation.current?.stop();
     progressAnim.setValue(0);
     if (!currentStoryId) return;
-    const kind = groups[authorIndex]?.[1][storyIndex]?.kind;
-    if (kind !== 'image') return;
+    if (currentStoryKind !== 'image') return;
 
     const animation = Animated.timing(progressAnim, {
       toValue: 1,
@@ -148,13 +163,14 @@ export default function StoryViewer() {
     });
     runningAnimation.current = animation;
     animation.start(({ finished }) => {
-      if (finished) next();
+      if (finished) nextRef.current();
     });
     return () => animation.stop();
-    // currentStoryId alone is the real key here — it changes exactly when
-    // the displayed story does, whether from a manual tap or auto-advance.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStoryId]);
+    // The id and kind of the displayed story are what this actually depends
+    // on, and they change exactly when it does — whether from a manual tap
+    // or an auto-advance. Reading `next` through a ref keeps the list
+    // honest rather than suppressed.
+  }, [currentStoryId, currentStoryKind, progressAnim]);
 
   if (stories === null) {
     return (
@@ -200,10 +216,6 @@ export default function StoryViewer() {
 
       <SafeAreaView edges={['top', 'bottom']} style={styles.foreground}>
         <View style={styles.progressRow}>
-          {/* eslint-disable-next-line react-hooks/refs -- progressAnim is
-              an Animated.Value, not a plain ref: reading it in a style
-              prop during render is the standard, idiomatic way to use
-              react-native's Animated API, unlike a plain ref's .current. */}
           {authorStories.map((s, i) => (
             <View key={s.id} style={styles.progressTrack}>
               {i < storyIndex ? (
