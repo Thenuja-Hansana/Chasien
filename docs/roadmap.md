@@ -79,6 +79,20 @@ issues late and the surface area only grows from here. Verified on the
 Galaxy A14, the same physical device used since Phase 6. Next after this:
 Phase 9 — Trust & Safety.
 
+**2026-09-21: Bones Phase closed; the path to a real release is now
+planned end to end.** Nine of Bones' ten items are done, and the tenth
+(right-sized image variants) is blocked on a paid Supabase feature. The
+React Compiler work that followed it now compiles every component, and CI
+enforces that. The goal from here is **a downloadable Android APK first,
+then the Play Store, then the App Store**, so the roadmap gained an **APK
+Beta Phase** between Phases 11 and 12. It's inserted by name rather than
+renumbered, the same way Bones was, so existing Phase 9-13 references stay
+valid. Phases 9, 11 and 12 were also re-audited against the stores'
+current requirements and what's actually built: Phase 9 gained items it
+was missing, password reset moved from Phase 12 to Phase 11 because it
+never depended on Apple, and the privacy policy moved ahead of the first
+public download. See decision-log, 2026-09-21. Next: Phase 9.
+
 Previously: the feed is real end to end — posts with text, images, and
 polls; likes; one-level threaded comments — all verified with two real
 accounts against the live local stack, with post images held in a
@@ -401,7 +415,11 @@ items below are pulled forward from Phase 10 (list virtualization/image
 caching, loading/empty/error-state audit) rather than duplicated there —
 Phase 10 keeps a re-verification pass instead, see its note below.
 
-**Status: complete as of 2026-09-15** — all nine items below are checked.
+**Status: complete as of 2026-09-15** — nine of the ten items below are
+checked. The tenth, the image-loading item, is done except for
+right-sized variants, which need Supabase's paid image transformations
+(see that item). *(This line said "all nine" until 2026-09-21. The
+composer item was added after the count was written.)*
 The exit condition's "feels smooth, no dropped-frame scrolling" is a
 good-faith read from manual on-device testing (scrolling stayed
 responsive throughout the memory-profiling swipes, no visible jank
@@ -751,17 +769,90 @@ on, not just in a browser or emulator.
 Goal: the things that get a UGC app rejected if missing. See
 `store-compliance.md` for the policy citations.
 
-- [ ] Report flow: post, comment, user — reaches a place you'll actually
-      see it
-- [ ] Block flow: blocked user's content hidden both directions
-- [ ] Mod actions: remove post/comment, mute/remove member, from
-      Community Settings
-- [ ] Abuse contact published somewhere reachable (even just an email, at
-      solo-dev scale)
-- [ ] In-app account deletion — actual deletion, not deactivation
+**Already in place (audited 2026-09-21).** This phase is mostly client
+flows and enforcement, not schema design:
+- `reports`, `blocks` and `moderation_actions` exist
+  (`20260813051229_trust_and_safety.sql`) with RLS. `blocks` allows
+  SELECT/INSERT/DELETE and `reports` allows SELECT/INSERT.
+  `moderation_actions` is SELECT-only, so moderation writes go through
+  Edge Functions or RPCs, like every other authority-bearing write.
+- The only thing that uses any of it today is the tag picker:
+  `fetchTaggableMembers` leaves out people you've blocked.
+- A Room owner can already delete any post (`delete_post`) and remove a
+  member (`removeFromRoom`).
+- Chat mute and ban are enforced when a message is inserted into a
+  sub-group (`20260905140400`).
+- Signup already has an "I'm 16 or older and accept the community
+  guidelines" checkbox, but there are no guidelines for it to point to.
 
-**Exit condition:** you could pass an App Store UGC review today, not just
-"eventually."
+**Everything below is enforced server-side, not just hidden in the UI.**
+The anon key ships inside every build, so anyone can call the API
+directly.
+
+The original five items were "report post/comment/user", "block both
+directions", "mod actions", "abuse contact" and "account deletion". They
+are expanded below to match what the stores actually check (see
+`store-compliance.md`):
+
+- [ ] Report flow for posts, comments, chat messages, stories, users, and
+      whole Rooms (a Room can itself be the problem). The server captures
+      `content_snapshot` itself, because the reported content may be
+      deleted before anyone reviews it. The client can't supply the
+      snapshot. This was an open item from Phase 10's column audit
+- [ ] Reports reach **you**, not just the Room's mods, because the Room
+      owner may be the person being reported. For example: Database
+      Webhook → Edge Function → email to the abuse inbox, the same shape
+      as the notification pipeline
+- [ ] A fast way to act on a report: remove the content, and suspend the
+      account across the whole app (a Supabase Auth ban, not just removal
+      from one Room). Apple asks for "timely responses". Its reviewers
+      have been known to spell that out as acting within 24 hours by
+      removing the content and ejecting the user who posted it. At this
+      scale, a written Studio/SQL procedure is acceptable if it really is
+      fast
+- [ ] Block flow, in both directions and on every surface: feed,
+      comments, stories, chat, search, Discover, profiles, @mentions and
+      tags, and notifications.
+      - Chat: no new DM with someone who has blocked you, and no messages
+        into an existing one. Phase 10's audit flagged this as unchecked.
+      - Notifications: a blocked user's likes and comments don't notify
+        you.
+      - Settings get a blocked-users list with unblock
+- [ ] Filter objectionable content before it's posted. Apple 1.2 asks for
+      "a method for filtering objectionable material from being posted".
+      At solo-dev scale, that means a server-side word list checked
+      against post, comment and message text, Room names and bios, on top
+      of report-and-remove
+- [ ] Mod actions in Room Settings, filling the gaps:
+      - admins and mods can remove posts (today only the owner can)
+      - mods can remove comments and chat messages
+      - mods can mute and remove members from the UI
+      - each action writes a `moderation_actions` row
+- [ ] Write the community guidelines, including an explicit
+      zero-tolerance line for objectionable content and abusive users.
+      Link them from the signup checkbox that already says people accept
+      them, and from settings. Apple expects UGC apps to have users agree
+      to terms like these
+- [ ] Publish an abuse contact where people can find it: in the app's
+      settings, and on the download page and store listing (even just an
+      email, at solo-dev scale)
+- [ ] In-app account deletion: actual deletion, not deactivation.
+      - Decide per table what happens to the user's content: delete it,
+        or keep it and show "Deleted user", which the client already
+        renders as a fallback.
+      - Remove their storage objects and push tokens.
+      - Decide what happens to Rooms they **own**: hand each one to its
+        longest-standing admin, or delete the Room.
+      - Deleting the `auth.users` row needs the service role, so this is
+        an Edge Function
+- [ ] Account deletion can also be requested from the web, without
+      installing the app. Google Play's Data safety form asks for that
+      URL. A page with an email address or a form is enough
+
+**Exit condition:** you could pass an App Store UGC review today, not
+just "eventually". This is checked with three accounts at once (blocker,
+blocked and bystander) and with direct API calls, not only through the
+UI.
 
 ---
 
@@ -801,7 +892,9 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
         `20260917100000` — but a direct INSERT is still possible); server-side `content_snapshot` capture
         when Phase 9 builds reporting; an `edited_at` trigger alongside any
         future edit feature. Not audited: business rules outside column
-        writes (e.g. starting a DM with someone who blocked you)
+        writes (e.g. starting a DM with someone who blocked you). That
+        case now belongs to Phase 9's block item, and `content_snapshot`
+        to its report item
   - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
         after Phase 9's features
 
@@ -826,10 +919,37 @@ starts.
       staging project) against the hosted project, exactly as they ran
       locally — a hosted Postgres/Auth instance isn't guaranteed to
       behave identically to `supabase start` just because it passed
-      locally
-- [ ] Wire up a real SMTP provider for Auth emails (e.g. SendGrid free
-      tier) via `supabase/config.toml`'s `[auth.email.smtp]` block —
-      already sketched in a comment there since Phase 2, unused until now
+      locally. **Never run `seed.sql` on the project real users reach.**
+      Every seeded account's password is `password123`, and the anon key
+      that reaches those accounts ships inside the app
+- [ ] Deploy all six Edge Functions and set their secrets on the hosted
+      project. Confirm the Database Webhooks (chat and activity push) and
+      the `pg_cron` story-cleanup job exist there too, and recreate any
+      that were configured outside the migrations
+- [ ] Point Auth's site URL and redirect URLs at something real.
+      Confirmation and password-reset links default to `localhost`,
+      which on a stranger's phone goes nowhere. Use a deep link back into
+      the app, or a small web page
+- [ ] Wire up a real SMTP provider for Auth emails via
+      `supabase/config.toml`'s `[auth.email.smtp]` block (already sketched
+      in a comment there since Phase 2, unused until now). Supabase's
+      built-in sender is rate-limited too hard for real signups.
+      *(2026-09-21: this used to suggest SendGrid's free tier, which may
+      no longer exist. Resend and Brevo both had free tiers at the time of
+      writing. Check current limits before choosing.)*
+- [ ] Password-reset flow: a "Forgot password?" link, the email, and a
+      screen that the reset link deep-links into. *Moved here from Phase
+      12 on 2026-09-21.* It was cut from Phase 2 because it needs a
+      deep-link screen (decision-log 2026-08-13), not because it depends
+      on Apple. Real users without it who forget their password are
+      locked out for good
+- [ ] Plan for the free tier's realities:
+      - A free project **pauses after about a week without activity**,
+        and the app stops working until it's unpaused.
+      - Backups on the free tier are limited. Take your own periodic
+        `supabase db dump` once real data exists.
+
+      Check the current terms, since these limits change
 - [ ] A real `mobile/.env` (not `.env.local`) pointing at the hosted
       project's URL + anon key, kept out of git the same way
       `.env.local` is
@@ -845,23 +965,113 @@ can sign up, receive an actual confirmation email, and log in.
 
 ---
 
+## APK Beta Phase — downloadable Android build (inserted 2026-09-21)
+
+Goal: a real Android app that anyone with the link can download, install
+and use, **at $0**. It comes before the store phases because it's free,
+it gets the app onto real phones without waiting on any review, and its
+testers carry straight into Google Play's closed test in Phase 12. It
+depends on Phase 11: a build for other people has to point at the hosted
+backend. See decision-log, 2026-09-21.
+
+**Two stages.** First, a **private** build shared only with testers you
+know. It can ship as soon as Phase 11 is done. Then, a **public** download
+link, which waits for Phase 9 and Phase 10's security pass, because
+"public link" means strangers. The dev client installed on the A14 today
+can't be shared: it contains no app code and loads everything from Metro
+on this laptop.
+
+- [ ] `mobile/eas.json` with an `apk` profile (`buildType: "apk"`) for
+      sideloading, and a `production` profile (AAB) for Play later, since
+      Play wants an AAB, not an APK. Set the `EXPO_PUBLIC_*` values as
+      EAS environment variables pointing at the hosted project. The build
+      won't see `.env.local`: it's gitignored, and it points at
+      `localhost` anyway
+- [ ] Pick one release signing key and keep it forever. Today
+      `android/app/build.gradle` signs release builds with the **debug
+      keystore**. Every future version has to be signed with the key
+      that signs the first public APK. Otherwise people must uninstall
+      (and lose their session) to update.
+      - Choose between the existing `chasien-upload-keystore.jks`
+        (gitignored, which is correct) and an EAS-managed key.
+      - Back the key up somewhere off this laptop.
+      - Decide now how it relates to Play App Signing in Phase 12. If
+        Play signs with a different key, sideloaded users can't update
+        in place to the Play version
+- [ ] Version numbering: bump `version`, and increment `versionCode` on
+      every release (EAS can auto-increment). Android refuses an
+      "update" with a versionCode that isn't higher
+- [ ] Smoke-test the release build against the hosted backend on the A14,
+      not the dev client. Release builds differ: there's no Metro, the
+      code is minified, and env values are baked in. Walk signup with a
+      real email, Rooms, posting with media, chat, stories and push
+- [ ] Push notifications in the release build. FCM and EAS credentials
+      are already set up (Phase 6), so this checks them against the hosted
+      project's webhooks
+- [ ] Privacy policy and community guidelines hosted before the public
+      link goes up. The app collects emails, photos, voice notes and
+      push tokens. *Moved here from Phase 12 on 2026-09-21.* GitHub Pages
+      is free
+- [ ] Download page: the APK on **GitHub Releases** (free, with a stable
+      link) and a simple page (GitHub Pages) with install steps. Explain
+      the "Install unknown apps" permission and the Play Protect warning
+      people will see, list a SHA-256 checksum, and link the abuse
+      contact and the web account-deletion page
+- [ ] An update path, since sideloaded apps never update themselves: EAS
+      Update over-the-air for JavaScript-only fixes (check the free-tier
+      limits), plus an in-app "new version available" prompt for native
+      changes that need a new APK
+- [ ] Check Google's developer-verification rules for sideloaded apps.
+      Google has been rolling out a requirement that apps on certified
+      Android devices come from verified developers, sideloaded apps
+      included, country by country. Check whether it applies where your
+      users are at release time, and register if so
+
+**Exit condition:** someone not on your network downloads the APK from
+the page onto a phone you don't own, installs it, signs up with a real
+email, and uses Rooms, posts, chat and push against the hosted backend.
+
+---
+
 ## Phase 12 — Store submission prep
 
-Goal: ready to actually submit.
+Goal: ready to actually submit. **Google Play first** ($25 one-time,
+and the APK Beta Phase's testers carry over), **then Apple** ($99 a year).
 
-- [ ] Privacy Policy + Terms, hosted somewhere reachable (free — e.g.
-      GitHub Pages)
+- [ ] Re-check the privacy policy and terms (hosted since the APK Beta
+      Phase) against each store's requirements
 - [ ] Apple "App Privacy" label / Google "Data safety" form — filled to
-      match actual behavior, not boilerplate
+      match actual behavior, not boilerplate. Google's form also needs the
+      web account-deletion URL from Phase 9
+- [ ] Content rating: Google's IARC questionnaire and Apple's age rating.
+      A social app with user content and chat rates higher than a plain
+      app. Keep it consistent with the "16 or older" that signup already
+      asks people to confirm
 - [ ] App icon, screenshots, store listing copy
-- [ ] Apple Developer Program ($99/yr) — the first real money spent, and
-      not before this point
-- [ ] Build OAuth (Sign in with Apple, mandatory once any social login
-      exists; Google, optional) and the password-reset flow — both cut
-      from Phase 2 for exactly this reason (see decision-log 2026-08-13),
-      now unblocked by the Apple Developer Program membership above; update
-      the login/signup screens to match once built
 - [ ] Google Play Console ($25 one-time)
+- [ ] **Google Play closed test.** New personal developer accounts have
+      had to run a closed test before getting production access: at
+      least 12 testers opted in for 14 days in a row, as of the time of
+      writing. Check the current numbers. Recruit the APK beta testers
+      for it. It's the longest-lead item in this phase, so start it
+      first
+- [ ] Production build as an AAB (the `production` profile from the APK
+      Beta Phase), signed with the key that phase settled on, and
+      meeting Play's target API level (Expo SDK upgrades handle this; confirm it at
+      submission time)
+- [ ] Apple Developer Program ($99/yr), the first recurring cost. You
+      need it even to install a test build on a real iPhone. EAS builds
+      iOS in the cloud, so no Mac is needed
+- [ ] Apple review demo account: App Review needs working login details,
+      plus a Room with real-looking content to look at. Make it a
+      dedicated account, not a seed one
+- [ ] OAuth, **optional**. Sign in with Apple is only required if another
+      third-party login (Google, Facebook) is offered. With email and
+      password alone, you don't need any OAuth to submit. *(Password
+      reset used to be bundled here. It moved to Phase 11 on 2026-09-21,
+      since it never depended on Apple.)* If Google login is added, Sign
+      in with Apple has to come with it; update the login/signup screens
+      to match
 - [ ] TestFlight / Internal testing track with a small real beta group
 
 **Exit condition:** submitted to both stores.
@@ -874,5 +1084,8 @@ Goal: ready to actually submit.
       test accounts)
 - [ ] Watch free-tier usage against the ceilings in `architecture.md`
       (DB size, realtime connections, R2 storage) — know before you hit
-      them, not after
+      them, not after. That includes the inactivity pause from Phase 11,
+      which hits hardest during a quiet week of a small beta
+- [ ] Act on reports within the time the store listing and guidelines
+      promise. Phase 9 builds the tools; this is doing it for real
 - [ ] Feedback loop back into this roadmap

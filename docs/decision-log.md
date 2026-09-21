@@ -7,6 +7,80 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-21 — The road to release: an APK Beta Phase, and Phases 9-12 re-audited
+
+**Decision:** the release goal is now **a downloadable Android APK first,
+then Google Play, then the App Store**. A new **APK Beta Phase** sits
+between Phase 11 (hosted backend) and Phase 12 (store submission). It's
+inserted by name rather than renumbered, the way Bones was (2026-09-02),
+so no existing "Phase 9-13" reference changes meaning.
+
+**Why an APK before the stores:** it costs nothing. EAS's free tier (or a
+local Gradle build), GitHub Releases for hosting and GitHub Pages for the
+download page are all free. It gets the app onto real phones without
+waiting on review. And its testers go straight into the Google Play
+closed test that new personal developer accounts have to run before
+production access, which is the longest lead time in Phase 12. The Play
+Store costs $25 once; Apple costs $99 a year and is needed even to put a
+test build on a real iPhone.
+
+**Why it has to come after Phase 11:** the dev client installed on the
+A14 contains no app code; it loads everything from Metro on this laptop.
+And every build so far bakes in `http://localhost:54321`, which on anyone
+else's phone points at their own phone. A shareable build needs the
+hosted backend.
+
+**Why the public link also waits for Phase 9 and Phase 10's security
+pass:** the anon key ships inside the APK, so anyone can call the API
+directly. RLS is the whole boundary, and a public link means strangers.
+The phase is split so that a *private* build for known testers can ship
+as soon as Phase 11 is done, if that's wanted sooner.
+
+**What the re-audit changed:**
+- *Phase 9 had real gaps against Apple 1.2.* It had report, block,
+  abuse contact and account deletion. It was missing a filter on
+  objectionable content before it's posted (one of the four things 1.2
+  lists), terms that users agree to, a platform-level way to act on
+  reports (removal from one Room isn't enough when the Room owner is the
+  one reported), and Google's requirement that account deletion also be
+  requestable from the web. Reports and blocks now also cover chat
+  messages, stories and whole Rooms. The phase now opens with what's
+  already built: the three tables and their policies, owner post
+  deletion, member removal, and sub-group mute and ban.
+- *Password reset moved from Phase 12 to Phase 11.* Phase 12 had bundled
+  it with OAuth, "unblocked by the Apple Developer Program". But the
+  2026-08-13 entry cut it because it needs a deep-link screen, not
+  because of Apple. It depends on real email, which is Phase 11, and
+  without it a beta user who forgets their password is locked out.
+- *Phase 11 gained what a real deployment needs:* deploying the Edge
+  Functions and their secrets, checking the webhooks and `pg_cron` job,
+  pointing Auth's redirect URLs away from `localhost`, and planning for
+  the free tier pausing an inactive project. It also gained an explicit
+  "never seed production" warning, since every seed account uses
+  `password123`. The SendGrid suggestion was replaced, because its free
+  plan may no longer exist.
+- *The privacy policy moved ahead of the first public download.* The
+  app collects emails, photos, voice notes and push tokens before any
+  store is involved.
+- *Phase 12 gained the store gates it was missing:* the Play closed test,
+  content rating, Apple's review demo account, and an AAB build. OAuth is
+  now marked optional: Sign in with Apple is only required when another
+  third-party login exists, and email and password need none.
+
+**Found while auditing, not yet fixed:** `android/app/build.gradle`
+signs release builds with the **debug keystore**. That's harmless for dev
+builds, but whichever key signs the first public APK has to sign every
+update after it. So the APK Beta Phase starts by picking one key for
+good, and deciding how it relates to Play App Signing.
+
+**Store-policy details** (the tester count and duration, SendGrid, and
+Google's developer verification for sideloaded apps) were written from
+knowledge that may be out of date, and are marked "check" where they
+appear. `store-compliance.md` gained items 7-12 and a section on
+sideloading.
+
+---
+
 ## 2026-09-20 — The last five: hook suppressions, and 0 skipped components
 
 Second half of batch 2, and the end of this work: **102 components, 0
