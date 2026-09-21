@@ -810,7 +810,7 @@ are expanded below to match what the stores actually check (see
       removing the content and ejecting the user who posted it. At this
       scale, a written Studio/SQL procedure is acceptable if it really is
       fast
-- [ ] Block flow, in both directions and on every surface: feed,
+- [x] Block flow, in both directions and on every surface: feed,
       comments, stories, chat, search, Discover, profiles, @mentions and
       tags, and notifications.
       - Chat: no new DM with someone who has blocked you, and no messages
@@ -818,6 +818,12 @@ are expanded below to match what the stores actually check (see
       - Notifications: a blocked user's likes and comments don't notify
         you.
       - Settings get a blocked-users list with unblock
+      **Done 2026-09-21** (`20260921100000_block_enforcement.sql`): enforced
+      in RLS and triggers, with group chats collapsing on the blocker's
+      device only. Verified with 47 direct-API checks, including a re-run of
+      the Room isolation checks, and 21 UI checks in the real app. See
+      decision-log, 2026-09-21. Left for later: presence and bio are still
+      readable through the API between blocked people (Phase 10)
 - [ ] Filter objectionable content before it's posted. Apple 1.2 asks for
       "a method for filtering objectionable material from being posted".
       At solo-dev scale, that means a server-side word list checked
@@ -885,7 +891,8 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
         decision-log, 2026-09-16 (two entries) and migrations
         `20260916140000`/`20260916150000`
   - [ ] Still open from that audit: client-written timestamps on likes,
-        reactions, blocks, hidden posts and push tokens; direct inserts into
+        reactions, hidden posts and push tokens (`blocks` closed
+        2026-09-21: writes now go only through `block_user()`); direct inserts into
         `polls`/`poll_options`/`post_media`/`events` that skip
         `create_post`'s validation (`post_media` is now column-granted with
         no UPDATE, and its framing columns are CHECK-constrained — see
@@ -897,6 +904,11 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
         to its report item
   - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
         after Phase 9's features
+  - [ ] Between blocked people, `profiles` is still fully readable through
+        the API, including bio and `last_active_at` (presence). The screens
+        hide them, but only column-level rules on `profiles` would stop a
+        blocked person fetching them directly. Found in Phase 9's block
+        slice (decision-log, 2026-09-21)
 
 **Exit condition:** you'd hand this to a stranger without wincing.
 

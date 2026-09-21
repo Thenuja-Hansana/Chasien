@@ -5,13 +5,16 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable,
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import BlockConfirmModal from '@/components/BlockConfirmModal';
 import Icon from '@/components/Icon';
 import MessageBubble from '@/components/MessageBubble';
+import OptionsSheet from '@/components/OptionsSheet';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { blockUser, fetchBlockedIds, fetchBlockStatus, unblockUser, type BlockStatus } from '@/lib/blocks';
 import {
   addReaction,
   fetchConversationSummary,
@@ -53,6 +56,16 @@ export default function ChatView() {
   const [recording, setRecording] = useState(false);
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [otherLastRead, setOtherLastRead] = useState<string | null>(null);
+  // DMs only: whether either person has blocked the other. The server
+  // enforces it by refusing messages; this just swaps the composer for an
+  // explanation instead of letting a send fail.
+  const [blockStatus, setBlockStatus] = useState<BlockStatus>('none');
+  // Room chats only: people the viewer blocked, whose messages collapse
+  // here. The server leaves group-chat messages alone on purpose
+  // (20260921100000_block_enforcement.sql), so this is client-side.
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,6 +75,7 @@ export default function ChatView() {
   const load = useCallback(() => {
     if (!chatId || !userId) return;
     setSummary('loading');
+    fetchBlockedIds(userId).then(setBlockedIds).catch(() => {});
     fetchConversationSummary(chatId, userId)
       .then(async (s) => {
         setSummary(s);
@@ -70,6 +84,7 @@ export default function ChatView() {
         setMessages(rows);
         await markConversationRead(chatId, userId);
         if (s.kind === 'dm' && s.otherUserId) {
+          setBlockStatus(await fetchBlockStatus(s.otherUserId));
           setOtherLastRead(await fetchOtherParticipantLastRead(chatId, s.otherUserId));
         }
       })
@@ -78,9 +93,6 @@ export default function ChatView() {
 
   useFocusEffect(useCallback(() => load(), [load]));
 
-  // Sign every image/voice path this conversation's currently-loaded
-  // messages reference, whenever the message list changes — new sends
-  // included, since sendMessage()'s own result needs a URL too.
   // Paths already handed to the signer. A ref rather than reading
   // `mediaUrls`, which this effect also writes: depending on `mediaUrls`
   // would loop forever over any path that fails to sign, because
@@ -91,6 +103,9 @@ export default function ChatView() {
   // skip the whole screen.
   const requestedPaths = useRef<Set<string>>(new Set());
 
+  // Sign every image/voice path this conversation's currently-loaded
+  // messages reference, whenever the message list changes — new sends
+  // included, since sendMessage()'s own result needs a URL too.
   useEffect(() => {
     const paths = (messages ?? []).flatMap((m) => [m.image_url, m.voice_url].filter((p): p is string => !!p));
     const unsigned = paths.filter((p) => !requestedPaths.current.has(p));
@@ -233,6 +248,27 @@ export default function ChatView() {
     );
   }
 
+  async function handleBlock(otherUserId: string) {
+    setError(null);
+    try {
+      await blockUser(otherUserId);
+      setBlockStatus('blocking');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not block this person.');
+    }
+  }
+
+  async function handleUnblock(otherUserId: string) {
+    if (!userId) return;
+    setError(null);
+    try {
+      await unblockUser(userId, otherUserId);
+      setBlockStatus('none');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not unblock this person.');
+    }
+  }
+
   if (!summary) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
@@ -268,6 +304,11 @@ export default function ChatView() {
             </Text>
           )}
         </View>
+        {summary.kind === 'dm' && summary.otherUserId && (
+          <Pressable onPress={() => setOptionsOpen(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel="More options">
+            <Icon name="dotsH" size={22} color={colors.text} />
+          </Pressable>
+        )}
       </View>
 
       {/* 'height' on Android, not the previous `undefined` — the manifest's
@@ -305,6 +346,9 @@ export default function ChatView() {
             const mine = item.author_id === userId;
             const showRead = mine && summary.kind === 'dm' && !!otherLastRead && otherLastRead >= item.created_at;
             const replySnippet = item.reply_to_id ? messagesById.get(item.reply_to_id) : null;
+            if (summary.kind === 'room_channel' && item.author_id && blockedIds.has(item.author_id)) {
+              return <Text style={styles.blockedMessage}>Message from someone you blocked</Text>;
+            }
             return (
               <View>
                 {replySnippet && (
@@ -335,6 +379,19 @@ export default function ChatView() {
         {typingUser && <Text style={styles.typingText}>Typing...</Text>}
         {error && <Text style={styles.errorText}>{error}</Text>}
 
+        {summary.kind === 'dm' && blockStatus !== 'none' ? (
+          <View style={styles.blockedBar}>
+            <Text style={styles.blockedBarText}>
+              {blockStatus === 'blocking' ? 'You blocked this person. Unblock them to send messages.' : 'You can’t reply to this conversation.'}
+            </Text>
+            {blockStatus === 'blocking' && summary.otherUserId && (
+              <Pressable onPress={() => summary.otherUserId && handleUnblock(summary.otherUserId)} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.blockedBarAction}>Unblock</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+        <>
         {replyTo && (
           <View style={styles.replyBanner}>
             <Text style={styles.replyBannerText} numberOfLines={1}>
@@ -385,12 +442,86 @@ export default function ChatView() {
             )}
           </Pressable>
         </View>
+        </>
+        )}
       </KeyboardAvoidingView>
+
+      {summary.kind === 'dm' && summary.otherUserId && (
+        <>
+          <OptionsSheet
+            visible={optionsOpen}
+            onClose={() => setOptionsOpen(false)}
+            options={[
+              blockStatus === 'blocking'
+                ? {
+                    key: 'unblock',
+                    label: `Unblock @${subtitle ?? ''}`,
+                    icon: 'noEntry',
+                    onPress: () => {
+                      setOptionsOpen(false);
+                      if (summary.otherUserId) handleUnblock(summary.otherUserId);
+                    },
+                  }
+                : {
+                    key: 'block',
+                    label: `Block @${subtitle ?? ''}`,
+                    icon: 'noEntry',
+                    destructive: true,
+                    onPress: () => {
+                      setOptionsOpen(false);
+                      setConfirmingBlock(true);
+                    },
+                  },
+            ]}
+          />
+          <BlockConfirmModal
+            visible={confirmingBlock}
+            handle={subtitle ?? ''}
+            onCancel={() => setConfirmingBlock(false)}
+            onConfirm={() => {
+              setConfirmingBlock(false);
+              if (summary.otherUserId) handleBlock(summary.otherUserId);
+            }}
+          />
+        </>
+      )}
     </SafeAreaView>
   );
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  blockedMessage: {
+    alignSelf: 'flex-start',
+    marginVertical: Spacing[1],
+    marginHorizontal: Spacing[4],
+    fontFamily: Fonts.body,
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: colors.neutral[500],
+  },
+  blockedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing[3],
+    paddingHorizontal: Spacing[4],
+    paddingTop: Spacing[4],
+    paddingBottom: Spacing[6],
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+  },
+  blockedBarText: {
+    flex: 1,
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    color: colors.neutral[400],
+  },
+  blockedBarAction: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 14,
+    color: colors.text,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.bg,

@@ -5,8 +5,10 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import BlockConfirmModal from '@/components/BlockConfirmModal';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import OptionsSheet from '@/components/OptionsSheet';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
@@ -14,6 +16,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { startDm } from '@/lib/chat';
 import { useAuth } from '@/lib/auth-context';
+import { blockUser, fetchBlockStatus, unblockUser, type BlockStatus } from '@/lib/blocks';
 import { acceptFriendRequest, fetchFriendCount, fetchFriendshipStatus, removeFriendship, sendFriendRequest, type FriendshipStatus } from '@/lib/friends';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { signProfileMediaUrls } from '@/lib/profileMedia';
@@ -43,47 +46,52 @@ export default function ProfileScreen() {
   const [friendshipStatus, setFriendshipStatus] = useState<FriendshipStatus>('none');
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [friendActionBusy, setFriendActionBusy] = useState(false);
+  const [blockStatus, setBlockStatus] = useState<BlockStatus>('none');
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
 
   const myId = session?.user.id;
   const isOwnProfile = userId === myId;
 
-  useFocusEffect(
-    useCallback(() => {
-      setProfile('loading');
-      setAvatarUrl(null);
-      setBannerUrl(null);
-      setRooms(null);
-      setPosts(null);
-      // .catch() rather than try/catch: the React Compiler can't compile the
-      // conditionals below inside a `try`, and skips the whole screen.
-      const loadProfile = async () => {
-        const [p, roomList, postList] = await Promise.all([
-          fetchProfile(userId),
-          fetchMyRooms(userId),
-          fetchRecentPostsByAuthor(userId, 9),
-        ]);
-        setProfile(p);
-        setRooms(roomList);
-        setPosts(postList);
+  // Named so an unblock can run it again: posts the block was hiding only
+  // come back on a refetch.
+  const load = useCallback(() => {
+    setProfile('loading');
+    setAvatarUrl(null);
+    setBannerUrl(null);
+    setRooms(null);
+    setPosts(null);
+    // .catch() rather than try/catch: the React Compiler can't compile the
+    // conditionals below inside a `try`, and skips the whole screen.
+    const loadProfile = async () => {
+      const [p, roomList, postList] = await Promise.all([
+        fetchProfile(userId),
+        fetchMyRooms(userId),
+        fetchRecentPostsByAuthor(userId, 9),
+      ]);
+      setProfile(p);
+      setRooms(roomList);
+      setPosts(postList);
 
-        const profileMediaPaths = [p?.avatar_url, p?.banner_url].filter((path): path is string => !!path);
-        if (profileMediaPaths.length > 0) {
-          const signed = await signProfileMediaUrls(profileMediaPaths);
-          setAvatarUrl(p?.avatar_url ? (signed.get(p.avatar_url) ?? null) : null);
-          setBannerUrl(p?.banner_url ? (signed.get(p.banner_url) ?? null) : null);
-        }
+      const profileMediaPaths = [p?.avatar_url, p?.banner_url].filter((path): path is string => !!path);
+      if (profileMediaPaths.length > 0) {
+        const signed = await signProfileMediaUrls(profileMediaPaths);
+        setAvatarUrl(p?.avatar_url ? (signed.get(p.avatar_url) ?? null) : null);
+        setBannerUrl(p?.banner_url ? (signed.get(p.banner_url) ?? null) : null);
+      }
 
-        const roomPaths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((path): path is string => !!path);
-        if (roomPaths.length > 0) signRoomMediaUrls(roomPaths).then(setRoomMediaUrls).catch(() => {});
+      const roomPaths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((path): path is string => !!path);
+      if (roomPaths.length > 0) signRoomMediaUrls(roomPaths).then(setRoomMediaUrls).catch(() => {});
 
-        const postPaths = postList.map((post) => post.mediaPath).filter((path): path is string => !!path);
-        if (postPaths.length > 0) signMediaUrls(postPaths).then(setPostMediaUrls).catch(() => {});
-      };
-      loadProfile().catch((e) => {
-        setError(e instanceof Error ? e.message : 'Failed to load this profile.');
-      });
-    }, [userId]),
-  );
+      const postPaths = postList.map((post) => post.mediaPath).filter((path): path is string => !!path);
+      if (postPaths.length > 0) signMediaUrls(postPaths).then(setPostMediaUrls).catch(() => {});
+    };
+    loadProfile().catch((e) => {
+      setError(e instanceof Error ? e.message : 'Failed to load this profile.');
+    });
+  }, [userId]);
+
+  useFocusEffect(load);
 
   useFocusEffect(
     useCallback(() => {
@@ -91,6 +99,7 @@ export default function ProfileScreen() {
       fetchFriendCount(userId).then(setFriendCount).catch(() => {});
       if (myId && userId !== myId) {
         fetchFriendshipStatus(myId, userId).then(setFriendshipStatus).catch(() => {});
+        fetchBlockStatus(userId).then(setBlockStatus).catch(() => {});
       }
     }, [userId, myId]),
   );
@@ -153,6 +162,33 @@ export default function ProfileScreen() {
     setFriendActionBusy(false);
   }
 
+  // The server does the rest (friendship ended, content hidden both ways);
+  // this screen only has to switch to its blocked state.
+  async function handleBlock() {
+    if (!userId) return;
+    setError(null);
+    try {
+      await blockUser(userId);
+      setBlockStatus('blocking');
+      setFriendshipStatus('none');
+      fetchFriendCount(userId).then(setFriendCount).catch(() => {});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not block this account.');
+    }
+  }
+
+  async function handleUnblock() {
+    if (!userId || !myId) return;
+    setError(null);
+    try {
+      await unblockUser(myId, userId);
+      setBlockStatus('none');
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not unblock this account.');
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.flex}>
@@ -199,6 +235,17 @@ export default function ProfileScreen() {
                   <Icon name="menu" size={20} color="#ffffff" />
                 </Pressable>
               )}
+              {!isOwnProfile && profile && (
+                <Pressable
+                  style={styles.settingsButton}
+                  hitSlop={8}
+                  onPress={() => setOptionsOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="More options"
+                >
+                  <Icon name="dotsH" size={20} color="#ffffff" />
+                </Pressable>
+              )}
             </View>
 
             <View style={styles.avatarRing}>
@@ -209,9 +256,9 @@ export default function ProfileScreen() {
               <View style={styles.identity}>
                 <Text style={styles.name}>{profile?.name ?? 'Unknown'}</Text>
                 {profile && <Text style={styles.handle}>@{profile.handle}</Text>}
-                {!isOwnProfile && profile?.last_active_at && <Text style={styles.activeStatus}>{formatLastActive(profile.last_active_at)}</Text>}
-                {profile?.bio && <Text style={styles.bio}>{profile.bio}</Text>}
-                {profile && friendCount !== null && (
+                {!isOwnProfile && blockStatus === 'none' && profile?.last_active_at && <Text style={styles.activeStatus}>{formatLastActive(profile.last_active_at)}</Text>}
+                {blockStatus === 'none' && profile?.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+                {blockStatus === 'none' && profile && friendCount !== null && (
                   <Pressable onPress={() => router.push({ pathname: '/u/[userId]/friends', params: { userId } })} hitSlop={6}>
                     <Text style={styles.friendCount}>
                       {friendCount} friend{friendCount === 1 ? '' : 's'}
@@ -222,7 +269,7 @@ export default function ProfileScreen() {
 
               {error && <Text style={styles.error}>{error}</Text>}
 
-              {!isOwnProfile && profile && (
+              {!isOwnProfile && profile && blockStatus === 'none' && (
                 <View style={styles.actionsRow}>
                   {friendshipStatus === 'friends' && (
                     <Pressable style={styles.messageButton} onPress={handleMessage} disabled={messaging}>
@@ -262,6 +309,17 @@ export default function ProfileScreen() {
                 </View>
               )}
 
+              {!isOwnProfile && blockStatus === 'blocking' ? (
+                <View style={styles.blockedNotice}>
+                  <Text style={styles.blockedNoticeText}>You blocked @{profile?.handle}. You can’t see each other’s posts or message each other.</Text>
+                  <Pressable style={styles.unblockButton} onPress={handleUnblock} accessibilityRole="button">
+                    <Text style={styles.unblockButtonText}>Unblock</Text>
+                  </Pressable>
+                </View>
+              ) : !isOwnProfile && blockStatus === 'blocked_by' ? (
+                <EmptyState icon="noEntry" message="This account isn't available." />
+              ) : (
+              <>
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>Rooms</Text>
                 {rooms === null ? (
@@ -376,6 +434,8 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </View>
+              </>
+              )}
             </View>
           </>
         )}
@@ -383,6 +443,42 @@ export default function ProfileScreen() {
       </View>
 
       <TabBar active="You" userId={session.user.id} />
+
+      <OptionsSheet
+        visible={optionsOpen}
+        onClose={() => setOptionsOpen(false)}
+        options={[
+          blockStatus === 'blocking'
+            ? {
+                key: 'unblock',
+                label: `Unblock @${profile !== 'loading' ? (profile?.handle ?? '') : ''}`,
+                icon: 'noEntry',
+                onPress: () => {
+                  setOptionsOpen(false);
+                  handleUnblock();
+                },
+              }
+            : {
+                key: 'block',
+                label: `Block @${profile !== 'loading' ? (profile?.handle ?? '') : ''}`,
+                icon: 'noEntry',
+                destructive: true,
+                onPress: () => {
+                  setOptionsOpen(false);
+                  setConfirmingBlock(true);
+                },
+              },
+        ]}
+      />
+      <BlockConfirmModal
+        visible={confirmingBlock}
+        handle={profile !== 'loading' ? (profile?.handle ?? '') : ''}
+        onCancel={() => setConfirmingBlock(false)}
+        onConfirm={() => {
+          setConfirmingBlock(false);
+          handleBlock();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -391,6 +487,33 @@ const AVATAR_SIZE = 104;
 const BANNER_HEIGHT = 170;
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
+  blockedNotice: {
+    marginTop: Spacing[6],
+    gap: Spacing[4],
+    alignItems: 'flex-start',
+  },
+  blockedNoticeText: {
+    fontFamily: Fonts.body,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.neutral[400],
+  },
+  // Its own style rather than the friend row's pendingButton, which is
+  // sized by `flex: 1` inside actionsRow and collapses anywhere else.
+  unblockButton: {
+    height: 40,
+    paddingHorizontal: Spacing[6],
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unblockButtonText: {
+    fontFamily: Fonts.bodySemibold,
+    fontSize: 15,
+    color: colors.text,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.bg,

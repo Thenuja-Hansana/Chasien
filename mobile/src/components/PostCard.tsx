@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
 import Avatar from '@/components/Avatar';
+import BlockConfirmModal from '@/components/BlockConfirmModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import EventCard from '@/components/EventCard';
 import Icon from '@/components/Icon';
@@ -42,6 +43,7 @@ export default function PostCard({
   onDelete,
   onRemoveTag,
   onTogglePin,
+  onBlockAuthor,
 }: {
   post: FeedPost;
   viewerId: string;
@@ -58,6 +60,8 @@ export default function PostCard({
   onDelete: () => void;
   onRemoveTag: () => void;
   onTogglePin: () => void;
+  /** Someone else's post only — the menu doesn't offer it on your own, or when the author deleted their account. */
+  onBlockAuthor: () => void;
 }) {
   const isModerator = post.authorRole === 'owner' || post.authorRole === 'mod';
   const canDelete = post.authorId === viewerId || viewerIsRoomOwner;
@@ -68,6 +72,8 @@ export default function PostCard({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const canBlockAuthor = post.authorId !== null && post.authorId !== viewerId;
 
   // A quick pop on the heart itself when a like lands, on top of the
   // existing haptic — set directly on press rather than watched via an
@@ -211,6 +217,11 @@ export default function PostCard({
         canRemoveTag={viewerIsTagged}
         canPin={viewerCanModerate}
         pinned={post.pinned}
+        blockHandle={canBlockAuthor ? post.authorHandle : undefined}
+        onBlock={() => {
+          setMenuOpen(false);
+          setConfirmingBlock(true);
+        }}
         onTogglePin={() => {
           setMenuOpen(false);
           onTogglePin();
@@ -238,6 +249,15 @@ export default function PostCard({
         onConfirm={() => {
           setConfirmingDelete(false);
           onDelete();
+        }}
+      />
+      <BlockConfirmModal
+        visible={confirmingBlock}
+        handle={post.authorHandle}
+        onCancel={() => setConfirmingBlock(false)}
+        onConfirm={() => {
+          setConfirmingBlock(false);
+          onBlockAuthor();
         }}
       />
     </View>

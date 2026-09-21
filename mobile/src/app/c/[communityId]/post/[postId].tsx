@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import BlockConfirmModal from '@/components/BlockConfirmModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
@@ -26,6 +27,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { blockUser } from '@/lib/blocks';
 import { togglePostPin } from '@/lib/notifications';
 import { useUserPreview } from '@/lib/user-preview-context';
 import {
@@ -67,6 +69,7 @@ export default function PostDetail() {
   const [pinning, setPinning] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
 
   const userId = session?.user.id;
 
@@ -159,6 +162,18 @@ export default function PostDetail() {
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete that post.');
+    }
+  }
+
+  // Same reasoning: once the author is blocked the server stops returning
+  // this post to the viewer at all.
+  async function handleBlockAuthor() {
+    if (post === 'loading' || !post?.authorId) return;
+    try {
+      await blockUser(post.authorId);
+      router.back();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not block that person.');
     }
   }
 
@@ -404,6 +419,11 @@ export default function PostDetail() {
         visible={menuOpen}
         canDelete={post.authorId === userId || isRoomOwner}
         canRemoveTag={post.tags.some((t) => t.userId === userId)}
+        blockHandle={post.authorId && post.authorId !== userId ? post.authorHandle : undefined}
+        onBlock={() => {
+          setMenuOpen(false);
+          setConfirmingBlock(true);
+        }}
         onRemoveTag={() => {
           setMenuOpen(false);
           handleRemoveTag();
@@ -427,6 +447,15 @@ export default function PostDetail() {
         onConfirm={() => {
           setConfirmingDelete(false);
           handleDelete();
+        }}
+      />
+      <BlockConfirmModal
+        visible={confirmingBlock}
+        handle={post.authorHandle}
+        onCancel={() => setConfirmingBlock(false)}
+        onConfirm={() => {
+          setConfirmingBlock(false);
+          handleBlockAuthor();
         }}
       />
     </SafeAreaView>

@@ -17,6 +17,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { blockUser } from '@/lib/blocks';
 import { fetchRoomUnreadCounts, markAllNotificationsRead, subscribeToNotifications, togglePostPin } from '@/lib/notifications';
 import { getCachedJoinedRoom } from '@/lib/room-cache';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
@@ -241,6 +242,21 @@ export default function RoomHome() {
     }
   }
 
+  // The server hides everything between the two from now on; the refetches
+  // below just catch this screen up — the author's other posts in the
+  // feed, and their story ring.
+  async function handleBlockAuthor(post: FeedPost, roomId: string) {
+    if (!post.authorId) return;
+    const authorId = post.authorId;
+    try {
+      await blockUser(authorId);
+      setPosts((prev) => prev?.filter((p) => p.authorId !== authorId) ?? prev);
+      fetchActiveStories(roomId).then(setActiveStories).catch(() => {});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not block that person.');
+    }
+  }
+
   async function handleDeletePost(post: FeedPost) {
     try {
       await deletePost(post.id);
@@ -396,6 +412,7 @@ export default function RoomHome() {
       onDelete={() => handleDeletePost(item)}
       onRemoveTag={() => handleRemoveTag(item)}
       onTogglePin={() => handleTogglePin(item)}
+      onBlockAuthor={() => handleBlockAuthor(item, room.id)}
     />
   );
 

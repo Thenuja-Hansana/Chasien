@@ -7,7 +7,8 @@ import { useTheme } from '@/hooks/use-theme';
 
 /**
  * The post overflow menu — "Hide" (any Room member, personal, doesn't
- * touch the post) and "Delete" (only the post's own author or the Room's
+ * touch the post), "Block" (someone else's post: blocks its author, see
+ * lib/blocks.ts) and "Delete" (only the post's own author or the Room's
  * owner — enforced server-side too, this just hides the row otherwise).
  * A bottom sheet, not a small anchored dropdown: there's no popup-menu
  * precedent anywhere else in this app to match, and this is what
@@ -22,11 +23,13 @@ export default function PostOptionsMenu({
   canRemoveTag = false,
   canPin = false,
   pinned = false,
+  blockHandle,
   onClose,
   onHide,
   onDelete,
   onRemoveTag,
   onTogglePin,
+  onBlock,
 }: {
   visible: boolean;
   canDelete: boolean;
@@ -35,11 +38,14 @@ export default function PostOptionsMenu({
   /** Owner/admin/mod of the Room — toggle_post_pin() checks the same thing server-side. */
   canPin?: boolean;
   pinned?: boolean;
+  /** The author's handle when the post is someone else's — shows "Block @handle". Omit for your own posts and deleted authors. */
+  blockHandle?: string;
   onClose: () => void;
   onHide: () => void;
   onDelete: () => void;
   onRemoveTag?: () => void;
   onTogglePin?: () => void;
+  onBlock?: () => void;
 }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
@@ -68,6 +74,13 @@ export default function PostOptionsMenu({
             <Pressable style={styles.row} onPress={onRemoveTag} accessibilityRole="button">
               <Icon name="youTab" size={19} color={colors.text} />
               <Text style={styles.rowText}>Remove tag</Text>
+            </Pressable>
+          )}
+
+          {blockHandle && onBlock && (
+            <Pressable style={styles.row} onPress={onBlock} accessibilityRole="button">
+              <Icon name="noEntry" size={19} color={colors.error} />
+              <Text style={[styles.rowText, styles.destructiveText]}>Block @{blockHandle}</Text>
             </Pressable>
           )}
 

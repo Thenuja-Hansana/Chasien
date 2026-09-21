@@ -36,7 +36,9 @@ type Section = { title: string; rows: Row[] };
  * rows. Accessibility (in "Your app and media" below) is real too, but
  * ordinary-sized and left inside the search filter like any other row —
  * it just happens to open a real screen (`accessibility.tsx`, Dark Mode)
- * instead of this file's usual "not wired up yet" alert.
+ * instead of this file's usual "not wired up yet" alert. Blocked (in "Who
+ * can see your content", where Instagram keeps it) is real the same way:
+ * it opens `blocked.tsx`, the list of accounts you've blocked (Phase 9).
  */
 const SECTIONS: Section[] = [
   {
@@ -54,6 +56,7 @@ const SECTIONS: Section[] = [
     rows: [
       { icon: 'lock', label: 'Account privacy', value: 'Public' },
       { icon: 'star', label: 'Close Friends', value: '0' },
+      { icon: 'noEntry', label: 'Blocked' },
     ],
   },
   {
@@ -122,6 +125,10 @@ export default function SettingsAndActivity() {
   function handleRowPress(row: Row) {
     if (row.label === 'Accessibility') {
       router.push({ pathname: '/u/[userId]/accessibility', params: { userId } });
+      return;
+    }
+    if (row.label === 'Blocked') {
+      router.push({ pathname: '/u/[userId]/blocked', params: { userId } });
       return;
     }
     Alert.alert(row.label, "This isn't wired up yet — the front end came first.");

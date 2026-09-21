@@ -7,6 +7,110 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-21 — Phase 9, slice 1: blocking, enforced by the server
+
+The first of Phase 9's six slices (block → moderation tools → reports →
+content filter → guidelines & contact → account deletion). Migration
+`20260921100000_block_enforcement.sql`, `lib/blocks.ts`, and Block/Unblock
+in the post menu, post detail, profiles, DMs, and a new Settings → Blocked
+screen.
+
+**Why it lives in RLS, not the client:** the anon key ships inside every
+build, so a block that only hid things in the UI would protect nobody. The
+blocked person could read the blocker's posts straight from the REST API.
+The blocker not seeing the blocked person is a convenience; the blocked
+person not seeing the blocker is the actual safety feature, and that side
+runs on a client the blocked person controls.
+
+**What it does:**
+- Posts, comments, stories and likes are hidden both ways, in the SELECT
+  policies themselves. Each policy keeps its old expression exactly and adds
+  one `not is_blocked_with(author)` clause, with the Room membership check
+  still first.
+- The INSERT policies on comments and post_likes check the post through a
+  subquery on `posts`. That subquery is itself subject to posts' RLS, so
+  once a post is hidden, commenting on it or liking it fails too, with no
+  extra rule. Verified, not assumed.
+- DMs are cut off both ways (no new DM, no messages or reactions in an
+  existing one), and friend requests are refused. These are triggers rather
+  than edits to the messages and reactions policies, so their
+  muted/banned/approved rules weren't touched.
+- One BEFORE INSERT trigger on `notifications` drops anything between the
+  two people. That covers every existing notification trigger at once, and
+  because push fires from that insert, it stops push too.
+- `block_user()` does it all atomically: the block, ending the friendship
+  or pending request, removing tags between them, and clearing
+  notifications they already have about each other. Direct inserts into
+  `blocks` are revoked, which also closes one of Phase 10's
+  client-written-timestamp items.
+
+**Two helpers, on purpose.** `blocked_pair(a, b)` answers about any two
+users, so if it were callable over the API anyone could probe whether two
+*other* people had blocked each other. It isn't callable. RLS uses
+`is_blocked_with(other)`, which only answers about the caller, and the
+screens use `block_status()` the same way.
+
+**Chosen with the user:** Room group-chat messages are *not* hidden by the
+server. They collapse to "Message from someone you blocked" on the
+blocker's device only, because hiding them server-side leaves gaps and
+replies pointing at messages nobody can see. Profiles also stay readable,
+since names appear everywhere a Room lists its members; the profile
+*screen* shows "This account isn't available" or "You blocked @x" instead.
+
+**Known limit:** because profiles stay readable, a blocked person can still
+fetch the blocker's name, bio and `last_active_at` from the API. The screens
+hide bio, friend count and "Active now" between blocked people. Hiding
+presence at the data level would mean column-level rules on `profiles`.
+That goes to Phase 10's security pass rather than being folded in here.
+
+**Also:** a mod who blocks a member no longer sees that member's posts in
+their own Room. Other mods still do, and Phase 9's report review works
+above the Room level, so moderation isn't blinded by one mod's block.
+
+**Verified:**
+- **47 direct-API checks**, signed in as the real accounts (Mara blocks
+  Tobi, Nadia is the bystander, `outsider_test` covers isolation). They
+  cover both directions for posts, comments, stories and likes; refusals
+  for comments, likes, DM messages, reactions, `start_dm` and friend
+  requests; search; `block_status`; that `blocked_pair` can't be called;
+  that the `blocks` table can't be written or seen by the blocked side;
+  notification suppression, with the bystander still notified; unblock
+  restoring everything; and a **re-run of the Room isolation checks**
+  (outsider reads zero posts, comments, stories and likes; members still
+  read their other Rooms normally).
+- **One check passed for the wrong reason at first.** The friend-request
+  refusal came back "permission denied for table friendships", which was
+  the column grant rejecting the `status` field the test had inserted, not
+  the block. It was re-run with only the granted columns, alongside a
+  control request between two unblocked users that has to succeed, and was
+  then refused by the block trigger itself.
+- **21 UI checks in the real app** (Expo web, headless Chromium, Mara and
+  Tobi in separate sessions): blocking from a post's menu, the group-chat
+  collapse, both sides of a blocked DM, both sides of a blocked profile,
+  the Blocked list and Unblock, and blocking and unblocking from a profile.
+  The screenshots caught what the text checks couldn't: the profile's
+  Unblock button had collapsed into a clipped oval (it borrowed a style
+  sized by `flex: 1` inside another row), and "Active now" was still
+  showing between blocked people. Both are fixed and re-checked.
+- The **A14 wasn't used for this slice**, because it's signed in to the
+  owner's own account and signing them out to test would have disturbed
+  real use. The repo's conventions accept Expo web for UI verification, and
+  the new sheet is the same component shape as `PostOptionsMenu`, which is
+  proven on Android.
+
+**A mistake worth recording:** the first API run called `block_user()` on
+two accounts with real history, and it deleted 15 genuine Mara↔Tobi
+notifications from earlier device testing. That's correct behaviour for a
+block, but it hit real data, and `seed.sql` creates no notifications, so
+they couldn't be restored. The UI run after it backed up every table a
+block touches, took the backups before starting, and restored surgically:
+only the rows the test created were removed and only backed-up rows the
+test deleted were re-inserted, because the app was in use on the phone at
+the same time. Counts ended exactly where they started. Every later slice
+does the same.
+
+---
+
 ## 2026-09-21 — The road to release: an APK Beta Phase, and Phases 9-12 re-audited
 
 **Decision:** the release goal is now **a downloadable Android APK first,

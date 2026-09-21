@@ -51,6 +51,16 @@ user load, real revenue) to spend money.
   (`tag_people_in_post()`, SECURITY DEFINER, which silently drops anyone not
   allowed so no error can reveal a block — clients may only read tags and
   remove their own).
+- **Blocks are enforced in RLS, both ways** (since 2026-09-21). The SELECT
+  policies on posts, comments, stories and post_likes include
+  `not is_blocked_with(author)`, so any new content table read by people
+  other than its author needs the same clause. DMs, DM reactions and
+  friend requests between blocked users are refused by triggers, and
+  notifications between them are dropped before insert. Two deliberate
+  exceptions: Room group-chat messages (collapsed on the blocker's device
+  only) and profiles (readable by everyone, because names appear wherever
+  Room members are shown). `blocked_pair()` isn't callable over the API, so
+  nobody can probe whether two *other* people have blocked each other.
 - **No client edits of posts, comments or messages yet.** When editing
   ships, grant UPDATE on the content column together with a trigger that
   stamps `edited_at`, so edits can't be silent.
