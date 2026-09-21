@@ -7,6 +7,103 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-21 — Phase 9, slice 2: moderation tools, one rank rule for every removal
+
+Migrations `20260921110000_moderation_enum_values.sql` and
+`20260921110100_moderation_tools.sql`, and `lib/moderation.ts`. The UI adds
+Remove on posts, comments, chat messages and stories, Delete for authors on
+their own comments and messages, Mute/Unmute in Room chats, and a
+Moderation log in Room Settings.
+
+**What was actually there before:** a Room's *owner* could remove other
+people's posts, and that was all. Admins and mods couldn't remove
+anything. And nobody, **not even authors**, could remove a comment or a
+chat message: the UPDATE policies for it exist, but the 2026-09-16 column
+lockdown granted them no columns, so they had quietly been dead since.
+Chat mute existed in the room-membership Edge Function, rank check and
+logging included, but nothing in the app could reach it.
+
+**One rule, `can_remove_content()`:** an author can always remove their
+own content; otherwise the actor must be an owner/admin/mod who
+*strictly outranks* the author in that Room. That's the rule the Edge
+Function already used for kicking and muting (`callerOutranksTarget`), so
+a mod can't remove an admin's post any more than they could kick that
+admin. `delete_post` was rewritten onto it, and `remove_comment`,
+`remove_message` and `remove_story` are new. A DM has no moderators, so
+there only the author can remove a message. `room_rank()` and
+`can_remove_content()` aren't callable over the API, because they'd be a
+way to read other people's roles.
+
+**Stories are removed by expiring them now**, not deleted. RLS already
+hides expired stories, and the hourly `cleanup-expired-stories` job
+deletes the row *and its media*. A plain DELETE, which is what the
+authors' existing policy did, would have left the file orphaned in
+storage.
+
+**A bug found on the way:** the old `delete_post` logged with
+`if auth.uid() <> v_author_id`. When the author had been deleted, that
+comparison is `null`, so the moderation log silently skipped exactly those
+removals. It's `is distinct from` now, and a test covers it.
+
+**Offering vs deciding.** Posts come with their author's role, so the menu
+only offers Remove when the viewer outranks the author, and post detail
+fetches the author's role to do the same. Comments, messages and stories
+don't carry roles, so any mod is offered Remove on someone else's, and in
+the rare outranked case the server refuses with its own message. The
+server is the authority either way.
+
+**Also:**
+- `FeedPost.authorRole` was typed `'owner' | 'mod' | 'member'`, missing
+  `'admin'` since admins were added.
+- CommentsSheet's `onCommentAdded` became `onCommentCountChange(postId,
+  delta)` so a removal can subtract.
+- Long-press on a message is still an instant ❤️ unless the viewer has
+  more to do with that message (their own, or one they moderate), in which
+  case it opens a sheet whose first row is Like.
+- A muted person's composer now says "A moderator has muted you in this
+  chat". Before, their send failed with a raw row-level-security error.
+- The story viewer pauses its auto-advance while a menu is open.
+
+**Verified:**
+- **41 direct-API checks** on a full role ladder in Grit Club (owner,
+  admin, mod, member, plus an outsider). Every refusal's *reason* was
+  printed and checked, not just the fact it failed. After Slice 1, a
+  refusal for the wrong reason is exactly what a bare pass/fail hides.
+  That's how a misleading message turned up: a DM refusal said "members
+  below your role", but DMs have no roles. It now says you can only remove
+  your own messages in a DM.
+- **28 UI checks** in the app (Expo web, a mod's session and a member's
+  session). They cover removing a post, and a mod *not* being offered
+  Remove on the owner's post; removing a comment; removing a message;
+  muting and unmuting, with the member's composer switching; removing a
+  story; and the Moderation log reading back every action.
+- The React Compiler check caught two skips introduced along the way, a
+  hoisted `goHome()` reference and a `??` inside a `try`, both in
+  story.tsx, and both fixed before commit.
+
+**Push was paused for every test run.** Mara still holds three Android
+push tokens from earlier device testing, so test inserts could have
+pushed to the owner's phone. The triggers were switched back on after
+every run and confirmed enabled.
+
+**Cleanup:** roles and mute flags were restored and confirmed identical.
+One more piece of residue turned up, from *yesterday's* verification: a
+`role_change` log row from making Tobi a mod through the app, whose role
+was then reverted directly in SQL. That row was removed. Older log rows,
+from before this work, were left alone. Those same older rows showed "a
+deleted user's post" because the old `delete_post` never recorded
+`target_user_id`, so the log now says "a post" when it has no name.
+
+**Known limit:** a removed chat message disappears for the remover, the
+author and mods straight away, but other people already viewing that chat
+keep seeing it until they reopen it. Realtime respects RLS, so once the
+message is removed they don't receive its update at all. A broadcast on
+the chat's channel (the one typing indicators use) would fix this; it's
+left for a later pass. A mute has the same lag for the muted person's own
+open chat.
+
+---
+
 ## 2026-09-21 — Phase 9, slice 1: blocking, enforced by the server
 
 The first of Phase 9's six slices (block → moderation tools → reports →

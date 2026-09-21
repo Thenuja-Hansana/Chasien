@@ -52,6 +52,7 @@ export default function MessageBubble({
   showRead,
   onReact,
   onPress,
+  onLongPress,
 }: {
   message: Message;
   mine: boolean;
@@ -61,6 +62,12 @@ export default function MessageBubble({
   showRead: boolean;
   onReact: (emoji: string) => void;
   onPress: () => void;
+  /**
+   * When set, long-press opens the caller's options (Like, Delete, Remove,
+   * Mute) instead of reacting ❤️ straight away — only for messages the
+   * viewer can do more with (their own, or one they moderate).
+   */
+  onLongPress?: () => void;
 }) {
   const reactionCounts = new Map<string, number>();
   for (const r of message.reactions) reactionCounts.set(r.emoji, (reactionCounts.get(r.emoji) ?? 0) + 1);
@@ -75,7 +82,7 @@ export default function MessageBubble({
             plain tap even though it has nothing to do with it, which is
             exactly what silently broke reply-to here before: the outer
             screen's onPress never got the touch. */}
-        <Pressable onPress={onPress} onLongPress={() => onReact('❤️')}>
+        <Pressable onPress={onPress} onLongPress={onLongPress ?? (() => onReact('❤️'))}>
           {imageUrl ? (
             <Image source={cachedImageSource(imageUrl)} style={styles.mineImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />
           ) : voiceUrl ? (
@@ -109,7 +116,7 @@ export default function MessageBubble({
     <View style={styles.theirsWrap}>
       <Avatar gradient={message.author_id ?? 'mara'} letter={(message.author?.name ?? '?').charAt(0)} size={28} />
       <View style={styles.theirsContent}>
-        <Pressable onPress={onPress} onLongPress={() => onReact('❤️')}>
+        <Pressable onPress={onPress} onLongPress={onLongPress ?? (() => onReact('❤️'))}>
           {imageUrl ? (
             <View style={styles.theirsImageWrap}>
               <Image source={cachedImageSource(imageUrl)} style={styles.theirsImage} contentFit="cover" cachePolicy="memory-disk" transition={150} />

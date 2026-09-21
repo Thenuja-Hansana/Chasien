@@ -278,8 +278,8 @@ export default function RoomHome() {
     }
   }
 
-  function handleCommentAdded(postId: string) {
-    setPosts((prev) => prev?.map((p) => (p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p)) ?? prev);
+  function handleCommentCountChange(postId: string, delta: number) {
+    setPosts((prev) => prev?.map((p) => (p.id === postId ? { ...p, commentCount: Math.max(0, p.commentCount + delta) } : p)) ?? prev);
   }
 
   async function handleRemoveTag(post: FeedPost) {
@@ -391,6 +391,7 @@ export default function RoomHome() {
   }
 
   const canPost = room.members_can_post || membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod';
+  const canModerate = membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod';
 
   // Its own variable, not inline in the FlatList: the React Compiler
   // memoizes an inline renderItem together with the whole list element,
@@ -401,8 +402,8 @@ export default function RoomHome() {
     <PostCard
       post={item}
       viewerId={session.user.id}
-      viewerIsRoomOwner={membership.role === 'owner'}
-      viewerCanModerate={membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'}
+      viewerRole={membership.role}
+      viewerCanModerate={canModerate}
       onOpenComments={() => commentsSheetRef.current?.open(item.id)}
       onOpenLikes={() => likesSheetRef.current?.open(item.id)}
       onOpenClip={() => router.push({ pathname: '/c/[communityId]/clips', params: { communityId, postId: item.id } })}
@@ -554,7 +555,12 @@ export default function RoomHome() {
 
       <TabBar active="Home" communityId={communityId} userId={session.user.id} />
 
-      <CommentsSheet ref={commentsSheetRef} viewerId={session.user.id} onCommentAdded={handleCommentAdded} />
+      <CommentsSheet
+        ref={commentsSheetRef}
+        viewerId={session.user.id}
+        viewerCanModerate={canModerate}
+        onCommentCountChange={handleCommentCountChange}
+      />
       <LikesSheet ref={likesSheetRef} viewerId={session.user.id} />
       {canPost && <PostFab communityId={communityId} />}
     </SafeAreaView>

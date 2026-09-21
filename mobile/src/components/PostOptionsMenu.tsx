@@ -8,8 +8,9 @@ import { useTheme } from '@/hooks/use-theme';
 /**
  * The post overflow menu — "Hide" (any Room member, personal, doesn't
  * touch the post), "Block" (someone else's post: blocks its author, see
- * lib/blocks.ts) and "Delete" (only the post's own author or the Room's
- * owner — enforced server-side too, this just hides the row otherwise).
+ * lib/blocks.ts) and "Delete"/"Remove" (the post's own author, or an
+ * owner/admin/mod who outranks them — enforced server-side by delete_post,
+ * this just hides the row otherwise).
  * A bottom sheet, not a small anchored dropdown: there's no popup-menu
  * precedent anywhere else in this app to match, and this is what
  * Instagram/Facebook/WhatsApp's own per-post menus actually look like on
@@ -24,6 +25,7 @@ export default function PostOptionsMenu({
   canPin = false,
   pinned = false,
   blockHandle,
+  deleteLabel = 'Delete post',
   onClose,
   onHide,
   onDelete,
@@ -40,6 +42,8 @@ export default function PostOptionsMenu({
   pinned?: boolean;
   /** The author's handle when the post is someone else's — shows "Block @handle". Omit for your own posts and deleted authors. */
   blockHandle?: string;
+  /** "Remove post" when a moderator is removing someone else's post. */
+  deleteLabel?: string;
   onClose: () => void;
   onHide: () => void;
   onDelete: () => void;
@@ -87,7 +91,7 @@ export default function PostOptionsMenu({
           {canDelete && (
             <Pressable style={styles.row} onPress={onDelete} accessibilityRole="button">
               <Icon name="trash" size={19} color={colors.error} />
-              <Text style={[styles.rowText, styles.destructiveText]}>Delete post</Text>
+              <Text style={[styles.rowText, styles.destructiveText]}>{deleteLabel}</Text>
             </Pressable>
           )}
 

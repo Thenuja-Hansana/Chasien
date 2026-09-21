@@ -1,5 +1,6 @@
 import { signMediaUrls } from '@/lib/media';
 import { mediaKindFromPath, type FeedShape, type MediaFraming } from '@/lib/mediaUtils';
+import type { RoomRole } from '@/lib/rooms';
 import { supabase } from '@/lib/supabase';
 
 export type PollOption = {
@@ -49,7 +50,7 @@ export type FeedPost = {
   authorHandle: string;
   authorName: string;
   /** owner/mod in this Room — drives the MOD badge the mock shows. */
-  authorRole: 'owner' | 'mod' | 'member' | null;
+  authorRole: RoomRole | null;
   text: string | null;
   tag: string | null;
   /** Free-text place name, 1–100 chars or null — see supabase/migrations/20260916160000_post_location.sql. */
@@ -155,7 +156,7 @@ type RawPost = {
  * embed like `post_likes!inner(user_id)` filtered to auth.uid() would
  * drop every post that has no likes at all, which is most of them.
  */
-async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<string, 'owner' | 'mod' | 'member'>) {
+async function hydratePosts(raw: RawPost[], userId: string, roleByUser?: Map<string, RoomRole>) {
   const postIds = raw.map((p) => p.id);
   const pollIds = raw.flatMap((p) => (p.polls ? [p.polls.id] : []));
   const mediaPaths = raw.flatMap((p) => p.post_media.map((m) => m.url));
@@ -348,8 +349,8 @@ async function fetchPostsPage(roomId: string, userId: string, cursor: FeedCursor
 
   if (postsRes.error) throw postsRes.error;
 
-  const roleByUser = new Map<string, 'owner' | 'mod' | 'member'>(
-    (membersRes.data ?? []).map((m) => [m.user_id as string, m.role as 'owner' | 'mod' | 'member']),
+  const roleByUser = new Map<string, RoomRole>(
+    (membersRes.data ?? []).map((m) => [m.user_id as string, m.role as RoomRole]),
   );
 
   const rows = (postsRes.data ?? []) as unknown as RawPost[];

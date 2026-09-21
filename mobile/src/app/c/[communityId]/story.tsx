@@ -7,11 +7,15 @@ import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
+import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
+import OptionsSheet from '@/components/OptionsSheet';
 import { Fonts, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth-context';
 import { cachedImageSource } from '@/lib/mediaUtils';
-import { fetchRoomBySlug } from '@/lib/rooms';
+import { removeStory } from '@/lib/moderation';
+import { fetchMyMembership, fetchRoomBySlug } from '@/lib/rooms';
 import { relativeTime } from '@/lib/posts';
 import { fetchActiveStories, signStoryUrls, type Story } from '@/lib/stories';
 
@@ -63,6 +67,13 @@ export default function StoryViewer() {
   const [authorIndex, setAuthorIndex] = useState(0);
   const [storyIndex, setStoryIndex] = useState(0);
   const [roomName, setRoomName] = useState('');
+  const { session } = useAuth();
+  const userId = session?.user.id;
+  // Owner/admin/mod of this Room: offered "Remove story" on other
+  // people's stories (remove_story() checks they outrank the author).
+  const [canModerate, setCanModerate] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Created once in state rather than a ref, as Skeleton.tsx's is: the
   // progress bar reads this during render for its scaleX, and reading
@@ -77,6 +88,11 @@ export default function StoryViewer() {
       const room = await fetchRoomBySlug(communityId);
       if (!room) return;
       setRoomName(room.name);
+      if (userId) {
+        fetchMyMembership(room.id, userId)
+          .then((m) => setCanModerate(m?.join_state === 'approved' && m.role !== 'member'))
+          .catch(() => {});
+      }
       const active = await fetchActiveStories(room.id);
       setStories(active);
       if (active.length > 0) {
@@ -92,7 +108,7 @@ export default function StoryViewer() {
     await loadStories().catch((e) => {
       setError(e instanceof Error ? e.message : 'Failed to load stories.');
     });
-  }, [communityId, authorId]);
+  }, [communityId, authorId, userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -102,6 +118,24 @@ export default function StoryViewer() {
 
   function goHome() {
     router.back();
+  }
+
+  // After goHome(), which it calls: a function declaration referenced before
+  // it's defined is a hoisted reference the React Compiler won't rewrite.
+  async function handleRemoveStory(storyId: string) {
+    setError(null);
+    // Outside the try: the React Compiler can't compile `??` inside one.
+    const remaining = (stories ?? []).filter((s) => s.id !== storyId);
+    try {
+      await removeStory(storyId);
+      if (remaining.length === 0) {
+        goHome();
+        return;
+      }
+      setStories(remaining);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove that story.');
+    }
   }
 
   const groups = useMemo(() => (stories ? groupByAuthor(stories) : []), [stories]);
@@ -132,6 +166,7 @@ export default function StoryViewer() {
 
   const currentStoryId = groups[authorIndex]?.[1][storyIndex]?.id;
   const currentStoryKind = groups[authorIndex]?.[1][storyIndex]?.kind;
+  const menuOpen = optionsOpen || confirmingRemove;
 
   // The latest `next`, so the auto-advance effect below doesn't depend on
   // it. `next` takes a new identity every time the story index moves, so
@@ -154,6 +189,9 @@ export default function StoryViewer() {
     progressAnim.setValue(0);
     if (!currentStoryId) return;
     if (currentStoryKind !== 'image') return;
+    // Paused (and restarted from zero afterwards) while the options sheet
+    // or its confirmation is open, so the story can't advance underneath.
+    if (menuOpen) return;
 
     const animation = Animated.timing(progressAnim, {
       toValue: 1,
@@ -170,7 +208,7 @@ export default function StoryViewer() {
     // on, and they change exactly when it does — whether from a manual tap
     // or an auto-advance. Reading `next` through a ref keeps the list
     // honest rather than suppressed.
-  }, [currentStoryId, currentStoryKind, progressAnim]);
+  }, [currentStoryId, currentStoryKind, progressAnim, menuOpen]);
 
   if (stories === null) {
     return (
@@ -237,6 +275,11 @@ export default function StoryViewer() {
               {roomName} · {relativeTime(story.created_at)}
             </Text>
           </View>
+          {(story.author_id === userId || canModerate) && (
+            <Pressable onPress={() => setOptionsOpen(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Story options">
+              <Icon name="dotsH" size={21} color="rgba(242,230,212,.9)" />
+            </Pressable>
+          )}
           <Pressable onPress={goHome} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
             <Icon name="close" size={21} color="rgba(242,230,212,.9)" />
           </Pressable>
@@ -247,12 +290,45 @@ export default function StoryViewer() {
 
         <View style={styles.spacer} />
 
+        {error && <Text style={styles.errorText}>{error}</Text>}
+
         {story.caption && (
           <View style={styles.captionWrap}>
             <Text style={styles.caption}>{story.caption}</Text>
           </View>
         )}
       </SafeAreaView>
+      <OptionsSheet
+        visible={optionsOpen}
+        onClose={() => setOptionsOpen(false)}
+        options={[
+          {
+            key: 'remove',
+            label: story.author_id === userId ? 'Delete story' : 'Remove story',
+            icon: 'trash',
+            destructive: true,
+            onPress: () => {
+              setOptionsOpen(false);
+              setConfirmingRemove(true);
+            },
+          },
+        ]}
+      />
+      <ConfirmModal
+        visible={confirmingRemove}
+        title={story.author_id === userId ? 'Delete this story?' : 'Remove this story?'}
+        body={
+          story.author_id === userId
+            ? "It'll disappear for everyone now instead of in 24 hours."
+            : "It'll disappear for everyone now and be recorded in the Room's moderation log."
+        }
+        confirmLabel={story.author_id === userId ? 'Delete' : 'Remove'}
+        onCancel={() => setConfirmingRemove(false)}
+        onConfirm={() => {
+          setConfirmingRemove(false);
+          handleRemoveStory(story.id);
+        }}
+      />
     </View>
   );
 }
@@ -383,6 +459,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     // to — without this, the fill would appear to grow from the middle
     // outward instead of filling left-to-right like a loading bar.
     transformOrigin: 'left',
+  },
+  errorText: {
+    marginHorizontal: Spacing[4],
+    marginBottom: Spacing[3],
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    color: '#ffffff',
+    textShadowColor: 'rgba(0,0,0,.6)',
+    textShadowRadius: 4,
   },
   headerRow: {
     flexDirection: 'row',

@@ -28,6 +28,7 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { blockUser } from '@/lib/blocks';
+import { outranks, removeComment } from '@/lib/moderation';
 import { togglePostPin } from '@/lib/notifications';
 import { useUserPreview } from '@/lib/user-preview-context';
 import {
@@ -44,7 +45,7 @@ import {
   type Comment,
   type FeedPost,
 } from '@/lib/posts';
-import { fetchMyMembership } from '@/lib/rooms';
+import { fetchMyMembership, type RoomRole } from '@/lib/rooms';
 
 /** Smaller than the feed card's own cap — this is a dedicated post screen, not a scrolling list, so the goal is just keeping the author row/actions/comments visibly within reach below it rather than the photo alone filling the screen. */
 const MAX_HERO_HEIGHT_FRACTION = 0.5;
@@ -65,11 +66,16 @@ export default function PostDetail() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isModerator, setIsModerator] = useState(false);
-  const [isRoomOwner, setIsRoomOwner] = useState(false);
+  // The viewer's and the author's roles, for whether the viewer may remove
+  // this post (lib/moderation.ts's outranks()). The feed gets authors'
+  // roles from its member list; this screen asks for the one it needs.
+  const [viewerRole, setViewerRole] = useState<RoomRole | null>(null);
+  const [authorRole, setAuthorRole] = useState<RoomRole | null>(null);
   const [pinning, setPinning] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const [removingComment, setRemovingComment] = useState<Comment | null>(null);
 
   const userId = session?.user.id;
 
@@ -82,10 +88,14 @@ export default function PostDetail() {
       setPost(fresh);
       setComments(freshComments);
       if (fresh) {
-        const membership = await fetchMyMembership(fresh.roomId, userId);
+        const [membership, authorMembership] = await Promise.all([
+          fetchMyMembership(fresh.roomId, userId),
+          fresh.authorId ? fetchMyMembership(fresh.roomId, fresh.authorId) : Promise.resolve(null),
+        ]);
         const approved = membership?.join_state === 'approved';
         setIsModerator(approved && (membership.role === 'owner' || membership.role === 'admin' || membership.role === 'mod'));
-        setIsRoomOwner(approved && membership.role === 'owner');
+        setViewerRole(approved ? membership.role : null);
+        setAuthorRole(authorMembership?.join_state === 'approved' ? authorMembership.role : null);
       }
     };
     await loadPost().catch((e) => {
@@ -174,6 +184,21 @@ export default function PostDetail() {
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not block that person.');
+    }
+  }
+
+  // Your own comment, or — for a mod — someone else's. The server refuses a
+  // mod whose role doesn't outrank the author, with its own message.
+  async function handleRemoveComment(comment: Comment) {
+    if (!userId || post === 'loading' || !post) return;
+    setError(null);
+    try {
+      await removeComment(comment.id);
+      const [fresh, freshComments] = await Promise.all([fetchPost(post.id, userId), fetchComments(post.id)]);
+      if (fresh) setPost(fresh);
+      setComments(freshComments);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove that comment.');
     }
   }
 
@@ -364,10 +389,20 @@ export default function PostDetail() {
               <View style={styles.comments}>
                 {topLevel.map((comment) => (
                   <View key={comment.id} style={styles.commentGroup}>
-                    <CommentRow comment={comment} onReply={() => setReplyTo(comment)} />
+                    <CommentRow
+                      comment={comment}
+                      onReply={() => setReplyTo(comment)}
+                      removeLabel={comment.authorId === userId ? 'Delete' : isModerator ? 'Remove' : undefined}
+                      onRemove={() => setRemovingComment(comment)}
+                    />
                     {(repliesByParent.get(comment.id) ?? []).map((reply) => (
                       <View key={reply.id} style={styles.replyIndent}>
-                        <CommentRow comment={reply} isReply />
+                        <CommentRow
+                          comment={reply}
+                          isReply
+                          removeLabel={reply.authorId === userId ? 'Delete' : isModerator ? 'Remove' : undefined}
+                          onRemove={() => setRemovingComment(reply)}
+                        />
                       </View>
                     ))}
                   </View>
@@ -417,7 +452,8 @@ export default function PostDetail() {
 
       <PostOptionsMenu
         visible={menuOpen}
-        canDelete={post.authorId === userId || isRoomOwner}
+        canDelete={post.authorId === userId || outranks(viewerRole, authorRole)}
+        deleteLabel={post.authorId === userId ? 'Delete post' : 'Remove post'}
         canRemoveTag={post.tags.some((t) => t.userId === userId)}
         blockHandle={post.authorId && post.authorId !== userId ? post.authorHandle : undefined}
         onBlock={() => {
@@ -440,13 +476,33 @@ export default function PostDetail() {
       />
       <ConfirmModal
         visible={confirmingDelete}
-        title="Delete this post?"
-        body="Everyone in this Room will lose access to it. This can't be undone."
-        confirmLabel="Delete"
+        title={post.authorId === userId ? 'Delete this post?' : 'Remove this post?'}
+        body={
+          post.authorId === userId
+            ? "Everyone in this Room will lose access to it. This can't be undone."
+            : "It'll be removed for everyone in this Room and recorded in the Room's moderation log."
+        }
+        confirmLabel={post.authorId === userId ? 'Delete' : 'Remove'}
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={() => {
           setConfirmingDelete(false);
           handleDelete();
+        }}
+      />
+      <ConfirmModal
+        visible={removingComment !== null}
+        title={removingComment?.authorId === userId ? 'Delete this comment?' : 'Remove this comment?'}
+        body={
+          removingComment?.authorId === userId
+            ? "It'll be removed for everyone. This can't be undone."
+            : "It'll be removed for everyone and recorded in the Room's moderation log."
+        }
+        confirmLabel={removingComment?.authorId === userId ? 'Delete' : 'Remove'}
+        onCancel={() => setRemovingComment(null)}
+        onConfirm={() => {
+          const target = removingComment;
+          setRemovingComment(null);
+          if (target) handleRemoveComment(target);
         }}
       />
       <BlockConfirmModal
@@ -466,10 +522,15 @@ function CommentRow({
   comment,
   isReply = false,
   onReply,
+  removeLabel,
+  onRemove,
 }: {
   comment: Comment;
   isReply?: boolean;
   onReply?: () => void;
+  /** "Delete" on your own comment, "Remove" for a mod; omitted when neither applies. */
+  removeLabel?: 'Delete' | 'Remove';
+  onRemove?: () => void;
 }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -505,6 +566,11 @@ function CommentRow({
           {onReply && (
             <Pressable onPress={onReply} hitSlop={6}>
               <Text style={styles.replyAction}>Reply</Text>
+            </Pressable>
+          )}
+          {removeLabel && onRemove && (
+            <Pressable onPress={onRemove} hitSlop={6} accessibilityRole="button" accessibilityLabel={`${removeLabel} comment`}>
+              <Text style={styles.replyAction}>{removeLabel}</Text>
             </Pressable>
           )}
         </View>

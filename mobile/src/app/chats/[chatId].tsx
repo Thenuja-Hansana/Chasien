@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import BlockConfirmModal from '@/components/BlockConfirmModal';
+import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
 import MessageBubble from '@/components/MessageBubble';
 import OptionsSheet from '@/components/OptionsSheet';
@@ -30,6 +31,8 @@ import {
   type Message,
 } from '@/lib/chat';
 import { pickImage } from '@/lib/media';
+import { fetchMutedInChat, removeMessage, setMutedInChat } from '@/lib/moderation';
+import { fetchMyMembership, type RoomRole } from '@/lib/rooms';
 import { signMessageMediaUrls, uploadMessageImage, uploadMessageVoice } from '@/lib/messageMedia';
 
 const TYPING_CLEAR_MS = 3000;
@@ -66,6 +69,13 @@ export default function ChatView() {
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
+  // Room chats only: the viewer's role in the Room (owner/admin/mod can
+  // remove messages and mute people here) and who's muted in this chat.
+  const [chatRole, setChatRole] = useState<RoomRole | null>(null);
+  const [mutedIds, setMutedIds] = useState<Set<string>>(new Set());
+  /** The message whose long-press options are open. */
+  const [actionsFor, setActionsFor] = useState<Message | null>(null);
+  const [removingMessage, setRemovingMessage] = useState<Message | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,6 +93,11 @@ export default function ChatView() {
         const rows = await fetchMessages(chatId);
         setMessages(rows);
         await markConversationRead(chatId, userId);
+        if (s.kind === 'room_channel' && s.room_id) {
+          const membership = await fetchMyMembership(s.room_id, userId);
+          setChatRole(membership?.join_state === 'approved' ? membership.role : null);
+          setMutedIds(await fetchMutedInChat(chatId));
+        }
         if (s.kind === 'dm' && s.otherUserId) {
           setBlockStatus(await fetchBlockStatus(s.otherUserId));
           setOtherLastRead(await fetchOtherParticipantLastRead(chatId, s.otherUserId));
@@ -124,7 +139,10 @@ export default function ChatView() {
         setMessages((prev) => (prev?.some((m) => m.id === message.id) ? prev : [message, ...(prev ?? [])]));
         if (message.author_id !== userId) markConversationRead(chatId, userId).catch(() => {});
       },
-      onUpdate: (message) => setMessages((prev) => prev && prev.map((m) => (m.id === message.id ? message : m))),
+      onUpdate: (message) =>
+        setMessages((prev) =>
+          prev && (message.deleted_at ? prev.filter((m) => m.id !== message.id) : prev.map((m) => (m.id === message.id ? message : m))),
+        ),
       onReactionChange: () => fetchMessages(chatId).then(setMessages).catch(() => {}),
     });
 
@@ -269,6 +287,32 @@ export default function ChatView() {
     }
   }
 
+  async function handleRemoveMessage(message: Message) {
+    setError(null);
+    try {
+      await removeMessage(message.id);
+      setMessages((prev) => prev && prev.filter((m) => m.id !== message.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove that message.');
+    }
+  }
+
+  async function handleToggleMute(targetUserId: string, muted: boolean) {
+    if (!chatId) return;
+    setError(null);
+    try {
+      await setMutedInChat(chatId, targetUserId, muted);
+      setMutedIds((prev) => {
+        const next = new Set(prev);
+        if (muted) next.add(targetUserId);
+        else next.delete(targetUserId);
+        return next;
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not change that.');
+    }
+  }
+
   if (!summary) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
@@ -286,6 +330,8 @@ export default function ChatView() {
           : null);
 
   const messagesById = new Map((messages ?? []).map((m) => [m.id, m]));
+  const isChatMod = chatRole === 'owner' || chatRole === 'admin' || chatRole === 'mod';
+  const iAmMuted = summary.kind === 'room_channel' && mutedIds.has(userId);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -363,6 +409,7 @@ export default function ChatView() {
                   voiceUrl={item.voice_url ? (mediaUrls.get(item.voice_url) ?? null) : null}
                   showRead={showRead}
                   onReact={(emoji) => handleReact(item, emoji)}
+                  onLongPress={mine || (summary.kind === 'room_channel' && isChatMod) ? () => setActionsFor(item) : undefined}
                   onPress={() => setReplyTo(item)}
                 />
               </View>
@@ -379,10 +426,14 @@ export default function ChatView() {
         {typingUser && <Text style={styles.typingText}>Typing...</Text>}
         {error && <Text style={styles.errorText}>{error}</Text>}
 
-        {summary.kind === 'dm' && blockStatus !== 'none' ? (
+        {(summary.kind === 'dm' && blockStatus !== 'none') || iAmMuted ? (
           <View style={styles.blockedBar}>
             <Text style={styles.blockedBarText}>
-              {blockStatus === 'blocking' ? 'You blocked this person. Unblock them to send messages.' : 'You can’t reply to this conversation.'}
+              {iAmMuted
+                ? 'A moderator has muted you in this chat.'
+                : blockStatus === 'blocking'
+                  ? 'You blocked this person. Unblock them to send messages.'
+                  : 'You can’t reply to this conversation.'}
             </Text>
             {blockStatus === 'blocking' && summary.otherUserId && (
               <Pressable onPress={() => summary.otherUserId && handleUnblock(summary.otherUserId)} hitSlop={8} accessibilityRole="button">
@@ -445,6 +496,87 @@ export default function ChatView() {
         </>
         )}
       </KeyboardAvoidingView>
+
+      <OptionsSheet
+        visible={actionsFor !== null}
+        onClose={() => setActionsFor(null)}
+        options={(() => {
+          const target = actionsFor;
+          if (!target) return [];
+          const mine = target.author_id === userId;
+          const name = target.author?.name ?? 'this person';
+          const targetMuted = !!target.author_id && mutedIds.has(target.author_id);
+          return [
+            {
+              key: 'like',
+              label: 'Like',
+              icon: 'heart' as const,
+              onPress: () => {
+                setActionsFor(null);
+                handleReact(target, '❤️');
+              },
+            },
+            ...(mine
+              ? [
+                  {
+                    key: 'delete',
+                    label: 'Delete message',
+                    icon: 'trash' as const,
+                    destructive: true,
+                    onPress: () => {
+                      setActionsFor(null);
+                      setRemovingMessage(target);
+                    },
+                  },
+                ]
+              : []),
+            ...(!mine && summary.kind === 'room_channel' && isChatMod
+              ? [
+                  {
+                    key: 'remove',
+                    label: 'Remove message',
+                    icon: 'trash' as const,
+                    destructive: true,
+                    onPress: () => {
+                      setActionsFor(null);
+                      setRemovingMessage(target);
+                    },
+                  },
+                  ...(target.author_id
+                    ? [
+                        {
+                          key: 'mute',
+                          label: targetMuted ? `Unmute ${name} in this chat` : `Mute ${name} in this chat`,
+                          icon: 'lock' as const,
+                          destructive: !targetMuted,
+                          onPress: () => {
+                            setActionsFor(null);
+                            if (target.author_id) handleToggleMute(target.author_id, !targetMuted);
+                          },
+                        },
+                      ]
+                    : []),
+                ]
+              : []),
+          ];
+        })()}
+      />
+      <ConfirmModal
+        visible={removingMessage !== null}
+        title={removingMessage?.author_id === userId ? 'Delete this message?' : 'Remove this message?'}
+        body={
+          removingMessage?.author_id === userId
+            ? "It'll be removed for everyone in this chat."
+            : "It'll be removed for everyone in this chat and recorded in the Room's moderation log."
+        }
+        confirmLabel={removingMessage?.author_id === userId ? 'Delete' : 'Remove'}
+        onCancel={() => setRemovingMessage(null)}
+        onConfirm={() => {
+          const target = removingMessage;
+          setRemovingMessage(null);
+          if (target) handleRemoveMessage(target);
+        }}
+      />
 
       {summary.kind === 'dm' && summary.otherUserId && (
         <>

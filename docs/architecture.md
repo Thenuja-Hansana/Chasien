@@ -51,6 +51,16 @@ user load, real revenue) to spend money.
   (`tag_people_in_post()`, SECURITY DEFINER, which silently drops anyone not
   allowed so no error can reveal a block — clients may only read tags and
   remove their own).
+- **One rule decides who can remove content** (since 2026-09-21):
+  `can_remove_content()`. Authors can always remove their own content;
+  otherwise the actor must be an owner/admin/mod who strictly outranks the
+  author in that Room. It's the same rank rule the room-membership Edge
+  Function applies to kicks, mutes and role changes. Every removal is a
+  SECURITY DEFINER function (`delete_post`, `remove_comment`,
+  `remove_message`, `remove_story`) that soft-deletes (stories are expired
+  instead, so the hourly cleanup job takes their media) and logs to
+  `moderation_actions` whenever the actor isn't the author. Clients can't
+  write that log at all.
 - **Blocks are enforced in RLS, both ways** (since 2026-09-21). The SELECT
   policies on posts, comments, stories and post_likes include
   `not is_blocked_with(author)`, so any new content table read by people

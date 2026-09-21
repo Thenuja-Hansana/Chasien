@@ -13,6 +13,7 @@ import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
 import { VIDEO_BUFFER_OPTIONS } from '@/lib/mediaUtils';
 import { cursorOf, fetchPost, fetchRoomClips, isClipPost, setLiked, type FeedCursor, type FeedPost } from '@/lib/posts';
+import { fetchMyMembership } from '@/lib/rooms';
 
 const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 80 };
 
@@ -49,6 +50,8 @@ export default function Clips() {
   // re-render the clips list (and its video players) behind it.
   const commentsSheetRef = useRef<CommentsSheetHandle>(null);
   const [error, setError] = useState<string | null>(null);
+  // Owner/admin/mod of the clips' Room: offered "Remove" on other people's comments.
+  const [canModerate, setCanModerate] = useState(false);
 
   useEffect(() => {
     if (!userId || !postId) return;
@@ -71,6 +74,9 @@ export default function Clips() {
       setActiveIndex(newer.clips.length);
       setOlderCursor(older.nextCursor);
       setReachedEnd(older.reachedEnd);
+      fetchMyMembership(start.roomId, userId)
+        .then((m) => setCanModerate(m?.join_state === 'approved' && m.role !== 'member'))
+        .catch(() => {});
     };
     loadAround().catch((e) => {
       if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load clips.');
@@ -162,8 +168,9 @@ export default function Clips() {
       <CommentsSheet
         ref={commentsSheetRef}
         viewerId={userId}
-        onCommentAdded={(id) =>
-          setClips((prev) => prev?.map((c) => (c.id === id ? { ...c, commentCount: c.commentCount + 1 } : c)) ?? prev)
+        viewerCanModerate={canModerate}
+        onCommentCountChange={(id, delta) =>
+          setClips((prev) => prev?.map((c) => (c.id === id ? { ...c, commentCount: Math.max(0, c.commentCount + delta) } : c)) ?? prev)
         }
       />
     </View>

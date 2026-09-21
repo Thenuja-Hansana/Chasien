@@ -14,7 +14,9 @@ import PostOptionsMenu from '@/components/PostOptionsMenu';
 import { PostTagsLine, PostTagsOverlay } from '@/components/PostTags';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { outranks } from '@/lib/moderation';
 import { isClipPost, relativeTime, type FeedPost } from '@/lib/posts';
+import type { RoomRole } from '@/lib/rooms';
 import { useUserPreview } from '@/lib/user-preview-context';
 
 /** Leaves the rest of the window free for the caption/actions row below and a peek of the next card, the way Instagram's own feed keeps scrolling legible. */
@@ -32,7 +34,7 @@ import { useUserPreview } from '@/lib/user-preview-context';
 export default function PostCard({
   post,
   viewerId,
-  viewerIsRoomOwner,
+  viewerRole,
   viewerCanModerate,
   onOpenComments,
   onOpenLikes,
@@ -47,7 +49,8 @@ export default function PostCard({
 }: {
   post: FeedPost;
   viewerId: string;
-  viewerIsRoomOwner: boolean;
+  /** The viewer's role in this Room — decides whether they can remove someone else's post (lib/moderation.ts's outranks()). */
+  viewerRole: RoomRole;
   /** Owner/admin/mod — can pin. Pinning used to live only on the post screen, which the feed no longer opens. */
   viewerCanModerate: boolean;
   onOpenComments: () => void;
@@ -64,7 +67,10 @@ export default function PostCard({
   onBlockAuthor: () => void;
 }) {
   const isModerator = post.authorRole === 'owner' || post.authorRole === 'mod';
-  const canDelete = post.authorId === viewerId || viewerIsRoomOwner;
+  const isOwnPost = post.authorId === viewerId;
+  // A mod removing someone else's post, which the server allows only if
+  // they outrank its author (can_remove_content, 20260921110100).
+  const canDelete = isOwnPost || outranks(viewerRole, post.authorRole);
   const isClip = isClipPost(post);
   const viewerIsTagged = post.tags.some((t) => t.userId === viewerId);
   const { open: openUserPreview } = useUserPreview();
@@ -214,6 +220,7 @@ export default function PostCard({
       <PostOptionsMenu
         visible={menuOpen}
         canDelete={canDelete}
+        deleteLabel={isOwnPost ? 'Delete post' : 'Remove post'}
         canRemoveTag={viewerIsTagged}
         canPin={viewerCanModerate}
         pinned={post.pinned}
@@ -242,9 +249,13 @@ export default function PostCard({
       />
       <ConfirmModal
         visible={confirmingDelete}
-        title="Delete this post?"
-        body="Everyone in this Room will lose access to it. This can't be undone."
-        confirmLabel="Delete"
+        title={isOwnPost ? 'Delete this post?' : 'Remove this post?'}
+        body={
+          isOwnPost
+            ? "Everyone in this Room will lose access to it. This can't be undone."
+            : "It'll be removed for everyone in this Room and recorded in the Room's moderation log."
+        }
+        confirmLabel={isOwnPost ? 'Delete' : 'Remove'}
         onCancel={() => setConfirmingDelete(false)}
         onConfirm={() => {
           setConfirmingDelete(false);

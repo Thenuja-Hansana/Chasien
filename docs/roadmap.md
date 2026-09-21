@@ -829,11 +829,19 @@ are expanded below to match what the stores actually check (see
       At solo-dev scale, that means a server-side word list checked
       against post, comment and message text, Room names and bios, on top
       of report-and-remove
-- [ ] Mod actions in Room Settings, filling the gaps:
+- [x] Mod actions in Room Settings, filling the gaps:
       - admins and mods can remove posts (today only the owner can)
       - mods can remove comments and chat messages
       - mods can mute and remove members from the UI
       - each action writes a `moderation_actions` row
+      **Done 2026-09-21** (`20260921110000`/`20260921110100`): one rank
+      rule for every removal; comments, messages and stories are removable
+      by their authors too (they weren't before); mute is reachable from
+      the app for the first time; there's a Moderation log in Room
+      Settings. Verified with 41 direct-API checks, each refusal checked for
+      its actual reason, and 28 UI checks. See decision-log, 2026-09-21.
+      Left for later: a removed chat message stays on other viewers' screens
+      until they reopen the chat
 - [ ] Write the community guidelines, including an explicit
       zero-tolerance line for objectionable content and abusive users.
       Link them from the signup checkbox that already says people accept

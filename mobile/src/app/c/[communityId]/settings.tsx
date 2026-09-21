@@ -552,6 +552,18 @@ export default function CommunitySettings() {
           </View>
         </Pressable>
 
+        <Pressable
+          style={styles.toggleRow}
+          onPress={() => router.push({ pathname: '/c/[communityId]/moderation', params: { communityId: currentRoom.slug } })}
+          accessibilityRole="button"
+        >
+          <View style={styles.toggleText}>
+            <Text style={styles.toggleTitle}>Moderation log</Text>
+            <Text style={styles.toggleDesc}>Removed posts, comments, messages and stories, and mutes</Text>
+          </View>
+          <Icon name="chevronRight" size={16} color={colors.neutral[400]} strokeWidth={2.2} />
+        </Pressable>
+
         {pendingRequests.length > 0 && (
           <>
             <Text style={styles.label}>Requests to join</Text>

@@ -3,9 +3,11 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 
 import Avatar from '@/components/Avatar';
 import BottomSheet, { BottomSheetFlatList } from '@/components/BottomSheet';
+import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { removeComment } from '@/lib/moderation';
 import { addComment, fetchComments, relativeTime, type Comment } from '@/lib/posts';
 
 const QUICK_EMOJI = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮', '😂'];
@@ -29,10 +31,16 @@ type Row = { comment: Comment; isReply: boolean };
  */
 export type CommentsSheetHandle = { open: (postId: string) => void };
 
-const CommentsSheet = forwardRef<CommentsSheetHandle, { viewerId: string; onCommentAdded: (postId: string) => void }>(function CommentsSheet(
-  { viewerId, onCommentAdded },
-  ref,
-) {
+const CommentsSheet = forwardRef<
+  CommentsSheetHandle,
+  {
+    viewerId: string;
+    /** Owner/admin/mod of the Room — offered "Remove" on other people's comments (remove_comment() checks rank). */
+    viewerCanModerate: boolean;
+    /** +1 when the viewer comments, -1 when a comment is removed, so the card's count keeps up. */
+    onCommentCountChange: (postId: string, delta: number) => void;
+  }
+>(function CommentsSheet({ viewerId, viewerCanModerate, onCommentCountChange }, ref) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   /** null = closed. */
@@ -43,6 +51,7 @@ const CommentsSheet = forwardRef<CommentsSheetHandle, { viewerId: string; onComm
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<Comment | null>(null);
 
   // A different post (or reopening) starts clean.
   const [shownPostId, setShownPostId] = useState(postId);
@@ -94,11 +103,23 @@ const CommentsSheet = forwardRef<CommentsSheetHandle, { viewerId: string; onComm
       setDraft('');
       setReplyTo(null);
       setComments(await fetchComments(postId));
-      onCommentAdded(postId);
+      onCommentCountChange(postId, 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not post your comment.');
     }
     setSending(false);
+  }
+
+  async function handleRemove(comment: Comment) {
+    if (!postId) return;
+    setError(null);
+    try {
+      await removeComment(comment.id);
+      setComments(await fetchComments(postId));
+      onCommentCountChange(postId, -1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove that comment.');
+    }
   }
 
   return (
@@ -130,16 +151,23 @@ const CommentsSheet = forwardRef<CommentsSheetHandle, { viewerId: string; onComm
                   <Text style={styles.handle}>{item.comment.authorHandle}</Text> <Text style={styles.time}>{relativeTime(item.comment.createdAt)}</Text>
                 </Text>
                 <Text style={styles.text}>{item.comment.text}</Text>
-                {!item.isReply && (
-                  <Pressable
-                    onPress={() => setReplyTo(item.comment)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Reply to ${item.comment.authorHandle}`}
-                  >
-                    <Text style={styles.reply}>Reply</Text>
-                  </Pressable>
-                )}
+                <View style={styles.actions}>
+                  {!item.isReply && (
+                    <Pressable
+                      onPress={() => setReplyTo(item.comment)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Reply to ${item.comment.authorHandle}`}
+                    >
+                      <Text style={styles.reply}>Reply</Text>
+                    </Pressable>
+                  )}
+                  {(item.comment.authorId === viewerId || viewerCanModerate) && (
+                    <Pressable onPress={() => setRemoving(item.comment)} hitSlop={8} accessibilityRole="button">
+                      <Text style={styles.reply}>{item.comment.authorId === viewerId ? 'Delete' : 'Remove'}</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             </View>
           )}
@@ -147,6 +175,23 @@ const CommentsSheet = forwardRef<CommentsSheetHandle, { viewerId: string; onComm
       )}
 
       {error && <Text style={styles.error}>{error}</Text>}
+
+      <ConfirmModal
+        visible={removing !== null}
+        title={removing?.authorId === viewerId ? 'Delete this comment?' : 'Remove this comment?'}
+        body={
+          removing?.authorId === viewerId
+            ? "It'll be removed for everyone. This can't be undone."
+            : "It'll be removed for everyone and recorded in the Room's moderation log."
+        }
+        confirmLabel={removing?.authorId === viewerId ? 'Delete' : 'Remove'}
+        onCancel={() => setRemoving(null)}
+        onConfirm={() => {
+          const target = removing;
+          setRemoving(null);
+          if (target) handleRemove(target);
+        }}
+      />
 
       <View style={styles.footer}>
         <View style={styles.emojiBar}>
@@ -266,6 +311,10 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 15,
       lineHeight: 20,
       color: colors.text,
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: Spacing[4],
     },
     reply: {
       fontFamily: Fonts.bodySemibold,
