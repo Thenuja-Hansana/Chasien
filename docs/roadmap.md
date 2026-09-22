@@ -813,7 +813,7 @@ are expanded below to match what the stores actually check (see
       admin*, a role above every Room that only SQL can grant. Still to
       do: make your own account an app admin (locally now, hosted in
       Phase 11)
-- [ ] A fast way to act on a report: remove the content, and suspend the
+- [x] A fast way to act on a report: remove the content, and suspend the
       account across the whole app (a Supabase Auth ban, not just removal
       from one Room). Apple asks for "timely responses". Its reviewers
       have been known to spell that out as acting within 24 hours by
@@ -931,6 +931,18 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
         hide them, but only column-level rules on `profiles` would stop a
         blocked person fetching them directly. Found in Phase 9's block
         slice (decision-log, 2026-09-21)
+  - [ ] **The push webhooks' Edge Functions trust any caller. Must be
+        fixed before the backend is hosted (Phase 11).**
+        `notify-activity` and `notify-new-message` send whatever
+        notification or message is in the request body, and the only
+        gate is a valid JWT, which the app's public anon key is. So anyone
+        could push made-up notifications to any user, and
+        `notify-new-message` would send their own text to every member of
+        a chat. The database webhooks need to send a secret the functions
+        check (kept in Vault and the functions' secrets, never in a
+        migration), or the functions should re-read the row by id instead
+        of trusting the body. Confirmed locally with the anon key only
+        (decision-log, 2026-09-22)
 
 **Exit condition:** you'd hand this to a stranger without wincing.
 
@@ -956,10 +968,12 @@ starts.
       locally. **Never run `seed.sql` on the project real users reach.**
       Every seeded account's password is `password123`, and the anon key
       that reaches those accounts ships inside the app
-- [ ] Deploy all six Edge Functions and set their secrets on the hosted
+- [ ] Deploy every Edge Function in `supabase/functions/` (seven since
+      Phase 9 added `moderate`) and set their secrets on the hosted
       project. Confirm the Database Webhooks (chat and activity push) and
       the `pg_cron` story-cleanup job exist there too, and recreate any
-      that were configured outside the migrations
+      that were configured outside the migrations. Then add your own
+      account to `app_admins` there, or reports reach nobody
 - [ ] Point Auth's site URL and redirect URLs at something real.
       Confirmation and password-reset links default to `localhost`,
       which on a stranger's phone goes nowhere. Use a deep link back into

@@ -82,6 +82,13 @@ Deno.serve(async (req) => {
     title: author?.name ?? 'New message',
     body: previewFor(record),
     data: { conversationId: record.conversation_id, messageId: record.id },
+    // 'high', not Expo's default: on Android the default is FCM "normal"
+    // priority, which Doze holds while the phone is locked and idle. On
+    // the Galaxy A14 in forced deep idle, a normal push was still waiting
+    // after 60s (it arrived only once the phone left idle); a high one
+    // arrived within 5s. Every push here is a visible notification, which
+    // is what FCM expects high priority to be used for.
+    priority: 'high',
   }));
 
   const pushResponse = await fetch(EXPO_PUSH_URL, {

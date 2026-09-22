@@ -7,6 +7,46 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-22 — Push notifications: high priority, and why none arrived
+
+**Why none arrived:** the phone was offline. Wi-Fi was off and mobile
+data had no connection, while the app itself kept working over the USB
+cable (`adb reverse`), which needs no internet. Push always comes from
+Google's servers, so everything up to the phone checked out:
+- the notification row was written
+- the webhook reached `notify-activity` (HTTP 200)
+- Expo accepted the push, and its receipt was `ok`
+
+Google held the pushes and delivered them as soon as Wi-Fi came back. So
+when push seems broken while developing, check the phone's own network
+first (`adb shell dumpsys connectivity`).
+
+**The real bug: pushes were sent at normal priority.** Neither function
+set `priority`, and Expo's default on Android is FCM "normal", which Doze
+holds while the phone is locked and idle. Measured on the Galaxy A14 with
+the phone forced into deep idle:
+- a normal push was still undelivered after 60 seconds, and arrived only
+  once the phone left idle
+- a high one arrived within 5 seconds
+
+Both functions now send `priority: 'high'`. Re-tested end to end through
+both of them in deep idle, and both delivered within 5 seconds. FCM
+expects high priority to be used only for visible notifications, which is
+all these ever send.
+
+**Found on the way: the functions trust any caller.** They take the
+notification or message from the request body, and the only check is a
+valid JWT, which the app's public anon key already is. With the anon key
+and no sign-in, `notify-activity` went as far as looking up push tokens
+for a user chosen in the request. So once the backend is hosted, anyone
+could push made-up notifications to anyone, and through
+`notify-new-message` send their own text to a whole chat. This doesn't
+matter locally, since nobody else can reach this machine. It's on
+Phase 10's security list, and must be fixed before Phase 11 hosts the
+backend.
+
+---
+
 ## 2026-09-22 — Phase 9, slice 3: reports reach an app admin, with evidence the server keeps
 
 Migrations `20260921120000_report_enum_values.sql` and
