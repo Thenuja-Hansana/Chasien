@@ -222,6 +222,22 @@ export default function SettingsAndActivity() {
               </View>
               <Icon name="chevronRight" size={18} color={colors.neutral[400]} strokeWidth={2.2} />
             </Pressable>
+            <Pressable
+              style={[styles.accountCentreCard, styles.adminCardGap]}
+              onPress={() => router.push('/admin/delete-account')}
+              accessibilityRole="button"
+            >
+              <View style={styles.accountCentreIcon}>
+                <Icon name="trash" size={24} color={colors.text} strokeWidth={1.8} />
+              </View>
+              <View style={styles.rowTextWrap}>
+                <Text style={styles.accountCentreLabel}>Delete an account</Text>
+                <Text style={styles.accountCentreSubtitle} numberOfLines={2}>
+                  For deletion requests sent by email
+                </Text>
+              </View>
+              <Icon name="chevronRight" size={18} color={colors.neutral[400]} strokeWidth={2.2} />
+            </Pressable>
           </View>
         )}
 
@@ -258,6 +274,15 @@ export default function SettingsAndActivity() {
           <Text style={styles.sectionLabel}>Login</Text>
           <Pressable style={styles.row} onPress={() => signOut()}>
             <Text style={styles.logOutText}>Log out</Text>
+          </Pressable>
+          {/* Outside the search filter, like Log out: Apple expects account
+              deletion to be easy to find, not behind a search. */}
+          <Pressable
+            style={styles.row}
+            onPress={() => router.push({ pathname: '/u/[userId]/delete-account', params: { userId } })}
+            accessibilityRole="button"
+          >
+            <Text style={styles.logOutText}>Delete account</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -397,6 +422,9 @@ const makeStyles = (colors: ThemeColors) =>
       fontFamily: Fonts.body,
       fontSize: 13.5,
       color: colors.neutral[400],
+    },
+    adminCardGap: {
+      marginTop: Spacing[2],
     },
     logOutText: {
       fontFamily: Fonts.bodySemibold,

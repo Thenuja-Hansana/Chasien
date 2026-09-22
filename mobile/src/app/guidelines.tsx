@@ -73,6 +73,14 @@ const SECTIONS: Section[] = [
       "We remove content that breaks them. Depending on how serious it is, we can also suspend your account, which stops you signing in. If you think we've made a mistake, email us and tell us why.",
     ],
   },
+  {
+    title: 'Deleting your account',
+    paragraphs: [
+      'You can delete your account at any time in Settings, under Delete account. It is permanent: your profile, posts, comments, stories and chat messages are deleted, along with your direct message conversations. Each Room you own passes to its longest-standing admin, then moderator, then member, or is deleted if nobody else is in it.',
+      `Can't use the app? Email ${SUPPORT_EMAIL} from the address you signed up with and ask us to delete your account. We'll delete it within 30 days.`,
+      'Reports you filed stay, without your name, and reports about you keep what was reported, as a safety record.',
+    ],
+  },
 ];
 
 /**

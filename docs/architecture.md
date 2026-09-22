@@ -94,6 +94,21 @@ user load, real revenue) to spend money.
   Text is normalized first (case, accents, look-alike letters, leetspeak,
   spaced-out letters) and matched as whole words. `text_is_allowed()` is
   public so signup can check before calling Supabase Auth.
+- **Deleting an account is real deletion** (since 2026-09-22), run by the
+  `delete-account` Edge Function in this order:
+  1. list the files (`account_storage_paths()`)
+  2. `delete_account_data()`, one transaction: owned Rooms go to
+     `room_successor()` (the next admin, then mod, then member) or are
+     deleted if nobody else is in them, and their posts, comments,
+     messages and stories are deleted
+  3. delete the Auth user, whose cascade removes the rest
+  4. remove the files
+
+  Deleting your own account needs the password entered in the last 5
+  minutes (the token's `amr` timestamp). Reports and the moderation log
+  are kept as safety records. `room_successor()` is also what the
+  owner-leaves trigger uses, so the preview and the result can't
+  disagree.
 - **Messages meant for people come from `raise exception` with no custom
   errcode (SQLSTATE `P0001`),** and screens show errors through
   `errorMessage(e, fallback)` in `lib/errors.ts`. It shows `P0001`

@@ -79,6 +79,21 @@ issues late and the surface area only grows from here. Verified on the
 Galaxy A14, the same physical device used since Phase 6. Next after this:
 Phase 9 — Trust & Safety.
 
+**2026-09-22: Phase 9 — Trust & safety, done.** Everything the stores
+check for user-generated content is built and verified against the live
+local stack:
+- blocking, enforced by the server both ways
+- moderation tools with one rank rule
+- reports that reach an app admin, with evidence the server keeps
+- a content filter that refuses slurs before they're posted
+- community guidelines with a published contact address
+- real account deletion, in the app or by email
+
+Along the way it also fixed CI, which had silently failed for two weeks,
+and a bug that had hidden every database error message from the screen.
+Found and left for Phase 10: the push webhooks' Edge Functions trust any
+caller. See decision-log, 2026-09-21 and 2026-09-22. Next: Phase 10.
+
 **2026-09-21: Bones Phase closed; the path to a real release is now
 planned end to end.** Nine of Bones' ten items are done, and the tenth
 (right-sized image variants) is blocked on a paid Supabase feature. The
@@ -764,7 +779,7 @@ on, not just in a browser or emulator.
 
 ---
 
-## Phase 9 — Trust & safety (store-required, not optional)
+## Phase 9 — Trust & safety (store-required, not optional) ✅ done (2026-09-22)
 
 Goal: the things that get a UGC app rejected if missing. See
 `store-compliance.md` for the policy citations.
@@ -879,7 +894,7 @@ are expanded below to match what the stores actually check (see
       (`constants/contact.ts`), shown in Settings, the guidelines, and
       the suspended-account login message. The download page and store
       listing carry it through their own items (APK Beta Phase, Phase 12)
-- [ ] In-app account deletion: actual deletion, not deactivation.
+- [x] In-app account deletion: actual deletion, not deactivation.
       - Decide per table what happens to the user's content: delete it,
         or keep it and show "Deleted user", which the client already
         renders as a fallback.
@@ -888,9 +903,21 @@ are expanded below to match what the stores actually check (see
         longest-standing admin, or delete the Room.
       - Deleting the `auth.users` row needs the service role, so this is
         an Edge Function
-- [ ] Account deletion can also be requested from the web, without
+      **Done 2026-09-22** (`20260922120000_account_deletion.sql`, the
+      `delete-account` Edge Function, Settings → Delete account). Content
+      is deleted; owned Rooms go to the next admin, then mod, then member,
+      or are deleted if nobody else is in them; files and push tokens go
+      too. It needs the password entered in the last 5 minutes. Verified
+      with 52 direct-API checks, 4 on re-authentication and 16 UI checks.
+      See decision-log, 2026-09-22
+- [x] Account deletion can also be requested from the web, without
       installing the app. Google Play's Data safety form asks for that
       URL. A page with an email address or a form is enough
+      **Done 2026-09-22, except publishing the page:** requests go to
+      `info.chasien@gmail.com`, and app admins act on them from Settings →
+      Delete an account, which finds the account by email. The text is the
+      guidelines' "Deleting your account" section; putting it on a public
+      URL is part of the APK Beta Phase's download page
 
 **Exit condition:** you could pass an App Store UGC review today, not
 just "eventually". This is checked with three accounts at once (blocker,
@@ -1085,7 +1112,10 @@ on this laptop.
       link) and a simple page (GitHub Pages) with install steps. Explain
       the "Install unknown apps" permission and the Play Protect warning
       people will see, list a SHA-256 checksum, and link the abuse
-      contact and the web account-deletion page
+      contact and the web account-deletion page. That page is the
+      guidelines' "Deleting your account" section (`app/guidelines.tsx`,
+      kept as data so it can be reused), and its URL goes in Google
+      Play's Data safety form
 - [ ] An update path, since sideloaded apps never update themselves: EAS
       Update over-the-air for JavaScript-only fixes (check the free-tier
       limits), plus an in-app "new version available" prompt for native

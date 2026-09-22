@@ -7,6 +7,115 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-22 — Phase 9, slice 6: deleting an account, for real
+
+Migration `20260922120000_account_deletion.sql`, a new `delete-account`
+Edge Function, `lib/account.ts`, a Settings → Delete account screen, and an
+admin "Delete an account" screen. That completes Phase 9.
+
+**Decided with the user:**
+- everything the person posted is deleted
+- each Room they own passes to the next role down
+- a DM with them disappears for the other person too
+- reports and the moderation log are kept
+- emailed requests are handled within 30 days
+
+**What was already there.** The foreign keys to `profiles` either CASCADE
+(likes, reactions, votes, memberships, friendships, blocks, notifications,
+push tokens, and whole DM conversations) or SET NULL (posts, comments,
+messages and stories, which is where the app's "Deleted user" fallback
+comes from). A trigger, `promote_next_owner_on_owner_departure`, already
+handed an owner's Room to the next admin, mod or member when their
+membership row went. So deleting the Auth user alone would already have
+kept all their content, and left a Room with nobody else in it behind,
+ownerless.
+
+**The deletion, in order:**
+1. **List the files** (`account_storage_paths()`). Every upload path is
+   `{scope}/{uploader}/…`, so this is their uploads, their profile
+   pictures, everything in a Room about to be deleted, and everything in
+   their DMs, the other person's files included.
+2. **`delete_account_data()`, one transaction.** A Room nobody else is in
+   is deleted. Otherwise their owner membership is deleted, the trigger
+   hands the Room over, and the handover is logged in that Room's
+   moderation log. Then their posts, comments, messages and stories are
+   deleted, taking other people's comments and replies on them along, as
+   deleting a post always does.
+3. **Delete the Auth user,** which cascades the rest.
+4. **Remove the files.** Last, so a failure part-way never leaves content
+   pointing at files that are already gone. A retry after a failed Auth
+   step is safe, because step 2 then finds nothing left to do.
+
+**One rule for who takes over.** `room_successor()` holds the ordering the
+trigger used (admin, then mod, then member, longest-standing first). The
+trigger now calls it, and so does the preview the person sees ("Uchihas:
+goes to @realthenuja"), so the preview can't disagree with what happens.
+It also gained a tie-break by user id: two people who joined at the same
+moment used to be picked arbitrarily.
+
+**The password has to be fresh.** Deleting your own account requires the
+password entered in the last 5 minutes, not just a signed-in session, so
+an unlocked phone or a stolen token isn't enough. The check reads the
+token's `amr` claim, which records when the password was entered. Checked
+before relying on it: a token refresh gives a new `iat` but keeps the
+`amr` timestamp. The app signs in again with the password just before
+calling.
+
+**Emailed requests** (Google Play wants deletion possible without the
+app). An app admin looks the account up by email (`find_account_by_email()`,
+service role only, because emails live in `auth.users`) and deletes it the
+same way. Admins can't delete another admin's account, the same rule as
+suspending, and their own account goes through Settings like anyone
+else's. The public page is the guidelines' new "Deleting your account"
+section; hosting it at a URL is part of the APK Beta Phase's download
+page.
+
+**Found along the way:**
+- **New Edge Functions need the stack recreated.** The local edge runtime
+  only serves a new function once the containers are recreated. This time
+  `supabase stop` / `supabase start -x vector` took under a minute with no
+  downloads, thanks to the image pins from 2026-09-21. A `pg_dump` taken
+  first confirmed every count was identical afterwards.
+- **The first test run failed part-way** (a trigger already adds both
+  people to a new DM) and left three test files behind, because the
+  cleanup couldn't find files whose owner was already gone. They were
+  removed, and the test cleanup now finds each throwaway's files with
+  `account_storage_paths()` before deleting anything.
+
+**Verified:**
+- **52 direct-API checks, on throwaway accounts.**
+  - The world under test: a leaver who owns a Room with an admin, a mod
+    and a member (who joined in the opposite order), a Room with two
+    members, and a Room they're alone in; who is a member of a fourth;
+    and who has posts, comments, replies, chat messages, a story, a like,
+    a friendship, a DM, files in every bucket, and reports both ways.
+  - Checked: the preview; every refusal (no session, a non-admin, an
+    admin deleting another admin or themselves, and all four internal
+    functions not callable); the deletion; everything that should be gone
+    (content, files, DM, push token, the lone Room); and everything that
+    should stay (other people's content and files, a surviving Room's
+    picture, the handovers in the moderation log, reports without the
+    reporter's name, and the member count).
+  - The admin path: finding an account by email (any case, stray spaces)
+    and deleting it.
+- **4 checks on the password rule**, after actually waiting 5 minutes 20
+  seconds: a stale password is refused, a token refresh doesn't get round
+  it, the account survives, and entering the password again works.
+- **16 UI checks in the app (Expo web).** The Settings row; the screen's
+  deleted/kept/Rooms sections; the button waiting for a password; the
+  confirmation; a wrong password refused; deletion landing on login with
+  "Your account has been deleted."; the Room handed on; the admin screen
+  finding and deleting an account; a non-admin kept out; and the
+  guidelines section.
+- **On the Galaxy A14,** view only: the screen reads correctly in dark
+  mode, shows "Uchihas: goes to @realthenuja", and clears the navigation
+  bar. Nothing was deleted.
+
+Every row, file and moderation-log count matched before and after each
+run. Push was paused for each run and confirmed back on.
+
+---
+
 ## 2026-09-22 — Phase 9, slice 5: community guidelines and a published contact address
 
 Apple 1.2 asks UGC apps for terms users accept, with no tolerance for

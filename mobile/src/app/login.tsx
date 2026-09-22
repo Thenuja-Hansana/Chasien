@@ -18,6 +18,7 @@ import { SUPPORT_EMAIL } from '@/constants/contact';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
+import { clearAccountDeletedNotice, wasAccountJustDeleted } from '@/lib/account';
 import { useAuth } from '@/lib/auth-context';
 
 // Apple/Google buttons and "Forgot password?" from the mock are left out
@@ -33,6 +34,8 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  // Set by lib/account.ts's deleteMyAccount() just before it signs out.
+  const [accountDeleted] = useState(wasAccountJustDeleted);
   const emailFocus = useFocusHighlight();
   const passwordFocus = useFocusHighlight();
 
@@ -55,6 +58,7 @@ export default function Login() {
       );
       return;
     }
+    clearAccountDeletedNotice();
     router.replace('/');
   }
 
@@ -67,6 +71,8 @@ export default function Login() {
             <Text style={styles.tagline}>
               Small rooms, in order. Everything newest-first, nothing ranked.
             </Text>
+
+            {accountDeleted && <Text style={styles.notice}>Your account has been deleted.</Text>}
 
             <View style={styles.fields}>
               <TextInput
@@ -215,6 +221,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 13,
     color: colors.accent.DEFAULT,
     marginBottom: Spacing[3],
+  },
+  notice: {
+    fontFamily: Fonts?.bodySemibold,
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: Spacing[4],
   },
   submitButton: {
     height: 54,
