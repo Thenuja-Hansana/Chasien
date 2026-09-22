@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/auth-context';
 import { fetchInbox, subscribeToInbox, type InboxItem } from '@/lib/chat';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { signMessageMediaUrls } from '@/lib/messageMedia';
+import { signRoomMediaUrls } from '@/lib/roomMedia';
 
 const FILTERS = ['All', 'Unread', 'Rooms', 'DMs'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -140,6 +141,8 @@ export default function Chats() {
   const [error, setError] = useState<string | null>(null);
   const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
   const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
+  /** Each Room's own picture, by room-media path. Kept apart from `mediaUrls` (chat photos) because it's a different bucket. */
+  const [roomAvatarUrls, setRoomAvatarUrls] = useState<Map<string, string>>(new Map());
 
   // Paths already handed to the signer. A ref rather than reading
   // `mediaUrls`, which this effect also writes: depending on `mediaUrls`
@@ -158,6 +161,20 @@ export default function Chats() {
     for (const path of unsigned) requestedPaths.current.add(path);
     signMessageMediaUrls(unsigned)
       .then((signed) => setMediaUrls((prev) => new Map([...prev, ...signed])))
+      .catch(() => {});
+  }, [items]);
+
+  // Same once-per-path guard as above, for Room pictures. A Room's General
+  // channel and its sub-groups all carry the same picture, hence the Set.
+  const requestedAvatarPaths = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const paths = new Set((items ?? []).map((i) => i.room_avatar_url).filter((p): p is string => !!p));
+    const unsigned = [...paths].filter((p) => !requestedAvatarPaths.current.has(p));
+    if (unsigned.length === 0) return;
+    for (const path of unsigned) requestedAvatarPaths.current.add(path);
+    signRoomMediaUrls(unsigned)
+      .then((signed) => setRoomAvatarUrls((prev) => new Map([...prev, ...signed])))
       .catch(() => {});
   }, [items]);
 
@@ -251,7 +268,7 @@ export default function Chats() {
             <>
               <Text style={styles.sectionLabel}>Pinned</Text>
               {pinned.map((row) => (
-                <RowView key={row.key} row={row} expanded={expandedRooms.has(row.key)} onToggle={() => toggleExpand(row.key)} mediaUrls={mediaUrls} />
+                <RowView key={row.key} row={row} expanded={expandedRooms.has(row.key)} onToggle={() => toggleExpand(row.key)} mediaUrls={mediaUrls} roomAvatarUrls={roomAvatarUrls} />
               ))}
             </>
           )}
@@ -259,7 +276,7 @@ export default function Chats() {
             <>
               <Text style={styles.sectionLabel}>Today</Text>
               {rest.map((row) => (
-                <RowView key={row.key} row={row} expanded={expandedRooms.has(row.key)} onToggle={() => toggleExpand(row.key)} mediaUrls={mediaUrls} />
+                <RowView key={row.key} row={row} expanded={expandedRooms.has(row.key)} onToggle={() => toggleExpand(row.key)} mediaUrls={mediaUrls} roomAvatarUrls={roomAvatarUrls} />
               ))}
             </>
           )}
@@ -277,21 +294,43 @@ function RowView({
   expanded,
   onToggle,
   mediaUrls,
+  roomAvatarUrls,
 }: {
   row: Row;
   expanded: boolean;
   onToggle: () => void;
   mediaUrls: Map<string, string>;
+  roomAvatarUrls: Map<string, string>;
 }) {
-  if (row.type === 'item') return <ChatRow item={row.item} mediaUrls={mediaUrls} />;
-  return <GroupRow main={row.main} subgroups={row.subgroups} unread={row.unread} expanded={expanded} onToggle={onToggle} mediaUrls={mediaUrls} />;
+  if (row.type === 'item') return <ChatRow item={row.item} mediaUrls={mediaUrls} roomAvatarUrls={roomAvatarUrls} />;
+  return (
+    <GroupRow
+      main={row.main}
+      subgroups={row.subgroups}
+      unread={row.unread}
+      expanded={expanded}
+      onToggle={onToggle}
+      mediaUrls={mediaUrls}
+      roomAvatarUrls={roomAvatarUrls}
+    />
+  );
 }
 
-function ChatRow({ item, mediaUrls }: { item: InboxItem; mediaUrls: Map<string, string> }) {
+function ChatRow({
+  item,
+  mediaUrls,
+  roomAvatarUrls,
+}: {
+  item: InboxItem;
+  mediaUrls: Map<string, string>;
+  roomAvatarUrls: Map<string, string>;
+}) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const avatarKey = item.kind === 'room_channel' ? (item.room_id ?? 'grit') : (item.otherUserId ?? 'mara');
   const letter = item.title.charAt(0).toUpperCase();
+  // A Room chat shows its Room's picture; a DM keeps the person's avatar.
+  const roomAvatarUrl = item.kind === 'room_channel' && item.room_avatar_url ? roomAvatarUrls.get(item.room_avatar_url) : undefined;
 
   return (
     <Pressable
@@ -301,6 +340,7 @@ function ChatRow({ item, mediaUrls }: { item: InboxItem; mediaUrls: Map<string, 
       <Avatar
         gradient={avatarKey}
         color={item.kind === 'room_channel' ? item.room_accent_color : undefined}
+        imageUrl={roomAvatarUrl}
         letter={letter}
         shape={item.kind === 'room_channel' ? 'square' : 'circle'}
         size={50}
@@ -342,6 +382,7 @@ function GroupRow({
   expanded,
   onToggle,
   mediaUrls,
+  roomAvatarUrls,
 }: {
   main: InboxItem;
   subgroups: InboxItem[];
@@ -349,6 +390,7 @@ function GroupRow({
   expanded: boolean;
   onToggle: () => void;
   mediaUrls: Map<string, string>;
+  roomAvatarUrls: Map<string, string>;
 }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -358,6 +400,10 @@ function GroupRow({
     main,
   );
   const previewText = previewSource === main ? previewFor(main) : `${previewSource.channel_name ?? 'Sub-group'}: ${previewFor(previewSource)}`;
+  // The collapsed row stands for the whole Room, so it shows the Room's
+  // picture. Sub-group rows below keep their own letter: a sub-group isn't
+  // the Room, and has no picture of its own.
+  const roomAvatarUrl = main.room_avatar_url ? roomAvatarUrls.get(main.room_avatar_url) : undefined;
 
   return (
     <View>
@@ -365,7 +411,14 @@ function GroupRow({
         style={[styles.row, main.pinned && styles.rowPinned]}
         onPress={() => router.push({ pathname: '/chats/[chatId]', params: { chatId: main.conversation_id } })}
       >
-        <Avatar gradient={main.room_id ?? 'grit'} color={main.room_accent_color} letter={main.title.charAt(0).toUpperCase()} shape="square" size={50} />
+        <Avatar
+          gradient={main.room_id ?? 'grit'}
+          color={main.room_accent_color}
+          imageUrl={roomAvatarUrl}
+          letter={main.title.charAt(0).toUpperCase()}
+          shape="square"
+          size={50}
+        />
         <View style={styles.rowContent}>
           <View style={styles.rowTitleLine}>
             <Text style={styles.rowTitle} numberOfLines={1}>

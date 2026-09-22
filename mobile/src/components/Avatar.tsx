@@ -38,8 +38,8 @@ type AvatarProps = {
   /**
    * A real per-Room `accent_color`, when the caller has one — takes over
    * from `gradient`'s small hardcoded neutral-tone lookup entirely (flat
-   * fill, not a gradient), same treatment Home's own Room-row icon already
-   * uses. `gradient` stays required so every existing call site (DMs,
+   * fill, not a gradient), which is how every Room avatar reads, Home's
+   * included. `gradient` stays required so every existing call site (DMs,
    * profile avatars, stories — anything without a Room's own color) keeps
    * working unchanged.
    */
@@ -63,9 +63,9 @@ export default function Avatar({ gradient, color, imageUrl, letter, size = 40, s
   const fallback = color ? (
     <View style={[styles.fill, { borderRadius: radius, backgroundColor: color }]}>
       {/* colors.onAccent, not the theme-derived contrast the gradient
-          branch below uses — matches Home's roomIconLetter exactly, since
-          an arbitrary accent color can't be assumed to pair with either
-          theme's bg color the way the neutral gradient ramp is designed to. */}
+          branch below uses, since an arbitrary accent color can't be
+          assumed to pair with either theme's bg color the way the neutral
+          gradient ramp is designed to. */}
       <Text style={[styles.letter, { fontSize: size * 0.4, color: colors.onAccent }]}>{letter}</Text>
     </View>
   ) : (

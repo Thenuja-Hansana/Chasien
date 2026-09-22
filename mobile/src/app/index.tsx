@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
 import Skeleton from '@/components/Skeleton';
@@ -14,6 +15,7 @@ import { useAuth } from '@/lib/auth-context';
 import { fetchRoomUnreadCounts, fetchUnreadCount, subscribeToNotifications } from '@/lib/notifications';
 import { fetchLatestPostPreview, type RoomActivityPreview } from '@/lib/posts';
 import { cacheJoinedRoom } from '@/lib/room-cache';
+import { signRoomMediaUrls } from '@/lib/roomMedia';
 import { fetchMyRooms, type Room, type RoomRole } from '@/lib/rooms';
 
 /**
@@ -56,6 +58,8 @@ export default function Index() {
   const [unreadByRoom, setUnreadByRoom] = useState<Map<string, number>>(new Map());
   /** The Telegram-style "Name: content" line + timestamp under each Room's name. Absent (not just null) while still loading a given Room's preview, so a row can tell "not fetched yet" apart from "genuinely no posts". */
   const [previewByRoom, setPreviewByRoom] = useState<Map<string, RoomActivityPreview | null>>(new Map());
+  /** Each Room's own picture, room-media path -> signed URL. A Room without one (or not signed yet) shows its letter instead. */
+  const [avatarUrls, setAvatarUrls] = useState<Map<string, string>>(new Map());
   const clearance = useTabBarClearance();
 
   const userId = session?.user.id;
@@ -69,6 +73,12 @@ export default function Index() {
           // So tapping into one of these a moment from now doesn't have to
           // re-fetch what we just fetched — see lib/room-cache.ts.
           for (const room of rooms) cacheJoinedRoom(room, room.myRole);
+
+          // Same as a profile's Rooms list (u/[userId]/rooms.tsx). Re-signing
+          // on every visit doesn't re-download: cachedImageSource() caches
+          // by storage path, not by the signed URL.
+          const avatarPaths = rooms.map((room) => room.avatar_url).filter((p): p is string => !!p);
+          if (avatarPaths.length > 0) signRoomMediaUrls(avatarPaths).then(setAvatarUrls).catch(() => {});
 
           // One lightweight query per Room, not a single batched call —
           // PostgREST has no "latest row per group" embed, and Home only
@@ -175,6 +185,7 @@ export default function Index() {
                   room={room}
                   unreadCount={unreadByRoom.get(room.id) ?? 0}
                   preview={previewByRoom.get(room.id)}
+                  avatarUrl={room.avatar_url ? avatarUrls.get(room.avatar_url) : undefined}
                 />
               ))}
             </View>
@@ -191,11 +202,14 @@ function RoomRow({
   room,
   unreadCount,
   preview,
+  avatarUrl,
 }: {
   room: JoinedRoom;
   unreadCount: number;
   /** undefined = preview still loading; null = Room genuinely has no posts yet. */
   preview: RoomActivityPreview | null | undefined;
+  /** The Room's picture, already signed. */
+  avatarUrl: string | undefined;
 }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -205,9 +219,18 @@ function RoomRow({
       style={styles.roomRow}
       onPress={() => router.push({ pathname: '/c/[communityId]', params: { communityId: room.slug } })}
     >
-      <View style={[styles.roomIcon, { backgroundColor: room.accent_color ?? colors.accent.DEFAULT }]}>
-        <Text style={styles.roomIconLetter}>{room.name.charAt(0).toUpperCase()}</Text>
-      </View>
+      {/* Circular, not the rounded-square Room icon used elsewhere in the
+          app (Explore cards, search results, Room settings): Home is the
+          first screen moving to the Telegram-style chat-list look; the
+          rest follow later, per the user's own scoping of that pass to
+          Home only. */}
+      <Avatar
+        gradient={room.id}
+        color={room.accent_color ?? colors.accent.DEFAULT}
+        imageUrl={avatarUrl}
+        letter={room.name.charAt(0).toUpperCase()}
+        size={48}
+      />
 
       <View style={styles.roomRowBody}>
         <View style={styles.roomRowLine}>
@@ -324,22 +347,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: Spacing[3],
     borderBottomWidth: 1,
     borderBottomColor: colors.divider,
-  },
-  // Circular, not the rounded-square Room icon used elsewhere in the app
-  // (Explore cards, search results, Room settings) — Home is the first
-  // screen moving to the Telegram-style chat-list look; the rest follow
-  // later, per the user's own scoping of this pass to Home only.
-  roomIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  roomIconLetter: {
-    fontFamily: Fonts.heading,
-    fontSize: 19,
-    color: colors.onAccent,
   },
   roomRowBody: {
     flex: 1,

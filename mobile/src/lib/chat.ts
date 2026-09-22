@@ -45,6 +45,8 @@ export type InboxRow = {
   channel_visibility: 'public' | 'request' | 'invite' | null;
   channel_description: string | null;
   channel_member_count: number | null;
+  /** Room-channel only: the Room's own picture, a room-media storage path to sign (20260922100000_inbox_room_avatar.sql). Null for a DM, or a Room without one. */
+  room_avatar_url: string | null;
 };
 
 /** What the inbox row's kind-specific fields resolve to for display, from the current user's point of view. */
