@@ -394,7 +394,7 @@ the storage bucket, unattended. Verified directly — inserted a story
 backdated 25h, invoked the cleanup function, confirmed both the row and
 the actual storage object were gone (a raw `GET` against the storage API
 returned `404 NoSuchKey`), not just that the UI stopped showing it. See
-decision-log, 2026-09-02.
+decision-log, 2026-09-02. Full write-up: `docs/phase/phase07.md`.
 
 ---
 
@@ -412,7 +412,7 @@ Goal: users know when something happened without polling.
 
 **Exit condition:** every event type in the mock's `NOTIFICATIONS` array
 has a real trigger and a real push notification. ✅ See decision-log,
-2026-09-02.
+2026-09-02. Full write-up: `docs/phase/phase08.md`.
 
 ---
 
@@ -775,7 +775,7 @@ decision-log, 2026-09-10, for the full evidence behind each line below.
 feed/chat/notifications, no layout breakage) on the Galaxy A14 specifically,
 and every screen visually matches `app_reference/`'s design language.
 Verify on the same real device the rest of this project has been verified
-on, not just in a browser or emulator.
+on, not just in a browser or emulator. Full write-up: `docs/phase/bones.md`.
 
 ---
 
@@ -920,7 +920,7 @@ are expanded below to match what the stores actually check (see
       URL is part of the APK Beta Phase's download page
 
 **Exit condition:** you could pass an App Store UGC review today, not
-just "eventually". This is checked with three accounts at once (blocker,
+just "eventually". Full write-up: `docs/phase/phase09.md`. This is checked with three accounts at once (blocker,
 blocked and bystander) and with direct API calls, not only through the
 UI.
 
