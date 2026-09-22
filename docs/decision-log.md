@@ -7,6 +7,35 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-22 — CI was failing at `npm ci` for two weeks
+
+Every `mobile-ci` run from 2026-09-07 to 2026-09-22 failed at `npm ci`,
+so lint, typecheck and the React Compiler check never ran on GitHub in
+that time.
+
+**Cause:** `@napi-rs/wasm-runtime` (a WebAssembly-only optional
+dependency) has two peer dependencies, `@emnapi/core` and
+`@emnapi/runtime`. The npm on this machine (11.6.2) leaves them out of
+`package-lock.json`, but npm 10 and current npm 11 both require them, and
+`npm ci` refuses the lock file ("Missing: @emnapi/core@1.11.3 from lock
+file"). Reproduced exactly: npm 10 on Windows, and Node 24.21 / npm 11.19
+on Linux (CI's setup), both fail on the old lock file. A Node 24 switch
+alone didn't fix it, which is how the first theory (an npm 10 vs 11
+difference) was ruled out.
+
+**Why it kept coming back:** the fix on 2026-09-01 regenerated the lock
+with npm 10, and the next `npm install` here with npm 11.6.2 stripped the
+entries again. Tested: 11.6.2 removes them from a correct lock file.
+
+**Fix:** the lock was regenerated with npm 11.19. It adds exactly those
+two entries and changes 40 others' `peer` flags only, with no version
+changes. It was verified with `npm ci` under npm 10, 11.6.2 and 11.19 (Linux). CI
+now also runs Node 24, the same major as local development. It only
+stays fixed if the npm used locally is current, because 11.6.2 will
+strip the entries again on the next install.
+
+---
+
 ## 2026-09-22 — Push notifications: high priority, and why none arrived
 
 **Why none arrived:** the phone was offline. Wi-Fi was off and mobile

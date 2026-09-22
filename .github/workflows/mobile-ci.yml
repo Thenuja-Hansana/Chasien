@@ -21,11 +21,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Must match the npm major that writes package-lock.json locally
-          # (Node 24 / npm 11). Node 22's npm 10 rejects that lock file in
-          # `npm ci` ("Missing: @emnapi/core ... from lock file"), which
-          # failed every run from 2026-09-07 to 2026-09-22 before lint or
-          # typecheck ever ran.
+          # Same major as local development. `npm ci` here is strict about
+          # package-lock.json: a lock written by npm 11.6.x leaves out
+          # @napi-rs/wasm-runtime's peers (@emnapi/core, @emnapi/runtime),
+          # which npm 10 and current npm 11 both require, so every run from
+          # 2026-09-07 to 2026-09-22 failed at `npm ci` before lint or
+          # typecheck ran. If it fails with "Missing: ... from lock file",
+          # regenerate the lock with a current npm (see decision-log,
+          # 2026-09-22), not with the npm that wrote it.
           node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
