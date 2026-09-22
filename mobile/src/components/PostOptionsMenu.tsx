@@ -7,8 +7,8 @@ import { useTheme } from '@/hooks/use-theme';
 
 /**
  * The post overflow menu — "Hide" (any Room member, personal, doesn't
- * touch the post), "Block" (someone else's post: blocks its author, see
- * lib/blocks.ts) and "Delete"/"Remove" (the post's own author, or an
+ * touch the post), "Report" and "Block" (someone else's post: see
+ * lib/reports.ts and lib/blocks.ts) and "Delete"/"Remove" (the post's own author, or an
  * owner/admin/mod who outranks them — enforced server-side by delete_post,
  * this just hides the row otherwise).
  * A bottom sheet, not a small anchored dropdown: there's no popup-menu
@@ -32,6 +32,7 @@ export default function PostOptionsMenu({
   onRemoveTag,
   onTogglePin,
   onBlock,
+  onReport,
 }: {
   visible: boolean;
   canDelete: boolean;
@@ -50,6 +51,8 @@ export default function PostOptionsMenu({
   onRemoveTag?: () => void;
   onTogglePin?: () => void;
   onBlock?: () => void;
+  /** Someone else's post only — opens the report sheet (lib/reports.ts). */
+  onReport?: () => void;
 }) {
   const colors = useTheme();
   const insets = useSafeAreaInsets();
@@ -78,6 +81,13 @@ export default function PostOptionsMenu({
             <Pressable style={styles.row} onPress={onRemoveTag} accessibilityRole="button">
               <Icon name="youTab" size={19} color={colors.text} />
               <Text style={styles.rowText}>Remove tag</Text>
+            </Pressable>
+          )}
+
+          {onReport && (
+            <Pressable style={styles.row} onPress={onReport} accessibilityRole="button">
+              <Icon name="alertCircle" size={19} color={colors.error} />
+              <Text style={[styles.rowText, styles.destructiveText]}>Report post</Text>
             </Pressable>
           )}
 

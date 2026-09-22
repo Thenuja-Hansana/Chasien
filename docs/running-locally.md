@@ -204,3 +204,25 @@ Signup confirmation emails don't go to a real inbox locally — check
    isn't enough) recovers real memory since this project's only Java/
    Kotlin/Gradle files are the generated `android/` folder, never hand-
    edited directly.
+
+9. **`npx supabase` runs the newest CLI, and a new CLI brings new
+   Docker images** (hit 2026-09-21). Nothing pins the CLI version (there's
+   no `package.json` at the repo root), so after a CLI release, the first
+   `supabase start` that follows a `supabase stop` pulls fresh images for
+   every service. That's several GB, and it crawled over the phone
+   hotspot. The trigger was adding a new Edge Function: the edge runtime
+   returned 404 for it until the stack was stopped and started again;
+   restarting the one container wasn't enough. To keep the images you
+   already have:
+   - Write each service's current tag into
+     `supabase/.temp/<service>-version`. Get the tags from
+     `docker images | findstr supabase`. This folder is gitignored, so it's
+     per machine. Currently pinned: postgres `17.6.1.165`, rest `v16.1`,
+     gotrue `v2.196.0`, storage `v1.70.3`, realtime `v2.129.3`, studio
+     `2026.08.17-sha-0c1da8f`, pgmeta `v0.98.0`, edge-runtime `v1.74.3`,
+     logflare `1.50.4`.
+   - Start with `npx supabase start -x vector`. Vector (Studio's log
+     shipper, not needed by the app) has no pin file.
+   - `supabase stop` keeps the database volume unless you pass
+     `--no-backup`. Even so, a `pg_dump` from inside the
+     `supabase_db_chasien` container first is cheap insurance.

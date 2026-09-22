@@ -7,6 +7,155 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-22 — Phase 9, slice 3: reports reach an app admin, with evidence the server keeps
+
+Migrations `20260921120000_report_enum_values.sql` and
+`20260921120100_reports.sql`, a new `moderate` Edge Function,
+`lib/reports.ts`, one shared `ReportSheet`, and an app-admin Reports screen
+(`/admin/reports`). Report is offered on:
+- posts (the post menu and post detail)
+- comments
+- chat messages (on long-press) and the DM header
+- stories
+- profiles
+- Room Settings
+
+**Who reviews: an app admin, not the Room's mods.** The Room's owner may
+be the person reported, and Apple 1.2 asks the *developer* to act on
+reports. `app_admins` is a new table clients can't read or write at all.
+The only way to become an admin is SQL or Studio with the service role;
+there is deliberately no path in the app. It uses the same two-function
+pattern as blocks: `is_app_admin(user)` answers about anyone, so it isn't
+callable over the API, while `current_user_is_app_admin()` only answers
+about the caller.
+
+**Push plus an in-app screen, not email (chosen with the user).** The
+roadmap had sketched a webhook that emails an abuse inbox. Instead, each
+report writes a `report_filed` notification to every app admin through the
+existing pipeline (notifications → webhook → notify-activity → Expo
+Push), and tapping it opens the Reports screen. That needs no new service
+and no email provider. The notification has no actor, for two reasons: a
+push never names the reporter, and Slice 1's block-suppression trigger
+can't swallow a report because the admin had blocked the reporter
+(tested). Its `data` goes into the push payload, so it carries ids and the
+reason only, never the reported content.
+
+**The evidence is the server's.** A BEFORE INSERT SECURITY DEFINER
+trigger captures `content_snapshot` when a report is filed:
+- the text or caption, and the storage paths of any media
+- the responsible account and its handle (for a Room, its owner)
+- the Room's id and name
+
+Names are copied in rather than looked up at review time, because an
+admin usually isn't a member (so can't read an invite-only Room's name)
+and an author may delete their account before review. Clients still can't
+supply a snapshot or a status (the 2026-09-16 column grants), and the
+trigger forces `status = 'open'` as a second line of defence.
+
+**You can only report what you can see.** Target validation still runs as
+the reporter (SECURITY INVOKER). Another Room's post, or an invite-only
+Room you're not in, "does not exist". The snapshot trigger actually fires
+*before* validation, because Postgres runs triggers in name order. That is
+safe only because the snapshot never raises an error about the target's
+contents: when validation then refuses, the insert is aborted and the
+snapshot is thrown away. The migration's comment claimed the opposite
+order and was corrected while writing this entry; it now warns against
+adding such an error.
+
+**What a report is:**
+- A fixed list of reasons (spam, harassment, hate, sexual, violence,
+  self-harm, illegal, other), so the queue can be sorted.
+- Optional details, up to 1000 characters.
+- One *open* report per person per thing. Once it's been reviewed, they
+  can report it again.
+- Reporters can't delete their reports.
+- The one seed report moved to `other`, with its text moved to `details`.
+
+**Acting on a report:**
+- **Remove** uses Slice 2's removal functions. `can_remove_content()`
+  gains one clause, that an app admin may remove anything. `remove_message()`
+  lets an app admin remove a DM message, the one exception to "a DM has no
+  moderators". A removal is still logged against its Room, so that Room's
+  mods see it too.
+- **Suspend** goes through the new `moderate` Edge Function, because it
+  needs Supabase Auth's admin API. The function records the suspension in
+  `account_suspensions`, then bans the auth user, which stops sign-in and
+  token refresh. The row is written first and the ban second, and the row
+  is removed again if the ban fails. The other order could leave someone
+  banned with no record an admin could see, and so no way to lift the ban
+  from the app. Admins can't suspend themselves or each other.
+- **Dismiss**, through `resolve_report()`. A report can't be reopened.
+- **Unsuspend** is on the screen's Suspended tab, and is logged as
+  `unban_user`.
+
+Suspensions are a table only admins can read, not a column on `profiles`,
+because every signed-in user can read profiles.
+
+**Seeing reported media.** Storage policies only let a Room's members read
+its media, and the admin usually isn't one. `moderate` signs the media for
+10 minutes, but only paths from that report's own snapshot, never paths
+from the request, so it can't be used to sign arbitrary files.
+
+**A bug testing caught: the signed URL pointed inside Docker.** The
+function's `SUPABASE_URL` is whatever address it reaches the gateway by,
+and locally that's `http://kong:8000`, which no phone or browser can
+resolve. It now returns only the path and token, and the app prefixes its
+own Supabase URL. On the hosted project the two addresses would agree, so
+this only ever broke locally, but the fix is correct in both.
+
+**Verified:**
+- **42 direct-API checks on the database:**
+  - every way to forge a report: supplying a snapshot, a pre-dismissed
+    status, an unknown reason, over-long details, a duplicate
+  - reporting in another Room, an invite-only Room, or yourself, each
+    refused for the right reason
+  - who is notified, and what the notification carries
+  - an admin who blocked the reporter still gets the report
+  - who can read reports and suspensions; that nobody can make themselves
+    an admin; resolving
+  - an admin removing a post in a Room they're not in, and a DM message,
+    while DMs stay author-only for everyone else
+- **22 checks on `moderate`.** Suspension was only ever tried on a
+  throwaway account, so a crash couldn't leave a real account locked out.
+  The checks cover refusing no session, a non-admin, yourself and another
+  admin; the ban really stopping sign-in and refresh; the report being
+  marked actioned; logging; unsuspending; and a real uploaded image being
+  signed, served from the app's own URL, and refused to non-admins.
+- **34 UI checks in the app** (Expo web, a member and an admin): all six
+  report surfaces, "Also block", the duplicate-report message, the
+  non-admin guard, notification → Reports screen, remove, dismiss, the
+  "media no longer stored" state, suspend and its confirmation, the
+  Suspended tab and unsuspend, and the Resolved tab.
+- **Screenshots were reviewed by eye.** The report sheet's Done button had
+  shrunk to the size of its label, and every text check had passed
+  straight over it. The React Compiler check caught a `?.` inside a `try`
+  in ReportSheet.
+
+**Cleanup.** Each UI run backed up the rows "Also block" deletes and
+restored them afterwards. The push triggers were paused and confirmed back
+on. The final count check found six `new_story` notifications left by two
+small one-off test scripts; they were removed. None of their recipients
+has a push token, so nothing reached a device. Counts match the baseline.
+
+**Known limits:**
+- An access token the suspended person already holds keeps working until
+  it expires, up to an hour. The suspend confirmation says so.
+- Suspending doesn't remove the person's other content. The admin removes
+  what was reported, and anything else stays until removed item by item
+  (or until account deletion, Slice 6).
+- The hourly cleanup deletes an expired story's media, including media a
+  report points to. The caption and handle survive in the snapshot.
+  Keeping evidence copies would need its own bucket and retention rules.
+- A Room report can be dismissed, or the Room's owner suspended. A whole
+  Room can't be taken down yet.
+- Locally, the seed report was filed before the snapshot trigger existed,
+  so it shows "Author unknown". A fresh `db reset` captures it properly.
+- No app admin exists yet. One is added with
+  `insert into app_admins (user_id) values ('<uuid>')`, locally now and on
+  the hosted project in Phase 11.
+
+---
+
 ## 2026-09-21 — Phase 9, slice 2: moderation tools, one rank rule for every removal
 
 Migrations `20260921110000_moderation_enum_values.sql` and

@@ -22,6 +22,7 @@ import {
 } from '@/lib/notifications';
 import { acceptFriendRequest, removeFriendship } from '@/lib/friends';
 import { relativeTime } from '@/lib/posts';
+import { reasonLabel } from '@/lib/reports';
 import { respondToRequest } from '@/lib/rooms';
 
 /**
@@ -72,6 +73,12 @@ function textFor(n: AppNotification): { line: string; highlight?: string } {
       return { line: `${n.actorName} sent you a friend request` };
     case 'friend_accept':
       return { line: `${n.actorName} accepted your friend request` };
+    // App admins only. No actor on purpose — the reporter isn't named here.
+    case 'report_filed': {
+      const reason = typeof n.data.reason === 'string' ? reasonLabel(n.data.reason) : 'A report';
+      const what = typeof n.data.targetType === 'string' ? n.data.targetType : 'something';
+      return { line: `New report to review: ${reason.toLowerCase()} (a ${what})` };
+    }
     default:
       return { line: 'New activity' };
   }
@@ -125,7 +132,9 @@ export default function Notifications() {
   function openNotification(n: AppNotification) {
     if (!n.read_at) markNotificationRead(n.id).catch(() => {});
     const postId = typeof n.data.postId === 'string' ? n.data.postId : undefined;
-    if (n.type === 'new_story' && n.roomSlug && n.actor_id) {
+    if (n.type === 'report_filed') {
+      router.push('/admin/reports');
+    } else if (n.type === 'new_story' && n.roomSlug && n.actor_id) {
       router.push({ pathname: '/c/[communityId]/story', params: { communityId: n.roomSlug, authorId: n.actor_id } });
     } else if (n.roomSlug && postId) {
       router.push({ pathname: '/c/[communityId]/post/[postId]', params: { communityId: n.roomSlug, postId } });

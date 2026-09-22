@@ -794,15 +794,25 @@ directions", "mod actions", "abuse contact" and "account deletion". They
 are expanded below to match what the stores actually check (see
 `store-compliance.md`):
 
-- [ ] Report flow for posts, comments, chat messages, stories, users, and
+- [x] Report flow for posts, comments, chat messages, stories, users, and
       whole Rooms (a Room can itself be the problem). The server captures
       `content_snapshot` itself, because the reported content may be
       deleted before anyone reviews it. The client can't supply the
       snapshot. This was an open item from Phase 10's column audit
-- [ ] Reports reach **you**, not just the Room's mods, because the Room
+      **Done 2026-09-22** (`20260921120000`/`20260921120100`): one shared
+      report sheet on all six; a fixed list of reasons plus optional
+      details; the snapshot captured by a trigger; and nobody can report
+      what they can't see. Verified with 42 direct-API checks, 22 on the
+      `moderate` function and 34 UI checks. See decision-log, 2026-09-22
+- [x] Reports reach **you**, not just the Room's mods, because the Room
       owner may be the person being reported. For example: Database
       Webhook → Edge Function → email to the abuse inbox, the same shape
       as the notification pipeline
+      **Done 2026-09-22**, as push plus an in-app Reports screen rather
+      than email (chosen with the user). Each report notifies every *app
+      admin*, a role above every Room that only SQL can grant. Still to
+      do: make your own account an app admin (locally now, hosted in
+      Phase 11)
 - [ ] A fast way to act on a report: remove the content, and suspend the
       account across the whole app (a Supabase Auth ban, not just removal
       from one Room). Apple asks for "timely responses". Its reviewers
@@ -810,6 +820,11 @@ are expanded below to match what the stores actually check (see
       removing the content and ejecting the user who posted it. At this
       scale, a written Studio/SQL procedure is acceptable if it really is
       fast
+      **Done 2026-09-22**: Remove, Suspend and Dismiss on each report, in
+      the app. Suspension is a Supabase Auth ban through the new `moderate`
+      Edge Function, and a session already open lasts up to an hour. Left
+      for later: suspending doesn't remove the person's other content, and
+      a whole Room can't be taken down
 - [x] Block flow, in both directions and on every surface: feed,
       comments, stories, chat, search, Discover, profiles, @mentions and
       tags, and notifications.
@@ -904,12 +919,11 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
         `polls`/`poll_options`/`post_media`/`events` that skip
         `create_post`'s validation (`post_media` is now column-granted with
         no UPDATE, and its framing columns are CHECK-constrained — see
-        `20260917100000` — but a direct INSERT is still possible); server-side `content_snapshot` capture
-        when Phase 9 builds reporting; an `edited_at` trigger alongside any
+        `20260917100000` — but a direct INSERT is still possible); an `edited_at` trigger alongside any
         future edit feature. Not audited: business rules outside column
         writes (e.g. starting a DM with someone who blocked you). That
-        case now belongs to Phase 9's block item, and `content_snapshot`
-        to its report item
+        case now belongs to Phase 9's block item. (`content_snapshot`
+        closed 2026-09-22: a trigger captures it when a report is filed)
   - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
         after Phase 9's features
   - [ ] Between blocked people, `profiles` is still fully readable through

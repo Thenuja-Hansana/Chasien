@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import Avatar from '@/components/Avatar';
 import BottomSheet, { BottomSheetFlatList } from '@/components/BottomSheet';
 import ConfirmModal from '@/components/ConfirmModal';
+import ReportSheet, { type ReportTarget } from '@/components/ReportSheet';
 import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -52,6 +53,8 @@ const CommentsSheet = forwardRef<
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Comment | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [blockedViaReport, setBlockedViaReport] = useState(false);
 
   // A different post (or reopening) starts clean.
   const [shownPostId, setShownPostId] = useState(postId);
@@ -167,6 +170,25 @@ const CommentsSheet = forwardRef<
                       <Text style={styles.reply}>{item.comment.authorId === viewerId ? 'Delete' : 'Remove'}</Text>
                     </Pressable>
                   )}
+                  {item.comment.authorId !== viewerId && (
+                    <Pressable
+                      onPress={() =>
+                        setReportTarget({
+                          type: 'comment',
+                          id: item.comment.id,
+                          noun: 'comment',
+                          blockUser: item.comment.authorId
+                            ? { id: item.comment.authorId, handle: item.comment.authorHandle }
+                            : undefined,
+                        })
+                      }
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Report comment"
+                    >
+                      <Text style={styles.reply}>Report</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             </View>
@@ -176,6 +198,21 @@ const CommentsSheet = forwardRef<
 
       {error && <Text style={styles.error}>{error}</Text>}
 
+      <ReportSheet
+        target={reportTarget}
+        onBlocked={() => setBlockedViaReport(true)}
+        onClose={() => {
+          setReportTarget(null);
+          // Blocking hides that person's comments server-side; refetch once
+          // the sheet is closed rather than under it.
+          if (blockedViaReport && postId) {
+            setBlockedViaReport(false);
+            fetchComments(postId)
+              .then(setComments)
+              .catch(() => {});
+          }
+        }}
+      />
       <ConfirmModal
         visible={removing !== null}
         title={removing?.authorId === viewerId ? 'Delete this comment?' : 'Remove this comment?'}

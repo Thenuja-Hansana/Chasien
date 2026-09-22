@@ -33,7 +33,9 @@ export type NotificationType =
   | 'message'
   | 'friend_request'
   | 'friend_accept'
-  | 'tag';
+  | 'tag'
+  /** Phase 9: an app admin's alert for a new report (20260921120100_reports.sql). */
+  | 'report_filed';
 
 export type AppNotification = {
   id: string;

@@ -15,7 +15,7 @@ type WebhookPayload = {
   record: {
     id: string;
     user_id: string;
-    type: 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'new_post' | 'new_story' | 'message' | 'tag';
+    type: 'reply' | 'like' | 'mention' | 'join_request' | 'pinned_post' | 'new_post' | 'new_story' | 'message' | 'tag' | 'report_filed';
     actor_id: string | null;
     room_id: string | null;
     data: Record<string, unknown>;
@@ -46,9 +46,33 @@ function titleFor(type: string, actorName: string, roomName: string, likerCount:
       return `${actorName} posted in ${roomName}`;
     case 'new_story':
       return `${actorName} added a story in ${roomName}`;
+    // Phase 9: an app admin's alert for a new report
+    // (20260921120100_reports.sql). No actor on purpose — the reporter
+    // isn't named in a push.
+    case 'report_filed':
+      return 'New report to review';
     default:
       return 'New activity';
   }
+}
+
+// The report's reason and what kind of thing was reported — the only
+// report details a push carries. The content itself stays in the app,
+// behind the admin-only Reports screen.
+const REASON_LABEL: Record<string, string> = {
+  spam: 'Spam',
+  harassment: 'Harassment or bullying',
+  hate: 'Hate speech',
+  sexual: 'Nudity or sexual content',
+  violence: 'Violence or threats',
+  self_harm: 'Self-harm',
+  illegal: 'Something illegal',
+  other: 'Something else',
+};
+
+function reportBody(data: Record<string, unknown>) {
+  const reason = REASON_LABEL[String(data.reason)] ?? 'A report';
+  return `${reason} · a ${String(data.targetType ?? 'post')}`;
 }
 
 Deno.serve(async (req) => {
@@ -79,7 +103,12 @@ Deno.serve(async (req) => {
   const messages = tokens.map((t) => ({
     to: t.token,
     title,
-    body: record.type === 'pinned_post' ? '' : room?.name ?? '',
+    body:
+      record.type === 'report_filed'
+        ? reportBody(record.data)
+        : record.type === 'pinned_post'
+          ? ''
+          : (room?.name ?? ''),
     data: { notificationType: record.type, ...record.data },
   }));
 

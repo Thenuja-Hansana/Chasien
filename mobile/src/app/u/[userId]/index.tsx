@@ -9,6 +9,7 @@ import BlockConfirmModal from '@/components/BlockConfirmModal';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
 import OptionsSheet from '@/components/OptionsSheet';
+import ReportSheet from '@/components/ReportSheet';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
@@ -49,6 +50,8 @@ export default function ProfileScreen() {
   const [blockStatus, setBlockStatus] = useState<BlockStatus>('none');
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [blockedViaReport, setBlockedViaReport] = useState(false);
 
   const myId = session?.user.id;
   const isOwnProfile = userId === myId;
@@ -448,6 +451,16 @@ export default function ProfileScreen() {
         visible={optionsOpen}
         onClose={() => setOptionsOpen(false)}
         options={[
+          {
+            key: 'report',
+            label: `Report @${profile !== 'loading' ? (profile?.handle ?? '') : ''}`,
+            icon: 'alertCircle',
+            destructive: true,
+            onPress: () => {
+              setOptionsOpen(false);
+              setReporting(true);
+            },
+          },
           blockStatus === 'blocking'
             ? {
                 key: 'unblock',
@@ -469,6 +482,29 @@ export default function ProfileScreen() {
                 },
               },
         ]}
+      />
+      <ReportSheet
+        target={
+          reporting && userId && profile !== 'loading' && profile
+            ? {
+                type: 'user',
+                id: userId,
+                noun: `@${profile.handle}`,
+                blockUser: blockStatus === 'blocking' ? undefined : { id: userId, handle: profile.handle },
+              }
+            : null
+        }
+        onBlocked={() => setBlockedViaReport(true)}
+        onClose={() => {
+          setReporting(false);
+          // The sheet already blocked them; just switch to the blocked state.
+          if (blockedViaReport && userId) {
+            setBlockedViaReport(false);
+            setBlockStatus('blocking');
+            setFriendshipStatus('none');
+            fetchFriendCount(userId).then(setFriendCount).catch(() => {});
+          }
+        }}
       />
       <BlockConfirmModal
         visible={confirmingBlock}

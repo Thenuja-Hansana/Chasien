@@ -11,6 +11,7 @@ import Icon from '@/components/Icon';
 import PollCard from '@/components/PollCard';
 import PostMediaCarousel, { FEED_MEDIA_MAX_HEIGHT_FRACTION } from '@/components/PostMediaCarousel';
 import PostOptionsMenu from '@/components/PostOptionsMenu';
+import ReportSheet from '@/components/ReportSheet';
 import { PostTagsLine, PostTagsOverlay } from '@/components/PostTags';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -79,6 +80,10 @@ export default function PostCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  // "Also block" in the report sheet: the feed drops this author's posts
+  // (this card included), so that waits until the sheet is closed.
+  const [blockedViaReport, setBlockedViaReport] = useState(false);
   const canBlockAuthor = post.authorId !== null && post.authorId !== viewerId;
 
   // A quick pop on the heart itself when a like lands, on top of the
@@ -225,6 +230,14 @@ export default function PostCard({
         canPin={viewerCanModerate}
         pinned={post.pinned}
         blockHandle={canBlockAuthor ? post.authorHandle : undefined}
+        onReport={
+          isOwnPost
+            ? undefined
+            : () => {
+                setMenuOpen(false);
+                setReporting(true);
+              }
+        }
         onBlock={() => {
           setMenuOpen(false);
           setConfirmingBlock(true);
@@ -260,6 +273,26 @@ export default function PostCard({
         onConfirm={() => {
           setConfirmingDelete(false);
           onDelete();
+        }}
+      />
+      <ReportSheet
+        target={
+          reporting
+            ? {
+                type: 'post',
+                id: post.id,
+                noun: 'post',
+                blockUser: canBlockAuthor && post.authorId ? { id: post.authorId, handle: post.authorHandle } : undefined,
+              }
+            : null
+        }
+        onBlocked={() => setBlockedViaReport(true)}
+        onClose={() => {
+          setReporting(false);
+          if (blockedViaReport) {
+            setBlockedViaReport(false);
+            onBlockAuthor();
+          }
         }}
       />
       <BlockConfirmModal

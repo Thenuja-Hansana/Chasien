@@ -151,7 +151,10 @@ insert into stories (room_id, author_id, media_url, caption) values
 
 -- ── trust & safety smoke test ──────────────────────────────────────────
 -- Proves validate_polymorphic_content_target and content_snapshot both
--- work end to end, not just that the migration applied cleanly.
+-- work end to end, not just that the migration applied cleanly. Since
+-- 20260921120100_reports.sql the snapshot is captured by a trigger (the
+-- one supplied here is overwritten) and `reason` must be one of the fixed
+-- categories, with free text going in `details`.
 
-insert into reports (reporter_id, target_type, target_id, reason, content_snapshot) values
-  ('44444444-4444-4444-4444-444444444444', 'post', 'c0000000-0000-0000-0000-000000000001', 'test report — not real, seed data', jsonb_build_object('text', 'Finally topped the blue overhang. Fourth week on it. Beta in the comments if anyone wants it.'));
+insert into reports (reporter_id, target_type, target_id, reason, details, content_snapshot) values
+  ('44444444-4444-4444-4444-444444444444', 'post', 'c0000000-0000-0000-0000-000000000001', 'other', 'test report — not real, seed data', jsonb_build_object('text', 'Finally topped the blue overhang. Fourth week on it. Beta in the comments if anyone wants it.'));

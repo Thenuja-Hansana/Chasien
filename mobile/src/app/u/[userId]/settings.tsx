@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState, type ComponentProps } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState, type ComponentProps } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +8,7 @@ import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { fetchAmIAppAdmin } from '@/lib/reports';
 
 type IconName = ComponentProps<typeof Icon>['name'];
 type Row = { icon: IconName; label: string; value?: string; subtitle?: string };
@@ -112,6 +113,16 @@ export default function SettingsAndActivity() {
   const { signOut } = useAuth();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [query, setQuery] = useState('');
+  // App admins (Phase 9) get a Reports entry; nobody else sees it. The
+  // Reports screen and everything behind it are enforced server-side, so
+  // this only decides whether to show the way in.
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAmIAppAdmin().then(setIsAdmin).catch(() => {});
+    }, []),
+  );
 
   const filteredSections = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -180,6 +191,24 @@ export default function SettingsAndActivity() {
             <Icon name="chevronRight" size={18} color={colors.neutral[400]} strokeWidth={2.2} />
           </Pressable>
         </View>
+
+        {isAdmin && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Admin</Text>
+            <Pressable style={styles.accountCentreCard} onPress={() => router.push('/admin/reports')} accessibilityRole="button">
+              <View style={styles.accountCentreIcon}>
+                <Icon name="shield" size={24} color={colors.text} strokeWidth={1.8} />
+              </View>
+              <View style={styles.rowTextWrap}>
+                <Text style={styles.accountCentreLabel}>Reports</Text>
+                <Text style={styles.accountCentreSubtitle} numberOfLines={2}>
+                  Review reports and suspended accounts
+                </Text>
+              </View>
+              <Icon name="chevronRight" size={18} color={colors.neutral[400]} strokeWidth={2.2} />
+            </Pressable>
+          </View>
+        )}
 
         {filteredSections.map((section) => (
           <View key={section.title} style={styles.section}>

@@ -71,6 +71,21 @@ user load, real revenue) to spend money.
   only) and profiles (readable by everyone, because names appear wherever
   Room members are shown). `blocked_pair()` isn't callable over the API, so
   nobody can probe whether two *other* people have blocked each other.
+- **Reports go to app admins, who sit above every Room** (since
+  2026-09-22). `app_admins` is written only with the service role; clients
+  can't even read it, and `current_user_is_app_admin()` answers only about
+  the caller.
+  - A report's `content_snapshot` is captured by a trigger when it's
+    filed, never by the client.
+  - Target validation runs as the reporter, so nobody can report what
+    they can't see.
+  - App admins can remove content in any Room: `can_remove_content()`
+    includes them.
+  - They suspend accounts through the `moderate` Edge Function, which
+    applies a Supabase Auth ban and writes an `account_suspensions` row
+    that only admins can read.
+  - The same function signs a report's media for review, using only the
+    paths in that report's snapshot.
 - **No client edits of posts, comments or messages yet.** When editing
   ships, grant UPDATE on the content column together with a trigger that
   stamps `edited_at`, so edits can't be silent.

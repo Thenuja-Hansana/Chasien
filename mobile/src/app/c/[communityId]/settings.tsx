@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import ReportSheet from '@/components/ReportSheet';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
@@ -85,6 +86,7 @@ export default function CommunitySettings() {
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [manageTarget, setManageTarget] = useState<RoomMember | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [reportingRoom, setReportingRoom] = useState(false);
 
   const userId = session?.user.id;
 
@@ -229,8 +231,15 @@ export default function CommunitySettings() {
           <Pressable style={styles.leaveRow} onPress={handleLeave} disabled={leaving}>
             {leaving ? <ActivityIndicator color={colors.accent.DEFAULT} /> : <Text style={styles.leaveText}>Leave Room</Text>}
           </Pressable>
+          <Pressable style={styles.reportRow} onPress={() => setReportingRoom(true)} accessibilityRole="button">
+            <Text style={styles.reportText}>Report this Room</Text>
+          </Pressable>
           {error && <Text style={styles.error}>{error}</Text>}
         </ScrollView>
+        <ReportSheet
+          target={reportingRoom ? { type: 'room', id: currentRoom.id, noun: 'this Room' } : null}
+          onClose={() => setReportingRoom(false)}
+        />
       </SafeAreaView>
     );
   }
@@ -617,9 +626,19 @@ export default function CommunitySettings() {
         <Pressable style={styles.leaveRow} onPress={handleLeave} disabled={leaving}>
           {leaving ? <ActivityIndicator color={colors.accent.DEFAULT} /> : <Text style={styles.leaveText}>Leave Room</Text>}
         </Pressable>
+        {myRole !== 'owner' && (
+          <Pressable style={styles.reportRow} onPress={() => setReportingRoom(true)} accessibilityRole="button">
+            <Text style={styles.reportText}>Report this Room</Text>
+          </Pressable>
+        )}
 
         {error && <Text style={styles.error}>{error}</Text>}
       </ScrollView>
+
+      <ReportSheet
+        target={reportingRoom ? { type: 'room', id: currentRoom.id, noun: 'this Room' } : null}
+        onClose={() => setReportingRoom(false)}
+      />
 
       <ManageMemberSheet
         member={manageTarget}
@@ -1092,6 +1111,19 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 13,
     color: colors.accent.DEFAULT,
     marginTop: Spacing[4],
+  },
+  // Directly under Leave Room, sharing its divider rhythm.
+  reportRow: {
+    paddingVertical: Spacing[4],
+    borderTopWidth: 1,
+    borderColor: colors.divider,
+    alignItems: 'center',
+  },
+  reportText: {
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.error,
   },
   leaveRow: {
     marginTop: Spacing[6],

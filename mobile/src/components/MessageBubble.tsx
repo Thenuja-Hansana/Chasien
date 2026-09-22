@@ -63,9 +63,10 @@ export default function MessageBubble({
   onReact: (emoji: string) => void;
   onPress: () => void;
   /**
-   * When set, long-press opens the caller's options (Like, Delete, Remove,
-   * Mute) instead of reacting ❤️ straight away — only for messages the
-   * viewer can do more with (their own, or one they moderate).
+   * When set, long-press opens the caller's options instead of reacting ❤️
+   * straight away. The chat screen always sets it now (Phase 9): every
+   * message has at least Like plus Report or Delete, and mods get Remove
+   * and Mute. Without it, long-press is still the instant ❤️.
    */
   onLongPress?: () => void;
 }) {

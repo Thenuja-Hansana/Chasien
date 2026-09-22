@@ -22,6 +22,7 @@ import PollCard from '@/components/PollCard';
 import PostCardSkeleton from '@/components/PostCardSkeleton';
 import PostMediaCarousel from '@/components/PostMediaCarousel';
 import PostOptionsMenu from '@/components/PostOptionsMenu';
+import ReportSheet, { type ReportTarget } from '@/components/ReportSheet';
 import { PostTagsLine, PostTagsOverlay } from '@/components/PostTags';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
@@ -76,6 +77,9 @@ export default function PostDetail() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingBlock, setConfirmingBlock] = useState(false);
   const [removingComment, setRemovingComment] = useState<Comment | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  /** Someone blocked from the report sheet; acted on once it closes. */
+  const [blockedViaReport, setBlockedViaReport] = useState<string | null>(null);
 
   const userId = session?.user.id;
 
@@ -185,6 +189,15 @@ export default function PostDetail() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not block that person.');
     }
+  }
+
+  function commentReportTarget(comment: Comment): ReportTarget {
+    return {
+      type: 'comment',
+      id: comment.id,
+      noun: 'comment',
+      blockUser: comment.authorId ? { id: comment.authorId, handle: comment.authorHandle } : undefined,
+    };
   }
 
   // Your own comment, or — for a mod — someone else's. The server refuses a
@@ -394,6 +407,7 @@ export default function PostDetail() {
                       onReply={() => setReplyTo(comment)}
                       removeLabel={comment.authorId === userId ? 'Delete' : isModerator ? 'Remove' : undefined}
                       onRemove={() => setRemovingComment(comment)}
+                      onReport={comment.authorId === userId ? undefined : () => setReportTarget(commentReportTarget(comment))}
                     />
                     {(repliesByParent.get(comment.id) ?? []).map((reply) => (
                       <View key={reply.id} style={styles.replyIndent}>
@@ -402,6 +416,7 @@ export default function PostDetail() {
                           isReply
                           removeLabel={reply.authorId === userId ? 'Delete' : isModerator ? 'Remove' : undefined}
                           onRemove={() => setRemovingComment(reply)}
+                          onReport={reply.authorId === userId ? undefined : () => setReportTarget(commentReportTarget(reply))}
                         />
                       </View>
                     ))}
@@ -456,6 +471,19 @@ export default function PostDetail() {
         deleteLabel={post.authorId === userId ? 'Delete post' : 'Remove post'}
         canRemoveTag={post.tags.some((t) => t.userId === userId)}
         blockHandle={post.authorId && post.authorId !== userId ? post.authorHandle : undefined}
+        onReport={
+          post.authorId === userId
+            ? undefined
+            : () => {
+                setMenuOpen(false);
+                setReportTarget({
+                  type: 'post',
+                  id: post.id,
+                  noun: 'post',
+                  blockUser: post.authorId ? { id: post.authorId, handle: post.authorHandle } : undefined,
+                });
+              }
+        }
         onBlock={() => {
           setMenuOpen(false);
           setConfirmingBlock(true);
@@ -487,6 +515,19 @@ export default function PostDetail() {
         onConfirm={() => {
           setConfirmingDelete(false);
           handleDelete();
+        }}
+      />
+      <ReportSheet
+        target={reportTarget}
+        onBlocked={setBlockedViaReport}
+        onClose={() => {
+          setReportTarget(null);
+          const blocked = blockedViaReport;
+          setBlockedViaReport(null);
+          // Blocking the post's author hides the post itself, like Block
+          // from the menu does; blocking a commenter just needs a refetch.
+          if (blocked && blocked === post.authorId) router.back();
+          else if (blocked) load();
         }}
       />
       <ConfirmModal
@@ -524,6 +565,7 @@ function CommentRow({
   onReply,
   removeLabel,
   onRemove,
+  onReport,
 }: {
   comment: Comment;
   isReply?: boolean;
@@ -531,6 +573,8 @@ function CommentRow({
   /** "Delete" on your own comment, "Remove" for a mod; omitted when neither applies. */
   removeLabel?: 'Delete' | 'Remove';
   onRemove?: () => void;
+  /** Someone else's comment — opens the report sheet. */
+  onReport?: () => void;
 }) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -571,6 +615,11 @@ function CommentRow({
           {removeLabel && onRemove && (
             <Pressable onPress={onRemove} hitSlop={6} accessibilityRole="button" accessibilityLabel={`${removeLabel} comment`}>
               <Text style={styles.replyAction}>{removeLabel}</Text>
+            </Pressable>
+          )}
+          {onReport && (
+            <Pressable onPress={onReport} hitSlop={6} accessibilityRole="button" accessibilityLabel="Report comment">
+              <Text style={styles.replyAction}>Report</Text>
             </Pressable>
           )}
         </View>

@@ -10,6 +10,7 @@ import Avatar from '@/components/Avatar';
 import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
 import OptionsSheet from '@/components/OptionsSheet';
+import ReportSheet from '@/components/ReportSheet';
 import { Fonts, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
@@ -74,6 +75,9 @@ export default function StoryViewer() {
   const [canModerate, setCanModerate] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  /** Blocked from the report sheet; their stories leave the viewer once it closes. */
+  const [blockedViaReport, setBlockedViaReport] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Created once in state rather than a ref, as Skeleton.tsx's is: the
   // progress bar reads this during render for its scaleX, and reading
@@ -166,7 +170,7 @@ export default function StoryViewer() {
 
   const currentStoryId = groups[authorIndex]?.[1][storyIndex]?.id;
   const currentStoryKind = groups[authorIndex]?.[1][storyIndex]?.kind;
-  const menuOpen = optionsOpen || confirmingRemove;
+  const menuOpen = optionsOpen || confirmingRemove || reporting;
 
   // The latest `next`, so the auto-advance effect below doesn't depend on
   // it. `next` takes a new identity every time the story index moves, so
@@ -275,7 +279,7 @@ export default function StoryViewer() {
               {roomName} · {relativeTime(story.created_at)}
             </Text>
           </View>
-          {(story.author_id === userId || canModerate) && (
+          {!!userId && (
             <Pressable onPress={() => setOptionsOpen(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Story options">
               <Icon name="dotsH" size={21} color="rgba(242,230,212,.9)" />
             </Pressable>
@@ -302,17 +306,59 @@ export default function StoryViewer() {
         visible={optionsOpen}
         onClose={() => setOptionsOpen(false)}
         options={[
-          {
-            key: 'remove',
-            label: story.author_id === userId ? 'Delete story' : 'Remove story',
-            icon: 'trash',
-            destructive: true,
-            onPress: () => {
-              setOptionsOpen(false);
-              setConfirmingRemove(true);
-            },
-          },
+          ...(story.author_id !== userId
+            ? [
+                {
+                  key: 'report',
+                  label: 'Report story',
+                  icon: 'alertCircle' as const,
+                  destructive: true,
+                  onPress: () => {
+                    setOptionsOpen(false);
+                    setReporting(true);
+                  },
+                },
+              ]
+            : []),
+          ...(story.author_id === userId || canModerate
+            ? [
+                {
+                  key: 'remove',
+                  label: story.author_id === userId ? 'Delete story' : 'Remove story',
+                  icon: 'trash' as const,
+                  destructive: true,
+                  onPress: () => {
+                    setOptionsOpen(false);
+                    setConfirmingRemove(true);
+                  },
+                },
+              ]
+            : []),
         ]}
+      />
+      <ReportSheet
+        target={
+          reporting
+            ? {
+                type: 'story',
+                id: story.id,
+                noun: 'story',
+                blockUser: story.author_id ? { id: story.author_id, handle: story.authorHandle } : undefined,
+              }
+            : null
+        }
+        onBlocked={setBlockedViaReport}
+        onClose={() => {
+          setReporting(false);
+          const blocked = blockedViaReport;
+          setBlockedViaReport(null);
+          if (!blocked) return;
+          // The server now hides this author's stories from the viewer; drop
+          // them here too, and leave if nothing's left to show.
+          const remaining = (stories ?? []).filter((s) => s.author_id !== blocked);
+          if (remaining.length === 0) goHome();
+          else setStories(remaining);
+        }}
       />
       <ConfirmModal
         visible={confirmingRemove}

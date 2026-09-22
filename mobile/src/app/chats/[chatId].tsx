@@ -10,6 +10,7 @@ import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
 import MessageBubble from '@/components/MessageBubble';
 import OptionsSheet from '@/components/OptionsSheet';
+import ReportSheet, { type ReportTarget } from '@/components/ReportSheet';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
@@ -76,6 +77,9 @@ export default function ChatView() {
   /** The message whose long-press options are open. */
   const [actionsFor, setActionsFor] = useState<Message | null>(null);
   const [removingMessage, setRemovingMessage] = useState<Message | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  /** Blocked from the report sheet; refetched once it closes. */
+  const [blockedViaReport, setBlockedViaReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -409,7 +413,7 @@ export default function ChatView() {
                   voiceUrl={item.voice_url ? (mediaUrls.get(item.voice_url) ?? null) : null}
                   showRead={showRead}
                   onReact={(emoji) => handleReact(item, emoji)}
-                  onLongPress={mine || (summary.kind === 'room_channel' && isChatMod) ? () => setActionsFor(item) : undefined}
+                  onLongPress={() => setActionsFor(item)}
                   onPress={() => setReplyTo(item)}
                 />
               </View>
@@ -530,6 +534,28 @@ export default function ChatView() {
                   },
                 ]
               : []),
+            ...(!mine
+              ? [
+                  {
+                    key: 'report',
+                    label: 'Report message',
+                    icon: 'alertCircle' as const,
+                    destructive: true,
+                    onPress: () => {
+                      setActionsFor(null);
+                      setReportTarget({
+                        type: 'message',
+                        id: target.id,
+                        noun: 'message',
+                        blockUser:
+                          target.author_id && target.author
+                            ? { id: target.author_id, handle: target.author.handle }
+                            : undefined,
+                      });
+                    },
+                  },
+                ]
+              : []),
             ...(!mine && summary.kind === 'room_channel' && isChatMod
               ? [
                   {
@@ -561,6 +587,17 @@ export default function ChatView() {
           ];
         })()}
       />
+      <ReportSheet
+        target={reportTarget}
+        onBlocked={() => setBlockedViaReport(true)}
+        onClose={() => {
+          setReportTarget(null);
+          if (blockedViaReport) {
+            setBlockedViaReport(false);
+            load();
+          }
+        }}
+      />
       <ConfirmModal
         visible={removingMessage !== null}
         title={removingMessage?.author_id === userId ? 'Delete this message?' : 'Remove this message?'}
@@ -584,6 +621,23 @@ export default function ChatView() {
             visible={optionsOpen}
             onClose={() => setOptionsOpen(false)}
             options={[
+              {
+                key: 'report',
+                label: `Report @${subtitle ?? ''}`,
+                icon: 'alertCircle',
+                destructive: true,
+                onPress: () => {
+                  setOptionsOpen(false);
+                  if (summary.otherUserId) {
+                    setReportTarget({
+                      type: 'user',
+                      id: summary.otherUserId,
+                      noun: `@${subtitle ?? ''}`,
+                      blockUser: blockStatus === 'blocking' ? undefined : { id: summary.otherUserId, handle: subtitle ?? '' },
+                    });
+                  }
+                },
+              },
               blockStatus === 'blocking'
                 ? {
                     key: 'unblock',
