@@ -1034,7 +1034,10 @@ on this laptop.
       Play wants an AAB, not an APK. Set the `EXPO_PUBLIC_*` values as
       EAS environment variables pointing at the hosted project. The build
       won't see `.env.local`: it's gitignored, and it points at
-      `localhost` anyway
+      `localhost` anyway. Pin `"node": "24.x"` (or newer) in each build
+      profile. `package-lock.json` is written by npm 11, and an older
+      Node's npm 10 refuses it in `npm ci`, which is exactly what broke CI
+      from 2026-09-07 to 2026-09-22
 - [ ] Pick one release signing key and keep it forever. Today
       `android/app/build.gradle` signs release builds with the **debug
       keystore**. Every future version has to be signed with the key

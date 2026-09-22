@@ -21,7 +21,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Must match the npm major that writes package-lock.json locally
+          # (Node 24 / npm 11). Node 22's npm 10 rejects that lock file in
+          # `npm ci` ("Missing: @emnapi/core ... from lock file"), which
+          # failed every run from 2026-09-07 to 2026-09-22 before lint or
+          # typecheck ever ran.
+          node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
