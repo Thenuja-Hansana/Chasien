@@ -865,14 +865,20 @@ are expanded below to match what the stores actually check (see
       its actual reason, and 28 UI checks. See decision-log, 2026-09-21.
       Left for later: a removed chat message stays on other viewers' screens
       until they reopen the chat
-- [ ] Write the community guidelines, including an explicit
+- [x] Write the community guidelines, including an explicit
       zero-tolerance line for objectionable content and abusive users.
       Link them from the signup checkbox that already says people accept
       them, and from settings. Apple expects UGC apps to have users agree
       to terms like these
-- [ ] Publish an abuse contact where people can find it: in the app's
+      **Done 2026-09-22:** `app/guidelines.tsx`, readable signed in or
+      out, linked from signup and Settings. See decision-log, 2026-09-22
+- [x] Publish an abuse contact where people can find it: in the app's
       settings, and on the download page and store listing (even just an
       email, at solo-dev scale)
+      **Done in the app 2026-09-22:** `info.chasien@gmail.com`
+      (`constants/contact.ts`), shown in Settings, the guidelines, and
+      the suspended-account login message. The download page and store
+      listing carry it through their own items (APK Beta Phase, Phase 12)
 - [ ] In-app account deletion: actual deletion, not deactivation.
       - Decide per table what happens to the user's content: delete it,
         or keep it and show "Deleted user", which the client already
@@ -1110,7 +1116,9 @@ and the APK Beta Phase's testers carry over), **then Apple** ($99 a year).
       A social app with user content and chat rates higher than a plain
       app. Keep it consistent with the "16 or older" that signup already
       asks people to confirm
-- [ ] App icon, screenshots, store listing copy
+- [ ] App icon, screenshots, store listing copy. Use
+      `info.chasien@gmail.com` as the listing's contact email, the same
+      address the app publishes (`constants/contact.ts`)
 - [ ] Google Play Console ($25 one-time)
 - [ ] **Google Play closed test.** New personal developer accounts have
       had to run a closed test before getting production access: at

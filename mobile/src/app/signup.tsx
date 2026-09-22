@@ -211,6 +211,17 @@ export default function SignUp() {
               </View>
               <Text style={styles.agreeText}>I&apos;m 16 or older and accept the community guidelines.</Text>
             </Pressable>
+            {/* Its own link rather than words inside the checkbox: the whole
+                row above is one "checkbox" to a screen reader, and on web a
+                tap on a link nested in it would tick the box too. */}
+            <Pressable
+              style={styles.guidelinesLink}
+              onPress={() => router.push('/guidelines')}
+              hitSlop={6}
+              accessibilityRole="link"
+            >
+              <Text style={styles.guidelinesLinkText}>Read the community guidelines</Text>
+            </Pressable>
 
             {error && <Text style={styles.error}>{error}</Text>}
           </View>
@@ -372,6 +383,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 12.5,
     lineHeight: 18,
     color: colors.neutral[400],
+  },
+  // Lined up under the checkbox label: checkbox width + agreeRow's gap.
+  guidelinesLink: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing[2],
+    marginLeft: 22 + Spacing[3],
+  },
+  guidelinesLinkText: {
+    fontFamily: Fonts?.bodySemibold,
+    fontSize: 12.5,
+    color: colors.text,
+    textDecorationLine: 'underline',
   },
   error: {
     fontFamily: Fonts?.body,

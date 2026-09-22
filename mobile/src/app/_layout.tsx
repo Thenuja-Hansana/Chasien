@@ -22,6 +22,9 @@ SplashScreen.preventAutoHideAsync();
 configureForegroundNotificationHandler();
 
 const AUTH_ROUTES = ['/login', '/signup'];
+// Readable signed in or out: signup links to the guidelines people accept
+// before an account exists.
+const PUBLIC_ROUTES = ['/guidelines'];
 
 // The only route guard the app needs at this phase: no session -> only
 // the auth screens are reachable; a session -> the auth screens bounce
@@ -34,7 +37,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   const colors = useTheme();
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || PUBLIC_ROUTES.includes(pathname)) return;
     const onAuthRoute = AUTH_ROUTES.includes(pathname);
     if (!session && !onAuthRoute) {
       router.replace('/login');

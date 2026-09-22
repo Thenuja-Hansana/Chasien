@@ -7,6 +7,77 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-22 — Phase 9, slice 5: community guidelines and a published contact address
+
+Apple 1.2 asks UGC apps for terms users accept, with no tolerance for
+objectionable content or abusive users, and for published contact
+information. Google Play's listing needs a contact email too.
+
+**The contact address is `info.chasien@gmail.com`,** a dedicated inbox
+the user created for the app, chosen over their personal address so that
+address stays private. It's one constant, `SUPPORT_EMAIL` in
+`constants/contact.ts`. It appears in:
+- Settings → More info and support → Contact us, which opens a new email
+  with the subject "Chasien support" (or shows the address if there's no
+  mail app)
+- the guidelines' Contact section
+- the message a suspended account now sees at login
+
+**The guidelines screen** (`app/guidelines.tsx`) states the zero-tolerance
+line, what isn't allowed, how Rooms and moderators fit in, how to report
+and block, and what happens to people who break the rules. It only
+describes what the app actually does. It doesn't promise a response time,
+and it doesn't say a whole Room can be taken down, because that isn't
+built. The text is kept as data at the top of the file, so the download
+page can reuse it.
+
+**Reachable before an account exists.** AuthGate now has `PUBLIC_ROUTES`
+(`/guidelines`), readable signed in or out. Signup links to it with a
+separate "Read the community guidelines" link under the checkbox rather
+than making words inside the checkbox label a link. The whole row is one
+checkbox to a screen reader, and on web a tap on a nested link would tick
+the box as well.
+
+**Suspended accounts now learn they're suspended.** Login used to map
+every error except "email not confirmed" to "Wrong email or password.", so
+someone suspended through the Reports screen had no idea why they
+couldn't sign in, or where to appeal. Supabase Auth returns the code
+`user_banned`, confirmed on a probe account. Login now shows "This account
+has been suspended. To appeal, email info.chasien@gmail.com." The probe
+also showed that Supabase returns `user_banned` even with a *wrong*
+password. So anyone can learn from the API that an email belongs to a
+suspended account, whatever this screen shows. That's Supabase's
+behaviour, and it's accepted here: it reveals the suspension, not the
+account's content.
+
+**Placement:** the two rows went at the top of Settings' existing "More
+info and support" section, not into a new "Help & safety" section as first
+planned, because two support sections side by side read as a duplicate.
+The guidelines text uses `neutral[700]`, not the `[400]` used for short
+captions elsewhere. `[400]` is about 2:1 contrast on white, too faint for
+several screens of reading; `[700]` is about 9:1 in both themes.
+
+**Verified:** 13 UI checks in the app (Expo web):
+- the guidelines open from signup while signed out, and the link doesn't
+  tick the checkbox
+- a direct visit to `/guidelines` isn't bounced to login, signed in or out
+- both email links open `mailto:info.chasien@gmail.com?subject=Chasien%20support`
+  (captured, so no mail client opened)
+- a suspended throwaway account sees the appeal message, while a wrong
+  password still gets "Wrong email or password."
+- Settings shows both rows, and back navigation returns where it should
+
+Typecheck, lint and the React Compiler check pass (109 components, 0
+skipped). On the Galaxy A14, in dark mode:
+- the guidelines read clearly, and the last line clears the navigation
+  bar when scrolled to the end
+- the two new Settings rows are in place
+- tapping the address opened Gmail's compose screen, addressed to
+  info.chasien@gmail.com with the subject "Chasien support" (closed
+  without sending)
+
+---
+
 ## 2026-09-22 — Phase 9, slice 4: a content filter, and database messages reach the screen
 
 Migration `20260922110000_content_filter.sql`, the new `lib/errors.ts`, a

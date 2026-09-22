@@ -5,10 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import { SUPPORT_EMAIL } from '@/constants/contact';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchAmIAppAdmin } from '@/lib/reports';
+import { emailSupport } from '@/lib/support';
 
 type IconName = ComponentProps<typeof Icon>['name'];
 type Row = { icon: IconName; label: string; value?: string; subtitle?: string };
@@ -99,6 +101,8 @@ const SECTIONS: Section[] = [
   {
     title: 'More info and support',
     rows: [
+      { icon: 'textLines', label: 'Community guidelines' },
+      { icon: 'mail', label: 'Contact us', subtitle: SUPPORT_EMAIL },
       { icon: 'help', label: 'Help' },
       { icon: 'shield', label: 'Account Status' },
       { icon: 'lock', label: 'Privacy Policy' },
@@ -140,6 +144,17 @@ export default function SettingsAndActivity() {
     }
     if (row.label === 'Blocked') {
       router.push({ pathname: '/u/[userId]/blocked', params: { userId } });
+      return;
+    }
+    if (row.label === 'Community guidelines') {
+      router.push('/guidelines');
+      return;
+    }
+    if (row.label === 'Contact us') {
+      // No mail app set up: show the address rather than doing nothing.
+      emailSupport().then((opened) => {
+        if (!opened) Alert.alert('Email us', SUPPORT_EMAIL);
+      });
       return;
     }
     Alert.alert(row.label, "This isn't wired up yet — the front end came first.");

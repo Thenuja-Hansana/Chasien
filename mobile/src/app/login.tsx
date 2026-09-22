@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import { SUPPORT_EMAIL } from '@/constants/contact';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -45,7 +46,12 @@ export default function Login() {
       setError(
         signInError.message === 'Email not confirmed'
           ? 'Check your email for a confirmation link before logging in.'
-          : 'Wrong email or password.',
+          : // An app admin's suspension is a Supabase Auth ban (the moderate
+            // Edge Function); without this, a suspended person would only
+            // ever see "Wrong email or password" and never know to appeal.
+            signInError.code === 'user_banned'
+            ? `This account has been suspended. To appeal, email ${SUPPORT_EMAIL}.`
+            : 'Wrong email or password.',
       );
       return;
     }
