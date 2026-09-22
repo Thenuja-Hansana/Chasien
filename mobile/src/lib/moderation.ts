@@ -119,3 +119,17 @@ export async function fetchModerationLog(roomId: string): Promise<ModerationEntr
     };
   });
 }
+
+/**
+ * Whether text passes the content filter (20260922110000_content_filter.sql).
+ * The filter itself is enforced by triggers on every text column, and a
+ * refused write already comes back with a readable message, so screens
+ * don't need this. Signup does: Supabase Auth replaces a trigger's error
+ * with a generic "Database error saving new user", so the handle and name
+ * are checked here first.
+ */
+export async function isTextAllowed(text: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('text_is_allowed', { p_text: text });
+  if (error) throw error;
+  return data === true;
+}

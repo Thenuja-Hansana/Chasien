@@ -86,6 +86,21 @@ user load, real revenue) to spend money.
     that only admins can read.
   - The same function signs a report's media for review, using only the
     paths in that report's snapshot.
+- **Objectionable text is refused by the database** (since 2026-09-22).
+  A `filter_blocked_terms` trigger runs `reject_blocked_terms()` on every
+  column people type into: posts, comments, messages, story captions,
+  polls, events, Rooms, sub-groups and profiles. So a new user-text column
+  needs the trigger too. `blocked_terms` (severe terms only) is private.
+  Text is normalized first (case, accents, look-alike letters, leetspeak,
+  spaced-out letters) and matched as whole words. `text_is_allowed()` is
+  public so signup can check before calling Supabase Auth.
+- **Messages meant for people come from `raise exception` with no custom
+  errcode (SQLSTATE `P0001`),** and screens show errors through
+  `errorMessage(e, fallback)` in `lib/errors.ts`. It shows `P0001`
+  messages and thrown `Error`s, and falls back for everything else
+  (permission, RLS, constraint and network errors). supabase-js returns
+  database errors as plain objects, so an `e instanceof Error` check would
+  hide them all.
 - **No client edits of posts, comments or messages yet.** When editing
   ships, grant UPDATE on the content column together with a trigger that
   stamps `edited_at`, so edits can't be silent.

@@ -839,11 +839,19 @@ are expanded below to match what the stores actually check (see
       the Room isolation checks, and 21 UI checks in the real app. See
       decision-log, 2026-09-21. Left for later: presence and bio are still
       readable through the API between blocked people (Phase 10)
-- [ ] Filter objectionable content before it's posted. Apple 1.2 asks for
+- [x] Filter objectionable content before it's posted. Apple 1.2 asks for
       "a method for filtering objectionable material from being posted".
       At solo-dev scale, that means a server-side word list checked
       against post, comment and message text, Room names and bios, on top
       of report-and-remove
+      **Done 2026-09-22** (`20260922110000_content_filter.sql`): a
+      `blocked_terms` list, severe terms only (chosen with the user),
+      enforced by triggers on every text field people type into, including
+      signup. Matching text is refused, with a clear message. Verified with
+      29 direct-API checks (21 evasion spellings caught, 36 innocent
+      phrases passed) and 15 UI checks. It also fixed a bug found along the
+      way: no database error message had ever reached a screen. See
+      decision-log, 2026-09-22
 - [x] Mod actions in Room Settings, filling the gaps:
       - admins and mods can remove posts (today only the owner can)
       - mods can remove comments and chat messages
@@ -926,6 +934,10 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
         closed 2026-09-22: a trigger captures it when a report is filed)
   - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
         after Phase 9's features
+  - [ ] `my_inbox` (a view) still carries INSERT/UPDATE/DELETE grants
+        for `authenticated` from the old blanket grants. They're harmless,
+        because the view can't be written to (`is_insertable_into = NO`),
+        but they should be revoked so the grants say what's true
   - [ ] Between blocked people, `profiles` is still fully readable through
         the API, including bio and `last_active_at` (presence). The screens
         hide them, but only column-level rules on `profiles` would stop a

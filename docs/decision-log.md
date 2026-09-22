@@ -7,6 +7,87 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-22 — Phase 9, slice 4: a content filter, and database messages reach the screen
+
+Migration `20260922110000_content_filter.sql`, the new `lib/errors.ts`, a
+signup pre-check, and `errorMessage()` in 28 screens and components.
+
+**The filter (Apple 1.2: "a method for filtering objectionable material
+from being posted").** Matching text is *refused*, not masked, and the list
+is severe terms only: slurs and child-sexual-abuse terms. Both were chosen
+with the user. Ordinary swearing stays allowed, because everyone is 16+ and
+reports cover the rest.
+- **Enforcement is a trigger on every column people type into,** so it
+  holds whatever the write path: the app, `create_post` and
+  `create_event_post`, or the room-membership Edge Function, which creates
+  sub-groups with the service role. `update of <columns>` keeps removals,
+  pins and counters from running it. An edit only checks the columns that
+  changed, so re-saving a form with an old, now-refused field left as it
+  was still works.
+- **Matching:** text is normalized first. That covers case, accents,
+  zero-width characters, look-alike Cyrillic/Greek letters, leetspeak,
+  and letters split by spaces or dots. Then it's matched as whole words.
+  Each term's regex keeps doubled letters doubled, which is what lets
+  "nigger" match without matching "Niger".
+- **Words that are also ordinary words are deliberately left off** (chink,
+  fag, dyke, coon, kaffir, and others; the migration lists them), because
+  refusing "a chink in the armour" or "kaffir lime" would be worse than
+  leaving them to reports.
+- **Not filtered:** report details, since a reporter may need to quote
+  what they're reporting. Existing content isn't rescanned; none of the
+  local data matches.
+- **Signup:** Supabase Auth replaces a trigger's error with "Database error
+  saving new user", so signup first calls `text_is_allowed()` on the handle
+  and name. Anyone can call it, which means anyone can test words against
+  the list. That's accepted, because lists like this are public anyway.
+- **Found in testing:** `unaccent()` turns a soft hyphen into a real `-`,
+  which then split the word, so invisible characters are now stripped
+  *before* unaccent. Separately, the tool that wrote the migration had
+  decoded its unicode escape sequences into the invisible characters
+  themselves. Postgres read them the same way, but they were restored to
+  escapes so the code is readable.
+
+**The bigger bug: no database error message had ever reached a screen.**
+supabase-js returns a failed query's error as a plain object parsed from
+the response, not an `Error`. The `PostgrestError` class is only used with
+`throwOnError()`. `lib/` rethrows that object, and every screen checked `e
+instanceof Error ? e.message : fallback`, so all 85 places showed their
+generic fallback for every database error. That includes the messages
+Slices 1–3 wrote on purpose, and create-community's "name already taken"
+branch, which could never have worked. The UI checks in those slices
+tested outcomes, not wording, so nothing caught it until the filter's
+message needed to show.
+
+**The fix is `errorMessage(e, fallback)` in `lib/errors.ts`.** It shows a
+message when we wrote it: a thrown `Error`, or a database error with
+SQLSTATE `P0001`, which is what `raise exception` without a custom code
+produces. Anything else keeps the screen's fallback, so permission, RLS
+and constraint wording never reaches people. The filter therefore raises
+with the default code, and create-community now checks `errorCode(e) ===
+'23505'`. The convention is: SQL written for people raises without an
+errcode.
+
+**Verified:**
+- **29 direct-API checks,** signed in as real users.
+  - Every surface refuses with the filter's own code and message: post
+    text, location, poll question and option, event title, location and
+    link, comment, message, story caption, Room create and edit, bio,
+    name, and a sub-group created through the Edge Function.
+  - Clean text still goes through, a bad signup creates no account, and
+    the list and helper functions aren't reachable.
+  - 21 evasion spellings are caught and 36 innocent phrases pass.
+- **15 UI checks in the app.**
+  - Comment, chat, event, bio, Room and signup each show the real message.
+  - The text stays in the box to edit, and the database is confirmed
+    unchanged.
+- **The migration file** was re-run from scratch in a rolled-back
+  transaction, because two functions had been re-applied by hand while
+  fixing the issues above.
+- **Push was paused** for each run, and row counts matched before and
+  after.
+
+---
+
 ## 2026-09-22 — CI was failing at `npm ci` for two weeks
 
 Every `mobile-ci` run from 2026-09-07 to 2026-09-22 failed at `npm ci`,

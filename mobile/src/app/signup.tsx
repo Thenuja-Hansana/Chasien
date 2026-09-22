@@ -18,6 +18,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors }
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { isTextAllowed } from '@/lib/moderation';
 
 // Matches the CHECK constraint on profiles.handle (identity_and_rooms
 // migration) — validated here too so a bad handle fails with a clear
@@ -52,6 +53,19 @@ export default function SignUp() {
     if (!canSubmit || submitting) return;
     setError(null);
     setSubmitting(true);
+
+    // The server refuses these too, but Supabase Auth would turn that into
+    // "Database error saving new user". If the check itself can't be
+    // reached, carry on and let the server decide.
+    const allowed = await Promise.all([isTextAllowed(handle.trim()), isTextAllowed(name.trim())])
+      .then(([handleOk, nameOk]) => handleOk && nameOk)
+      .catch(() => true);
+    if (!allowed) {
+      setSubmitting(false);
+      setError("That handle or name includes words that aren't allowed on Chasien.");
+      return;
+    }
+
     const { data, error: signUpError } = await signUp({
       email: email.trim(),
       password,
