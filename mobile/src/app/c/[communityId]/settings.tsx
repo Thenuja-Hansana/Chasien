@@ -11,6 +11,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors }
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { pickImage, type PickedImage } from '@/lib/media';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { fetchRoomNotificationsMuted, setRoomNotificationsMuted } from '@/lib/notifications';
@@ -119,7 +120,7 @@ export default function CommunitySettings() {
           setMembers(await fetchRoomMembers(r.id));
         }
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load Room settings.'));
+      .catch((e) => setError(errorMessage(e, 'Failed to load Room settings.')));
   }, [communityId, userId]);
 
   useFocusEffect(useCallback(() => load(), [load]));
@@ -180,7 +181,7 @@ export default function CommunitySettings() {
       await setRoomNotificationsMuted(currentRoom.id, next);
     } catch (e) {
       setNotificationsMuted(!next);
-      setError(e instanceof Error ? e.message : 'Could not update notification settings.');
+      setError(errorMessage(e, 'Could not update notification settings.'));
     }
   }
 
@@ -195,7 +196,7 @@ export default function CommunitySettings() {
       await leaveRoom(currentRoom.id);
       router.replace('/discover');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not leave this Room.');
+      setError(errorMessage(e, 'Could not leave this Room.'));
       setLeaving(false);
     }
   }
@@ -282,7 +283,7 @@ export default function CommunitySettings() {
     };
     await doSave()
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Could not save changes.');
+        setError(errorMessage(e, 'Could not save changes.'));
       })
       .finally(() => setSaving(false));
   }
@@ -297,7 +298,7 @@ export default function CommunitySettings() {
       await respondToRequest(currentRoom.id, targetUserId, approve);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not respond to that request.');
+      setError(errorMessage(e, 'Could not respond to that request.'));
     }
     setBusyUserId(null);
   }
@@ -310,7 +311,7 @@ export default function CommunitySettings() {
       await changeRole(currentRoom.id, targetUserId, newRole);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not change that member’s role.');
+      setError(errorMessage(e, 'Could not change that member’s role.'));
     }
     setBusyUserId(null);
   }
@@ -323,7 +324,7 @@ export default function CommunitySettings() {
       await removeFromRoom(currentRoom.id, targetUserId);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove that member.');
+      setError(errorMessage(e, 'Could not remove that member.'));
     }
     setBusyUserId(null);
   }

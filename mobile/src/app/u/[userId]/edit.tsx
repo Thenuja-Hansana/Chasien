@@ -9,6 +9,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors }
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { pickImage, type PickedImage } from '@/lib/media';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { signProfileMediaUrls, uploadProfileAvatar, uploadProfileBanner } from '@/lib/profileMedia';
@@ -70,7 +71,7 @@ export default function EditProfile() {
       };
       loadProfile()
         .catch((e) => {
-          setError(e instanceof Error ? e.message : 'Failed to load your profile.');
+          setError(errorMessage(e, 'Failed to load your profile.'));
         })
         .finally(() => setLoaded(true));
     }, [userId, isOwnProfile]),
@@ -110,7 +111,7 @@ export default function EditProfile() {
     };
     await doSave()
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Could not save your profile.');
+        setError(errorMessage(e, 'Could not save your profile.'));
       })
       .finally(() => setSaving(false));
   }

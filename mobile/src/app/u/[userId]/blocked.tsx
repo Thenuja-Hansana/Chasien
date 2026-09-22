@@ -11,6 +11,7 @@ import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/t
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchBlockedUsers, unblockUser, type BlockedUser } from '@/lib/blocks';
+import { errorMessage } from '@/lib/errors';
 
 /**
  * Settings → Blocked: everyone the viewer has blocked, with Unblock.
@@ -34,7 +35,7 @@ export default function Blocked() {
       if (!myId) return;
       fetchBlockedUsers(myId)
         .then(setBlocked)
-        .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load blocked accounts.'));
+        .catch((e) => setError(errorMessage(e, 'Failed to load blocked accounts.')));
     }, [myId]),
   );
 
@@ -50,7 +51,7 @@ export default function Blocked() {
       await unblockUser(myId, person.id);
       setBlocked((prev) => prev?.filter((p) => p.id !== person.id) ?? prev);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not unblock that account.');
+      setError(errorMessage(e, 'Could not unblock that account.'));
     }
     setBusyId(null);
   }

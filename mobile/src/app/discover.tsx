@@ -14,6 +14,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { cacheJoinedRoom } from '@/lib/room-cache';
 import {
@@ -69,7 +70,7 @@ export default function Discover() {
           if (membership?.join_state === 'approved') cacheJoinedRoom(room, membership.role);
         }
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load Rooms.'));
+      .catch((e) => setError(errorMessage(e, 'Failed to load Rooms.')));
   }, [session]);
 
   useFocusEffect(useCallback(() => load(), [load]));
@@ -101,7 +102,7 @@ export default function Discover() {
     await doJoin()
       .catch((e) => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        setError(e instanceof Error ? e.message : 'Could not join that Room.');
+        setError(errorMessage(e, 'Could not join that Room.'));
       })
       .finally(() => setJoiningId(null));
   }

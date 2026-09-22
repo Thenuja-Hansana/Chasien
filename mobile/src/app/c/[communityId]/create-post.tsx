@@ -18,6 +18,7 @@ import Icon from '@/components/Icon';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { deletePostMedia, MAX_POST_MEDIA_ITEMS, uploadPostMedia, type PickedMedia } from '@/lib/media';
 import { clipShape, closestFeedShape, isUneditedPhoto, renderPhotoEditPreview, type FeedShape, type PhotoEdit } from '@/lib/mediaUtils';
 import { createEventPost, createPost, type TaggedPerson } from '@/lib/posts';
@@ -139,7 +140,7 @@ export default function CreatePost() {
   useEffect(() => {
     fetchRoomBySlug(communityId)
       .then(setRoom)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load this Room.'));
+      .catch((e) => setError(errorMessage(e, 'Failed to load this Room.')));
   }, [communityId]);
 
   const filledPollOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
@@ -321,7 +322,7 @@ export default function CreatePost() {
     };
     await applyEdit()
       .catch((e) => {
-        setPhotoEditorError(e instanceof Error ? e.message : 'Could not apply that edit.');
+        setPhotoEditorError(errorMessage(e, 'Could not apply that edit.'));
       })
       .finally(() => setPhotoEditorBusy(false));
   }
@@ -454,7 +455,7 @@ export default function CreatePost() {
     };
     await doSubmit()
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Could not publish that.');
+        setError(errorMessage(e, 'Could not publish that.'));
       })
       .finally(() => {
         setSubmitting(false);

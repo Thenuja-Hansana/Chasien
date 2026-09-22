@@ -10,6 +10,7 @@ import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { fetchMyRooms, type Room, type RoomRole } from '@/lib/rooms';
 import { signRoomMediaUrls } from '@/lib/roomMedia';
 
@@ -36,7 +37,7 @@ export default function AllRooms() {
           const paths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((p): p is string => !!p);
           if (paths.length > 0) signRoomMediaUrls(paths).then(setMediaUrls).catch(() => {});
         })
-        .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load Rooms.'));
+        .catch((e) => setError(errorMessage(e, 'Failed to load Rooms.')));
     }, [userId]),
   );
 

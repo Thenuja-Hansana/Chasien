@@ -18,6 +18,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { startDm } from '@/lib/chat';
 import { useAuth } from '@/lib/auth-context';
 import { blockUser, fetchBlockStatus, unblockUser, type BlockStatus } from '@/lib/blocks';
+import { errorMessage } from '@/lib/errors';
 import { acceptFriendRequest, fetchFriendCount, fetchFriendshipStatus, removeFriendship, sendFriendRequest, type FriendshipStatus } from '@/lib/friends';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { signProfileMediaUrls } from '@/lib/profileMedia';
@@ -90,7 +91,7 @@ export default function ProfileScreen() {
       if (postPaths.length > 0) signMediaUrls(postPaths).then(setPostMediaUrls).catch(() => {});
     };
     loadProfile().catch((e) => {
-      setError(e instanceof Error ? e.message : 'Failed to load this profile.');
+      setError(errorMessage(e, 'Failed to load this profile.'));
     });
   }, [userId]);
 
@@ -120,7 +121,7 @@ export default function ProfileScreen() {
       const conversationId = await startDm(userId);
       router.push({ pathname: '/chats/[chatId]', params: { chatId: conversationId } });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start that conversation.');
+      setError(errorMessage(e, 'Could not start that conversation.'));
     }
     setMessaging(false);
   }
@@ -133,7 +134,7 @@ export default function ProfileScreen() {
       await sendFriendRequest(myId, userId);
       setFriendshipStatus('pending_sent');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send that friend request.');
+      setError(errorMessage(e, 'Could not send that friend request.'));
     }
     setFriendActionBusy(false);
   }
@@ -146,7 +147,7 @@ export default function ProfileScreen() {
       await removeFriendship(myId, userId);
       setFriendshipStatus('none');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not cancel that request.');
+      setError(errorMessage(e, 'Could not cancel that request.'));
     }
     setFriendActionBusy(false);
   }
@@ -160,7 +161,7 @@ export default function ProfileScreen() {
       setFriendshipStatus('friends');
       setFriendCount((c) => (c ?? 0) + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not accept that request.');
+      setError(errorMessage(e, 'Could not accept that request.'));
     }
     setFriendActionBusy(false);
   }
@@ -176,7 +177,7 @@ export default function ProfileScreen() {
       setFriendshipStatus('none');
       fetchFriendCount(userId).then(setFriendCount).catch(() => {});
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not block this account.');
+      setError(errorMessage(e, 'Could not block this account.'));
     }
   }
 
@@ -188,7 +189,7 @@ export default function ProfileScreen() {
       setBlockStatus('none');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not unblock this account.');
+      setError(errorMessage(e, 'Could not unblock this account.'));
     }
   }
 

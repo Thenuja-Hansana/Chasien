@@ -18,6 +18,7 @@ import Avatar from '@/components/Avatar';
 import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { errorMessage } from '@/lib/errors';
 import { fetchTaggableMembers, MAX_POST_TAGS, type TaggedPerson } from '@/lib/posts';
 
 /**
@@ -75,7 +76,7 @@ export default function TagPeopleSheet({
         if (!cancelled) setMembers(list);
       })
       .catch((e) => {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Could not load this Room’s members.');
+        if (!cancelled) setLoadError(errorMessage(e, 'Could not load this Room’s members.'));
       });
     return () => {
       cancelled = true;

@@ -10,6 +10,7 @@ import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { fetchFriends, type Friend } from '@/lib/friends';
 
 export default function Friends() {
@@ -25,7 +26,7 @@ export default function Friends() {
       if (!userId) return;
       fetchFriends(userId)
         .then(setFriends)
-        .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load friends.'));
+        .catch((e) => setError(errorMessage(e, 'Failed to load friends.')));
     }, [userId]),
   );
 

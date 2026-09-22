@@ -8,6 +8,7 @@ import ReportSheet, { type ReportTarget } from '@/components/ReportSheet';
 import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { errorMessage } from '@/lib/errors';
 import { removeComment } from '@/lib/moderation';
 import { addComment, fetchComments, relativeTime, type Comment } from '@/lib/posts';
 
@@ -74,7 +75,7 @@ const CommentsSheet = forwardRef<
         if (!cancelled) setComments(list);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load comments.');
+        if (!cancelled) setError(errorMessage(e, 'Could not load comments.'));
       });
     return () => {
       cancelled = true;
@@ -108,7 +109,7 @@ const CommentsSheet = forwardRef<
       setComments(await fetchComments(postId));
       onCommentCountChange(postId, 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not post your comment.');
+      setError(errorMessage(e, 'Could not post your comment.'));
     }
     setSending(false);
   }
@@ -121,7 +122,7 @@ const CommentsSheet = forwardRef<
       setComments(await fetchComments(postId));
       onCommentCountChange(postId, -1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove that comment.');
+      setError(errorMessage(e, 'Could not remove that comment.'));
     }
   }
 

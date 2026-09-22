@@ -18,6 +18,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { blockUser } from '@/lib/blocks';
+import { errorMessage } from '@/lib/errors';
 import { fetchRoomUnreadCounts, markAllNotificationsRead, subscribeToNotifications, togglePostPin } from '@/lib/notifications';
 import { getCachedJoinedRoom } from '@/lib/room-cache';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
@@ -124,7 +125,7 @@ export default function RoomHome() {
     try {
       await openRoom();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load this Room.');
+      setError(errorMessage(e, 'Failed to load this Room.'));
     }
   }, [communityId, userId, loadFeed]);
 
@@ -170,7 +171,7 @@ export default function RoomHome() {
       await load();
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      setError(e instanceof Error ? e.message : 'Could not join.');
+      setError(errorMessage(e, 'Could not join.'));
     }
     setBusy(false);
   }
@@ -184,7 +185,7 @@ export default function RoomHome() {
       if (accept) await load();
       else router.replace('/discover');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not respond to the invite.');
+      setError(errorMessage(e, 'Could not respond to the invite.'));
     }
     setBusy(false);
   }
@@ -209,7 +210,7 @@ export default function RoomHome() {
             p.id === post.id ? { ...p, likedByMe: post.likedByMe, likeCount: post.likeCount } : p,
           ) ?? prev,
       );
-      setError(e instanceof Error ? e.message : 'Could not update that like.');
+      setError(errorMessage(e, 'Could not update that like.'));
     }
   }
 
@@ -223,7 +224,7 @@ export default function RoomHome() {
       const fresh = await fetchPost(post.id, userId);
       if (fresh) setPosts((prev) => prev?.map((p) => (p.id === post.id ? fresh : p)) ?? prev);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not record that vote.');
+      setError(errorMessage(e, 'Could not record that vote.'));
     }
   }
 
@@ -238,7 +239,7 @@ export default function RoomHome() {
       await hidePost(post.id, userId);
       setPosts((prev) => prev?.filter((p) => p.id !== post.id) ?? prev);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not hide that post.');
+      setError(errorMessage(e, 'Could not hide that post.'));
     }
   }
 
@@ -253,7 +254,7 @@ export default function RoomHome() {
       setPosts((prev) => prev?.filter((p) => p.authorId !== authorId) ?? prev);
       fetchActiveStories(roomId).then(setActiveStories).catch(() => {});
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not block that person.');
+      setError(errorMessage(e, 'Could not block that person.'));
     }
   }
 
@@ -262,7 +263,7 @@ export default function RoomHome() {
       await deletePost(post.id);
       setPosts((prev) => prev?.filter((p) => p.id !== post.id) ?? prev);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not delete that post.');
+      setError(errorMessage(e, 'Could not delete that post.'));
     }
   }
 
@@ -274,7 +275,7 @@ export default function RoomHome() {
       await togglePostPin(post.id, nextPinned);
     } catch (e) {
       setPosts((prev) => prev?.map((p) => (p.id === post.id ? { ...p, pinned: post.pinned } : p)) ?? prev);
-      setError(e instanceof Error ? e.message : 'Could not update the pin.');
+      setError(errorMessage(e, 'Could not update the pin.'));
     }
   }
 
@@ -288,7 +289,7 @@ export default function RoomHome() {
       await removeMyTag(post.id, userId);
       setPosts((prev) => prev?.map((p) => (p.id === post.id ? { ...p, tags: p.tags.filter((t) => t.userId !== userId) } : p)) ?? prev);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove your tag.');
+      setError(errorMessage(e, 'Could not remove your tag.'));
     }
   }
 

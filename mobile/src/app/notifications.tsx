@@ -13,6 +13,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors }
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import {
   deleteNotification,
   fetchNotifications,
@@ -102,7 +103,7 @@ export default function Notifications() {
     if (!userId) return;
     fetchNotifications(userId, roomId)
       .then(setItems)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load activity.'));
+      .catch((e) => setError(errorMessage(e, 'Failed to load activity.')));
   }, [userId, roomId]);
 
   useFocusEffect(
@@ -165,7 +166,7 @@ export default function Notifications() {
     await doRespond()
       .catch((e) => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        setError(e instanceof Error ? e.message : 'Could not respond to that request.');
+        setError(errorMessage(e, 'Could not respond to that request.'));
       })
       .finally(() => setBusyId(null));
   }

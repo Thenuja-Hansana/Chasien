@@ -14,6 +14,7 @@ import ReportSheet from '@/components/ReportSheet';
 import { Fonts, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { removeStory } from '@/lib/moderation';
 import { fetchMyMembership, fetchRoomBySlug } from '@/lib/rooms';
@@ -110,7 +111,7 @@ export default function StoryViewer() {
       setStoryIndex(0);
     };
     await loadStories().catch((e) => {
-      setError(e instanceof Error ? e.message : 'Failed to load stories.');
+      setError(errorMessage(e, 'Failed to load stories.'));
     });
   }, [communityId, authorId, userId]);
 
@@ -138,7 +139,7 @@ export default function StoryViewer() {
       }
       setStories(remaining);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove that story.');
+      setError(errorMessage(e, 'Could not remove that story.'));
     }
   }
 

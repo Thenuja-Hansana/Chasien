@@ -13,6 +13,7 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { searchProfiles, type ProfileSearchResult } from '@/lib/profiles';
 import { fetchDiscoverRooms, fetchMyMembershipMap, joinRoom, type Membership, type Room } from '@/lib/rooms';
 import { useUserPreview } from '@/lib/user-preview-context';
@@ -64,7 +65,7 @@ export default function Search() {
         setRooms(roomList);
         setMemberships(membershipMap);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load Rooms.'));
+      .catch((e) => setError(errorMessage(e, 'Failed to load Rooms.')));
   }, [userId]);
 
   // Debounced, unlike Rooms above — that's one full fetch of a small,
@@ -104,7 +105,7 @@ export default function Search() {
     await doJoin()
       .catch((e) => {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-        setError(e instanceof Error ? e.message : 'Could not join that Room.');
+        setError(errorMessage(e, 'Could not join that Room.'));
       })
       .finally(() => setJoiningId(null));
   }

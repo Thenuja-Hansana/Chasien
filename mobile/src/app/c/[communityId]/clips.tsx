@@ -11,6 +11,7 @@ import CommentsSheet, { type CommentsSheetHandle } from '@/components/CommentsSh
 import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { VIDEO_BUFFER_OPTIONS } from '@/lib/mediaUtils';
 import { cursorOf, fetchPost, fetchRoomClips, isClipPost, setLiked, type FeedCursor, type FeedPost } from '@/lib/posts';
 import { fetchMyMembership } from '@/lib/rooms';
@@ -79,7 +80,7 @@ export default function Clips() {
         .catch(() => {});
     };
     loadAround().catch((e) => {
-      if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load clips.');
+      if (!cancelled) setError(errorMessage(e, 'Could not load clips.'));
     });
     return () => {
       cancelled = true;

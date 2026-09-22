@@ -6,6 +6,7 @@ import BottomSheet, { BottomSheetFlatList } from '@/components/BottomSheet';
 import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { errorMessage } from '@/lib/errors';
 import { acceptFriendRequest, fetchFriendshipStatuses, removeFriendship, sendFriendRequest, type FriendshipStatus } from '@/lib/friends';
 import { fetchPostLikers, type TaggedPerson } from '@/lib/posts';
 
@@ -52,7 +53,7 @@ const LikesSheet = forwardRef<LikesSheetHandle, { viewerId: string }>(function L
         setStatuses(friendStatuses);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load likes.');
+        if (!cancelled) setError(errorMessage(e, 'Could not load likes.'));
       });
     return () => {
       cancelled = true;
@@ -74,7 +75,7 @@ const LikesSheet = forwardRef<LikesSheetHandle, { viewerId: string }>(function L
       else await removeFriendship(viewerId, person.userId);
     } catch (e) {
       setStatus(current);
-      setError(e instanceof Error ? e.message : 'Could not update that friend request.');
+      setError(errorMessage(e, 'Could not update that friend request.'));
     }
   }
 

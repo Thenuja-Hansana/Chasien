@@ -8,6 +8,7 @@ import Icon from '@/components/Icon';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { errorMessage } from '@/lib/errors';
 import { fetchModerationLog, type ModerationActionType, type ModerationEntry } from '@/lib/moderation';
 import { relativeTime } from '@/lib/posts';
 import { fetchRoomBySlug } from '@/lib/rooms';
@@ -63,7 +64,7 @@ export default function ModerationLog() {
         const room = await fetchRoomBySlug(communityId);
         setEntries(room ? await fetchModerationLog(room.id) : []);
       };
-      loadLog().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load the moderation log.'));
+      loadLog().catch((e) => setError(errorMessage(e, 'Failed to load the moderation log.')));
     }, [communityId]),
   );
 

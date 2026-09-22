@@ -12,6 +12,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/con
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { fetchRoomUnreadCounts, fetchUnreadCount, subscribeToNotifications } from '@/lib/notifications';
 import { fetchLatestPostPreview, type RoomActivityPreview } from '@/lib/posts';
 import { cacheJoinedRoom } from '@/lib/room-cache';
@@ -87,7 +88,7 @@ export default function Index() {
             .then((entries) => setPreviewByRoom(new Map(entries)))
             .catch(() => {});
         })
-        .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load your Rooms.'));
+        .catch((e) => setError(errorMessage(e, 'Failed to load your Rooms.')));
     }, [session]),
   );
 

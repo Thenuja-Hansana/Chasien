@@ -10,6 +10,7 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchMyVerificationStatus, requestRoomVerification, type VerificationStatus } from '@/lib/domainVerification';
+import { errorMessage } from '@/lib/errors';
 import { fetchMyMembership, fetchRoomBySlug, type Room } from '@/lib/rooms';
 
 /**
@@ -57,7 +58,7 @@ export default function VerifyEmail() {
         setStatus(existing);
       };
       loadRoom().catch((e) => {
-        setError(e instanceof Error ? e.message : 'Failed to load this Room.');
+        setError(errorMessage(e, 'Failed to load this Room.'));
       });
     }, [communityId, userId]),
   );
@@ -74,7 +75,7 @@ export default function VerifyEmail() {
       await requestRoomVerification(room.id, email.trim());
       setStatus({ email: email.trim().toLowerCase(), verifiedAt: null, expiresAt: new Date(Date.now() + 3600_000).toISOString() });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send that verification email.');
+      setError(errorMessage(e, 'Could not send that verification email.'));
     }
     setSending(false);
   }

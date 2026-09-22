@@ -12,6 +12,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchInbox, type InboxItem } from '@/lib/chat';
+import { errorMessage } from '@/lib/errors';
 import { fetchMyMembership, fetchRoomBySlug, type Room } from '@/lib/rooms';
 import {
   fetchMySubgroupParticipations,
@@ -83,7 +84,7 @@ export default function RoomChat() {
       setParticipations(await fetchMySubgroupParticipations(allSubgroups.map((s) => s.id), userId));
     };
     await loadChat().catch((e) => {
-      setError(e instanceof Error ? e.message : "Failed to load this Room's chat.");
+      setError(errorMessage(e, "Failed to load this Room's chat."));
     });
   }, [communityId, userId]);
 
@@ -108,7 +109,7 @@ export default function RoomChat() {
     };
     await doJoin()
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Could not join that sub-group.');
+        setError(errorMessage(e, 'Could not join that sub-group.'));
       })
       .finally(() => setJoiningId(null));
   }

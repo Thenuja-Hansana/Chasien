@@ -29,6 +29,7 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { blockUser } from '@/lib/blocks';
+import { errorMessage } from '@/lib/errors';
 import { outranks, removeComment } from '@/lib/moderation';
 import { togglePostPin } from '@/lib/notifications';
 import { useUserPreview } from '@/lib/user-preview-context';
@@ -103,7 +104,7 @@ export default function PostDetail() {
       }
     };
     await loadPost().catch((e) => {
-      setError(e instanceof Error ? e.message : 'Failed to load this post.');
+      setError(errorMessage(e, 'Failed to load this post.'));
       setPost(null);
     });
   }, [postId, userId]);
@@ -125,7 +126,7 @@ export default function PostDetail() {
       await setLiked(post.id, userId, nextLiked);
     } catch (e) {
       setPost(snapshot);
-      setError(e instanceof Error ? e.message : 'Could not update that like.');
+      setError(errorMessage(e, 'Could not update that like.'));
     }
   }
 
@@ -136,7 +137,7 @@ export default function PostDetail() {
       const fresh = await fetchPost(post.id, userId);
       if (fresh) setPost(fresh);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not record that vote.');
+      setError(errorMessage(e, 'Could not record that vote.'));
     }
   }
 
@@ -151,7 +152,7 @@ export default function PostDetail() {
       await togglePostPin(post.id, nextPinned);
       setPost({ ...post, pinned: nextPinned });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update the pin.');
+      setError(errorMessage(e, 'Could not update the pin.'));
     }
     setPinning(false);
   }
@@ -165,7 +166,7 @@ export default function PostDetail() {
       await hidePost(post.id, userId);
       router.back();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not hide that post.');
+      setError(errorMessage(e, 'Could not hide that post.'));
     }
   }
 
@@ -175,7 +176,7 @@ export default function PostDetail() {
       await deletePost(post.id);
       router.back();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not delete that post.');
+      setError(errorMessage(e, 'Could not delete that post.'));
     }
   }
 
@@ -187,7 +188,7 @@ export default function PostDetail() {
       await blockUser(post.authorId);
       router.back();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not block that person.');
+      setError(errorMessage(e, 'Could not block that person.'));
     }
   }
 
@@ -211,7 +212,7 @@ export default function PostDetail() {
       if (fresh) setPost(fresh);
       setComments(freshComments);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove that comment.');
+      setError(errorMessage(e, 'Could not remove that comment.'));
     }
   }
 
@@ -222,7 +223,7 @@ export default function PostDetail() {
       await removeMyTag(post.id, userId);
       setPost({ ...post, tags: post.tags.filter((t) => t.userId !== userId) });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove your tag.');
+      setError(errorMessage(e, 'Could not remove your tag.'));
     }
   }
 
@@ -240,7 +241,7 @@ export default function PostDetail() {
       if (fresh) setPost(fresh);
       setComments(freshComments);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not post that comment.');
+      setError(errorMessage(e, 'Could not post that comment.'));
     }
     setSending(false);
   }

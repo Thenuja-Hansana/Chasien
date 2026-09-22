@@ -31,6 +31,7 @@ import {
   type InboxItem,
   type Message,
 } from '@/lib/chat';
+import { errorMessage } from '@/lib/errors';
 import { pickImage } from '@/lib/media';
 import { fetchMutedInChat, removeMessage, setMutedInChat } from '@/lib/moderation';
 import { fetchMyMembership, type RoomRole } from '@/lib/rooms';
@@ -107,7 +108,7 @@ export default function ChatView() {
           setOtherLastRead(await fetchOtherParticipantLastRead(chatId, s.otherUserId));
         }
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load this conversation.'));
+      .catch((e) => setError(errorMessage(e, 'Failed to load this conversation.')));
   }, [chatId, userId]);
 
   useFocusEffect(useCallback(() => load(), [load]));
@@ -198,7 +199,7 @@ export default function ChatView() {
       const sent = await sendMessage({ conversationId: chatId, authorId: userId, text, replyToId });
       setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send that message.');
+      setError(errorMessage(e, 'Could not send that message.'));
       setDraft(text);
     }
     setSending(false);
@@ -215,7 +216,7 @@ export default function ChatView() {
       const sent = await sendMessage({ conversationId: chatId, authorId: userId, imageUrl: path });
       setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send that photo.');
+      setError(errorMessage(e, 'Could not send that photo.'));
     }
     setSending(false);
   }
@@ -245,7 +246,7 @@ export default function ChatView() {
       const sent = await sendMessage({ conversationId: chatId, authorId: userId, voiceUrl: path });
       setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send that voice message.');
+      setError(errorMessage(e, 'Could not send that voice message.'));
     }
     setSending(false);
   }
@@ -276,7 +277,7 @@ export default function ChatView() {
       await blockUser(otherUserId);
       setBlockStatus('blocking');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not block this person.');
+      setError(errorMessage(e, 'Could not block this person.'));
     }
   }
 
@@ -287,7 +288,7 @@ export default function ChatView() {
       await unblockUser(userId, otherUserId);
       setBlockStatus('none');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not unblock this person.');
+      setError(errorMessage(e, 'Could not unblock this person.'));
     }
   }
 
@@ -297,7 +298,7 @@ export default function ChatView() {
       await removeMessage(message.id);
       setMessages((prev) => prev && prev.filter((m) => m.id !== message.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove that message.');
+      setError(errorMessage(e, 'Could not remove that message.'));
     }
   }
 
@@ -313,7 +314,7 @@ export default function ChatView() {
         return next;
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not change that.');
+      setError(errorMessage(e, 'Could not change that.'));
     }
   }
 

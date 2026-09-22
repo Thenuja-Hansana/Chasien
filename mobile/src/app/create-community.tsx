@@ -10,6 +10,7 @@ import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors }
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorCode, errorMessage } from '@/lib/errors';
 import { pickImage, type PickedImage } from '@/lib/media';
 import { createRoom, updateRoomSettings, ROOM_CATEGORIES, type RoomCategory, type RoomVisibility } from '@/lib/rooms';
 import { uploadRoomAvatar, uploadRoomBanner } from '@/lib/roomMedia';
@@ -159,11 +160,10 @@ export default function CreateCommunity() {
     await doCreate()
       .catch((e) => {
         setError(
-          e instanceof Error && e.message.includes('duplicate')
+          // 23505, unique violation: the slug made from the name is taken.
+          errorCode(e) === '23505'
             ? 'A Room with that name already exists — try another.'
-            : e instanceof Error
-              ? e.message
-              : 'Could not create that Room.',
+            : errorMessage(e, 'Could not create that Room.'),
         );
       })
       .finally(() => setSubmitting(false));

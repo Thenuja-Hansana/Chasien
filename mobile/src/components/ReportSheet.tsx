@@ -18,6 +18,7 @@ import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { blockUser } from '@/lib/blocks';
+import { errorMessage } from '@/lib/errors';
 import { fileReport, REPORT_REASONS, type ReportReason, type ReportTargetType } from '@/lib/reports';
 
 export type ReportTarget = {
@@ -91,7 +92,7 @@ export default function ReportSheet({
       setDone({ blocked: !!blockTarget });
     };
     await send().catch((e) => {
-      setError(e instanceof Error ? e.message : 'Could not send that report.');
+      setError(errorMessage(e, 'Could not send that report.'));
     });
     setSending(false);
   }

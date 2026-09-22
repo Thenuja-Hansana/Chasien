@@ -7,6 +7,7 @@ import Icon from '@/components/Icon';
 import { Fonts, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
+import { errorMessage } from '@/lib/errors';
 import { fetchRoomBySlug } from '@/lib/rooms';
 import { createSubgroup, type SubgroupVisibility } from '@/lib/subgroups';
 
@@ -48,7 +49,7 @@ export default function CreateSubgroup() {
     };
     await doCreate()
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Could not create that sub-group.');
+        setError(errorMessage(e, 'Could not create that sub-group.'));
       })
       .finally(() => setBusy(false));
   }

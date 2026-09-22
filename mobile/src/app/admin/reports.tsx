@@ -10,6 +10,7 @@ import Icon from '@/components/Icon';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { errorMessage } from '@/lib/errors';
 import { removeComment, removeMessage, removeStory } from '@/lib/moderation';
 import { deletePost, relativeTime } from '@/lib/posts';
 import {
@@ -84,7 +85,7 @@ export default function AdminReports() {
       setResolved(r);
       setSuspensions(s);
     };
-    loadAll().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load reports.'));
+    loadAll().catch((e) => setError(errorMessage(e, 'Failed to load reports.')));
   }, []);
 
   useFocusEffect(load);
@@ -95,7 +96,7 @@ export default function AdminReports() {
       const signed = await signReportMedia(report.id);
       setMedia((prev) => new Map(prev).set(report.id, signed));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load that media.');
+      setError(errorMessage(e, 'Could not load that media.'));
     }
   }
 
@@ -106,7 +107,7 @@ export default function AdminReports() {
       await resolveReport(report.id, 'dismissed');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not dismiss that report.');
+      setError(errorMessage(e, 'Could not dismiss that report.'));
     }
     setBusyId(null);
   }
@@ -130,7 +131,7 @@ export default function AdminReports() {
       await resolveReport(report.id, 'actioned');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove that.');
+      setError(errorMessage(e, 'Could not remove that.'));
     }
     setBusyId(null);
   }
@@ -144,7 +145,7 @@ export default function AdminReports() {
       await suspendUser(authorId, reasonLabel(report.reason), report.id);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not suspend that account.');
+      setError(errorMessage(e, 'Could not suspend that account.'));
     }
     setBusyId(null);
   }
@@ -156,7 +157,7 @@ export default function AdminReports() {
       await unsuspendUser(suspension.userId);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not lift that suspension.');
+      setError(errorMessage(e, 'Could not lift that suspension.'));
     }
     setBusyId(null);
   }

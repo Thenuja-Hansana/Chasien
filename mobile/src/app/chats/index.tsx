@@ -14,6 +14,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchInbox, subscribeToInbox, type InboxItem } from '@/lib/chat';
+import { errorMessage } from '@/lib/errors';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { signMessageMediaUrls } from '@/lib/messageMedia';
 import { signRoomMediaUrls } from '@/lib/roomMedia';
@@ -193,7 +194,7 @@ export default function Chats() {
     if (!userId) return;
     fetchInbox(userId)
       .then(setItems)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load chats.'));
+      .catch((e) => setError(errorMessage(e, 'Failed to load chats.')));
   }, [userId]);
 
   useFocusEffect(useCallback(() => load(), [load]));

@@ -10,6 +10,7 @@ import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { captureImageOrVideo, pickImageOrVideo, type PickedMedia } from '@/lib/media';
 import { VIDEO_BUFFER_OPTIONS } from '@/lib/mediaUtils';
 import { fetchRoomBySlug, type Room } from '@/lib/rooms';
@@ -46,7 +47,7 @@ export default function CreateStory() {
   useEffect(() => {
     fetchRoomBySlug(communityId)
       .then(setRoom)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load this Room.'));
+      .catch((e) => setError(errorMessage(e, 'Failed to load this Room.')));
   }, [communityId]);
 
   if (!session) return null;
@@ -59,7 +60,7 @@ export default function CreateStory() {
       const captured = await captureImageOrVideo();
       if (captured) setMedia(captured);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not open the camera.');
+      setError(errorMessage(e, 'Could not open the camera.'));
     }
   }
 
@@ -69,7 +70,7 @@ export default function CreateStory() {
       const picked = await pickImageOrVideo();
       if (picked) setMedia(picked);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not open your photo library.');
+      setError(errorMessage(e, 'Could not open your photo library.'));
     }
   }
 
@@ -86,7 +87,7 @@ export default function CreateStory() {
     };
     await doSubmit()
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Could not share that story.');
+        setError(errorMessage(e, 'Could not share that story.'));
       })
       .finally(() => {
         setSubmitting(false);
