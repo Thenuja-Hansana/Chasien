@@ -976,7 +976,7 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
         hide them, but only column-level rules on `profiles` would stop a
         blocked person fetching them directly. Found in Phase 9's block
         slice (decision-log, 2026-09-21)
-  - [ ] **The push webhooks' Edge Functions trust any caller. Must be
+  - [x] **The push webhooks' Edge Functions trust any caller. Must be
         fixed before the backend is hosted (Phase 11).**
         `notify-activity` and `notify-new-message` send whatever
         notification or message is in the request body, and the only
@@ -987,7 +987,17 @@ Goal: doesn't crash, doesn't leak, doesn't feel broken.
         check (kept in Vault and the functions' secrets, never in a
         migration), or the functions should re-read the row by id instead
         of trusting the body. Confirmed locally with the anon key only
-        (decision-log, 2026-09-22)
+        (decision-log, 2026-09-22).
+        **Done 2026-09-23** (`20260923100000_push_claimed_from_the_row.sql`):
+        no secret to keep in step. Both functions ignore the body apart
+        from the row's id, read the row themselves, and claim it
+        (`pushed_at`) before sending, so a forged call can at most ask for
+        a push that was already due, and only before the real call claims
+        it. Double pushes are impossible too. The hourly story-cleanup job
+        is called the same way and is left as it is: all a caller can
+        trigger is deleting stories that have already expired. Verified
+        with 10 direct checks using the anon key alone, plus the full send
+        path. See decision-log, 2026-09-23
 
 **Exit condition:** you'd hand this to a stranger without wincing.
 

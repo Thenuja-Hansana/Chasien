@@ -94,6 +94,14 @@ user load, real revenue) to spend money.
   Text is normalized first (case, accents, look-alike letters, leetspeak,
   spaced-out letters) and matched as whole words. `text_is_allowed()` is
   public so signup can check before calling Supabase Auth.
+- **A push is built from the row, not from the request** (since
+  2026-09-23). `notify-activity` and `notify-new-message` are reachable by
+  anyone with the anon key, so they take only the row's id from the body,
+  read the row with the service role, and claim it first
+  (`update … set pushed_at = now() where id = $1 and pushed_at is null`).
+  Nothing can be injected through the request, a replay does nothing, and
+  no row can be pushed twice. `pushed_at` is never granted to clients, so
+  nobody can pre-claim a row to silence someone's push.
 - **Deleting an account is real deletion** (since 2026-09-22), run by the
   `delete-account` Edge Function in this order:
   1. list the files (`account_storage_paths()`)

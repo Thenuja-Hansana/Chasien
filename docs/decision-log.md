@@ -7,6 +7,72 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-09-23 — Phase 10, slice 1: a push is built from the row, not the request
+
+Migration `20260923100000_push_claimed_from_the_row.sql`, and both push
+Edge Functions rewritten. First item of Phase 10, and the one that blocks
+Phase 11: this had to be closed before the backend is hosted.
+
+**The hole** (found 2026-09-22): `notify-activity` and `notify-new-message`
+took the notification or message from the request body, and the only gate
+was a valid JWT — which the anon key inside every build is. So anyone
+could have pushed made-up notifications to any account, or sent their own
+wording to every member of a chat. Proven locally with the anon key alone.
+
+**Considered: a shared secret.** The database's webhook would send a
+secret the functions check, kept in Vault on one side and the functions'
+secrets on the other. Rejected: it has to be kept in step in two places,
+in both the local and hosted setups, and anyone who obtained it could
+still inject content.
+
+**Chosen: make a forged call pointless.**
+- The functions ignore the body apart from the row's id.
+- They read the row themselves with the service role, so the push is
+  built from what's actually in the database.
+- They claim the row first, in one statement:
+  `update … set pushed_at = now() where id = $1 and pushed_at is null`,
+  returning the row. Whoever claims it is the one that sends.
+
+So a forged call can at most ask for a push that the database was about to
+send anyway, and only in the moment before the real call claims the row.
+Afterwards it does nothing. The same claim makes a double push impossible,
+which nothing prevented before, and an unknown id and an already-pushed
+one give the same answer, so ids can't be probed.
+
+**`pushed_at` is server-only.** It's absent from every column grant
+(20260916150000), so a client can't claim a row itself to silence
+someone's push. Checked: an ordinary client's update is refused with
+"permission denied".
+
+**If Expo itself is unreachable,** the claim is given back, so a retry can
+still send. A push lost silently would be worse than one sent twice, and
+the claim makes twice impossible anyway.
+
+**The hourly story-cleanup job is left as it is.** `pg_cron` calls it with
+the anon key too, but it takes no input and only deletes stories that have
+already expired, so a caller gains nothing. Noted rather than changed.
+
+**Verified** (10 checks with the anon key alone, on throwaway accounts,
+where the real recipient has no push token and the account a forged body
+names has a made-up one, so a successful forgery would show as "sent"):
+- a real notification still reaches the function, which claims the row
+- a replay of an already-pushed row sends nothing
+- an unknown id sends nothing, with the same answer as a replay
+- a body with no id is refused
+- a forged body naming a different recipient can't redirect the push: the
+  recipient comes from the database
+- the same for a chat message pointed at another conversation
+- both rows end up claimed, so a second call sends nothing
+- a signed-in client can't set `pushed_at` itself
+
+Separately, the full send path was exercised with a throwaway holding a
+made-up Expo token: the function ran end to end and Expo answered that the
+token isn't registered, which is the expected answer for a made-up one.
+Delivery to a real device is the unchanged part of the path, and is worth
+one check on the phone when it's next connected.
+
+---
+
 ## 2026-09-22 — Phase 9, slice 6: deleting an account, for real
 
 Migration `20260922120000_account_deletion.sql`, a new `delete-account`

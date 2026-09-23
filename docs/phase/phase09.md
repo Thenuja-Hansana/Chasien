@@ -401,7 +401,10 @@ How the testing was run:
 - **A whole Room can't be taken down.** A Room report can be dismissed,
   or its owner suspended.
 - **The push functions and the story-cleanup job** accept calls from
-  anyone with the anon key. Phase 10, before hosting.
+  anyone with the anon key. The push functions were fixed in Phase 10
+  (2026-09-23): they now build the push from the row and claim it, so a
+  forged call achieves nothing. The cleanup job is left as it is, since
+  all it can do is delete already-expired stories.
 - **The account-deletion page** needs a public URL. That comes with the
   download page in the APK Beta Phase.
 - **No app admin exists on a hosted project yet.** Add one when Phase 11
