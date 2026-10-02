@@ -930,6 +930,50 @@ UI.
 
 Goal: doesn't crash, doesn't leak, doesn't feel broken.
 
+**The order it's being done in** (agreed 2026-10-02). Security first,
+because Phase 11 puts the backend on the internet. Each slice: root
+cause and plan agreed, a control run before the fix, verified on the
+local stack and the A14, docs, one commit. The checklist below this
+block is the original list; each slice says which of its items it closes.
+
+- [x] Slice 1 — a push is built from the row, not the request
+      (2026-09-23)
+- [x] Slice 2 — **database functions anyone can call.** Not on the
+      original list; found 2026-10-02 while planning. 43 of 66 functions
+      were callable signed out, with only the key that ships in the app.
+      `notify_mentions()` let a signed-out caller forge a mention from
+      anyone to any Room member, and the membership helpers answered
+      questions about other people. **Done 2026-10-02**
+      (`20261002100000_functions_closed_by_default.sql`): functions are
+      closed unless a migration grants them (1 for signed-out callers, 25
+      for signed-in), new ones start closed, and the helpers answer only
+      about the caller. 52 database checks and 17 over the live API, kept
+      in `supabase/tests/`. See decision-log, 2026-10-02
+- [ ] Slice 3 — grant tidy-up: client-written timestamps on likes,
+      reactions, hidden posts and push tokens; `my_inbox`'s stale grants.
+      Also `conversations`, noticed in slice 2: its INSERT and UPDATE
+      grants still list every column, `member_count` and `created_at`
+      included
+- [ ] Slice 4 — post attachments only through `create_post`: direct
+      inserts into `polls`, `poll_options`, `post_media`, `events`; the
+      10-media and 4-option limits exist only in the app
+- [ ] Slice 5 — `profiles` between blocked people (bio, banner, last
+      active)
+- [ ] Slice 6 — rate limits: the verification email (unlimited today),
+      per-person caps on posts, messages, comments, reports and friend
+      requests, and a review of Auth's own limits
+- [ ] Slice 7 — the full security re-check as one re-runnable script
+      kept in the repo (September's suites were never saved)
+- [ ] Slice 8 — crash handling: an error boundary (there is none), and
+      Sentry's free plan wired so it does nothing until a key is set.
+      Needs a Sentry account, and a line in the privacy policy
+- [ ] Slice 9 — offline, "online-only but honest": a no-connection
+      banner, requests that time out, retry buttons, and nothing typed
+      ever lost (a chat message that fails to send loses its text today).
+      No offline queue. Shares slice 8's dev-client rebuild
+- [ ] Slice 10 — loading, empty and error states on Phase 9's screens,
+      then `docs/phase/phase10.md`
+
 - [ ] Crash reporting (free tier — e.g. Sentry free tier)
 - [ ] Offline behavior: what happens with no connection, for feed and chat
       — at minimum, don't crash or silently drop user actions

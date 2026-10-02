@@ -131,6 +131,25 @@ user load, real revenue) to spend money.
   ships, grant UPDATE on the content column together with a trigger that
   stamps `edited_at`, so edits can't be silent.
 - `anon` has no write privileges on any table, including future ones.
+- **A database function is callable over the API only if a migration
+  grants it** (since 2026-10-02, `20261002100000`). PostgREST turns every
+  function in `public` into an `/rpc` endpoint, and Postgres opens a new
+  function to everyone unless told otherwise, so the defaults are
+  withdrawn: a new function is callable by nobody but the service role
+  until it's granted on purpose. `authenticated` holds the functions the
+  app calls, the helpers its RLS policies evaluate, and
+  `tag_people_in_post`. `anon` holds one, `text_is_allowed`, for the
+  signup screen. Trigger functions need no grant.
+- **The membership helpers answer only about the caller.**
+  `is_room_member`, `is_room_moderator`, `is_room_admin`, `is_room_owner`
+  and `is_conversation_participant` have to be executable by
+  `authenticated`, because policies run as the person querying; that also
+  makes them endpoints. So each returns false for any user id but
+  `auth.uid()`. A policy must therefore pass `auth.uid()` (all of them
+  do). Code that has to ask about *someone else* (a trigger deciding who
+  to notify, a removal checking rank) is SECURITY DEFINER and uses
+  `room_rank()`, which is not an endpoint: -1 not a member, 0 member,
+  1 mod, 2 admin, 3 owner.
 - **One Edge Function is public, on purpose** (since 2026-10-02):
   `verify-room-email`, the link inside a domain-verification email. It's
   opened from a mail app, which sends no key, so `supabase/config.toml`

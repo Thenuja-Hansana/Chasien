@@ -147,6 +147,17 @@ GitHub Actions → EAS builds.
   (roles, join state, pins, timestamps, moderation fields, verification)
   goes through SECURITY DEFINER functions or Edge Functions instead. `anon`
   holds no write privileges on any table.
+- **A database function is an API endpoint only if a migration grants
+  it.** Every function in `public` is reachable at `/rpc/<name>`, so
+  defaults are withdrawn — see
+  `20261002100000_functions_closed_by_default.sql`. A new function is
+  callable by nobody but the service role until its migration says
+  `grant execute ... to authenticated` on purpose; a function the app
+  doesn't call (anything written for a trigger, any internal helper) gets
+  no grant. The membership helpers (`is_room_member` and its siblings)
+  answer only about `auth.uid()`: always pass `auth.uid()` to them in a
+  policy, and use `room_rank()` from SECURITY DEFINER code that has to ask
+  about someone else.
 - `functions/` (Deno Edge Functions) is for anything beyond what RLS can
   safely express: cross-table checks, role changes, join-approval flow,
   webhook-triggered push notification fan-out.

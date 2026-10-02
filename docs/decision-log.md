@@ -7,6 +7,127 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-02 — Phase 10, slice 2: functions are closed unless granted, and the helpers answer only about the caller
+
+Migration `20261002100000_functions_closed_by_default.sql`. No app
+change. Not on the roadmap's Phase 10 list: found while surveying the
+database to plan the phase, the same day. The plan itself (nine slices,
+security first) is at the top of Phase 10 in `roadmap.md`.
+
+**What was wrong, two causes.**
+- **Every function was an open endpoint unless a migration had closed
+  it.** Postgres grants EXECUTE on a new function to PUBLIC. Supabase's
+  default privileges add `anon` and `authenticated` by name. PostgREST
+  serves every function in `public` at `/rpc/<name>`. So 43 of the 66
+  functions could be called signed out, with only the anon key that ships
+  in the app, and 55 signed in. Most check `auth.uid()` and refuse.
+  `notify_mentions(p_text, p_room_id, p_actor_id, p_data)` didn't: it's
+  SECURITY DEFINER, takes the "from" account as a parameter, and was only
+  ever meant for the two mention triggers. Called directly it wrote a
+  mention from anyone, to any member of any Room, with any payload, and
+  the webhook would have pushed it. The same hole as slice 1, through a
+  different door.
+- **The membership helpers answered about anyone.** `is_room_member()`
+  and its four siblings exist for RLS, and a policy runs as the person
+  querying, so `authenticated` must be able to execute them. That makes
+  them endpoints too, and they took any user id. The member list that RLS
+  hides from non-members could be rebuilt one question at a time.
+
+**Reproduced first.**
+- Signed out (the `anon` role, inside a rolled-back transaction): a
+  mention "from" one seed account to another account, in a Room the first
+  isn't in. The row was written.
+- Signed in as an outsider, over the API: `room_memberships` for a Room
+  they aren't in returned zero rows, and `is_room_member()` and
+  `is_room_owner()` returned true about its owner.
+
+**What changed.**
+- **Closed, then opened by name.** EXECUTE is revoked from PUBLIC, `anon`
+  and `authenticated` on every function, then granted back: one to `anon`
+  (`text_is_allowed`, which signup calls before an account exists), 25 to
+  `authenticated` (the 18 the app calls, six helpers RLS evaluates, and
+  `tag_people_in_post`, which `create_post` calls as the caller). The
+  service role keeps all 66.
+- **New functions start closed.** The default privileges are withdrawn.
+  A function added later is callable by nobody over the API until its
+  migration grants it. The same rule 2026-09-16 set for columns.
+- **The five helpers return false for anyone but the caller**
+  (`and user_id = auth.uid()` inside each `exists`). All 38 helper calls
+  in RLS policies, public and storage, already pass `auth.uid()`, so no
+  policy's result changes.
+- **Four functions that must ask about other people use `room_rank()`**:
+  `notify_mentions`, `notify_on_join_request`, `tag_people_in_post`,
+  `can_remove_content`. It already existed for this, and isn't an
+  endpoint.
+
+**Why this shape.**
+- **Not "add an `auth.uid()` check to `notify_mentions`".** That fixes
+  one function and leaves the cause: the next definer function written
+  for a trigger would be open the same way. Closing by default makes the
+  safe state the one you get by doing nothing.
+- **Not moving the helpers to a schema PostgREST doesn't expose.** It
+  would close the endpoints too, and the policies would follow (they
+  reference functions by identity, not by name). But the protection would
+  then live in an API setting, the list of exposed schemas, which is set
+  separately on the hosted project, and one wrong entry there would
+  reopen all five without any migration changing. The caller-only rule is
+  inside the functions, so it holds whatever the API exposes. It changed
+  nine function bodies and none of the 38 policies.
+- **`notify_on_join_request` moved off `is_room_moderator()` a day after
+  moving onto it** (2026-10-01). The reason for that fix holds: ask a
+  helper, don't name roles. It's a different helper because this trigger
+  runs as the service role, where there is no caller to be asked about.
+- **`toggle_message_pin()` is closed although it checks roles itself.**
+  No screen calls it. The rule is "what the app calls", not "what looks
+  safe". One grant when message pinning ships.
+- **`text_is_allowed()` stays open to signed-out callers**, so anyone can
+  test whether a word is on the blocked list. That's the price of
+  checking a name at signup; the list was never secret from someone
+  willing to try posting.
+
+**Verified** against the local stack, as real accounts:
+- **Privileges read back:** signed-out callers can execute 1 function
+  (was 43), signed-in 25 (was 55). A function created after the migration
+  has no grant for either.
+- **The two attacks, over the real API:** the forged mention is refused
+  signed out (401) and signed in (403), "permission denied for function
+  notify_mentions". The outsider asking about the owner now gets false.
+  `room_rank` and `toggle_message_pin` are refused.
+- **52 checks in one rolled-back transaction**, each run the way
+  PostgREST runs a request (role and JWT claims for one account): a Room
+  created by a signed-in person; a join request written as the service
+  role notifying exactly owner, admin and mod; the helpers truthful about
+  the caller and false about others, for a member, a mod, an admin, an
+  owner and an outsider; a post with mentions, tags and a poll (the
+  outsider mentioned and tagged in it gets nothing); like, comment, vote,
+  event post; removal and pinning decided by rank, each refusal read for
+  its reason; group chat, stories, a DM, friends, blocking, reports,
+  push-token registration. All pass. Nothing left behind, nothing pushed.
+- **17 checks over the live API** for what a transaction can't cover: a
+  real signup (the profile trigger runs as the auth service), a join and
+  an approval through the `room-membership` Edge Function, a self-promotion
+  refused, a post with a mention by the new member, an outsider reading
+  zero posts, a member signing a Room's file and an outsider refused by
+  the storage policy, and the account deleting itself through
+  `delete-account` (the service-role RPCs). All pass.
+- **On the Galaxy A14:** Home, a Room feed, Activity, Explore and the chat
+  list load. With a chat open, a message sent by a seed account over the
+  API appeared within four seconds without touching the phone (Realtime
+  evaluates the same policies), and a reply typed on the phone landed.
+- Everything created was removed; every count matches the baseline.
+
+Both scripts are kept in `supabase/tests/`, the first checks in this repo
+that outlive the session that wrote them. Slice 7 builds the full sweep on
+them.
+
+**Noticed, not changed:**
+- `toggle_post_pin()` refuses with "Only an owner or mod can pin a post."
+  An admin can pin; the message predates the admin role.
+- `conversations` still has every column in its INSERT and UPDATE grants.
+  Added to slice 3.
+
+---
+
 ## 2026-10-02 — The three bugs from the unchecked-items pass, fixed
 
 The entry below found them; this is the fixes, in the order they were
