@@ -244,3 +244,33 @@ Signup confirmation emails don't go to a real inbox locally — check
       and take the `pg_dump` first). The database is a named volume, not
       a folder, so the data comes back as it was.
     - The empty folder Docker left at the old path can be deleted.
+
+11. **A change to `supabase/config.toml` needs the stack stopped and
+    started** (hit 2026-10-02, making `verify-room-email` public with
+    `verify_jwt = false`). The edge runtime is handed its per-function
+    settings when its container is created, so restarting that one
+    container isn't enough. `npx supabase stop`, then
+    `npx supabase start -x vector`; see gotcha #9 for the image pins and
+    the `pg_dump` first. To check which functions want a key, call one
+    with none: a gated function answers `401 UNAUTHORIZED_NO_AUTH_HEADER`
+    before its code runs.
+
+12. **`npx expo run:android` can hang on adb, and take adb down with it**
+    (hit 2026-10-02, twice in a row, started from a script rather than a
+    terminal). The log stops after the two `env:` lines, Gradle never
+    starts, and every other `adb` command then hangs as well. The CLI's
+    own `adb start-server` call never returns.
+    - Recover adb: end the `adb.exe` process in Task Manager (or
+      `Stop-Process -Name adb -Force`), run `adb start-server`, check
+      `adb devices`, and redo both `adb reverse` lines — a new adb server
+      forgets them.
+    - Build without the CLI. From `mobile\android`, with `JAVA_HOME` set
+      as in gotcha #5:
+      ```powershell
+      .\gradlew.bat app:assembleDebug "-PreactNativeArchitectures=arm64-v8a"
+      adb install -r app\build\outputs\apk\debug\app-debug.apk
+      ```
+      Then "Every day" steps 7 and 8. `install -r` keeps the app's data,
+      so you stay signed in.
+    - Stop Metro while Gradle runs (gotcha #8): it's several hundred MB
+      this machine doesn't have to spare.

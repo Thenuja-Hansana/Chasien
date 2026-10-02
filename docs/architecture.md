@@ -131,6 +131,32 @@ user load, real revenue) to spend money.
   ships, grant UPDATE on the content column together with a trigger that
   stamps `edited_at`, so edits can't be silent.
 - `anon` has no write privileges on any table, including future ones.
+- **One Edge Function is public, on purpose** (since 2026-10-02):
+  `verify-room-email`, the link inside a domain-verification email. It's
+  opened from a mail app, which sends no key, so `supabase/config.toml`
+  sets `verify_jwt = false` for it; the emailed token is the credential.
+  Every other function keeps the gateway's JWT check, and a new one is
+  gated unless it's added to `config.toml` deliberately.
+
+## System bars (current rule)
+
+- **The status bar and Android's navigation bar follow the app's own
+  Light/Dark mode, not the phone's** (since 2026-10-02). The root layout
+  mounts `<StatusBar>` (`expo-status-bar`) and `<NavigationBar>`
+  (`expo-navigation-bar`) with a style taken from `useThemeContext().mode`.
+  Never `style="auto"`: that follows the phone's theme, and the mode
+  chosen in Settings can differ from it.
+- **A screen that's dark in both modes mounts its own pair** with
+  `style="light"` (the clips and story viewers). Both components stack,
+  so the root's style comes back when the screen closes.
+- **Sheets and dialogs are separate windows on Android,** and React
+  Native styles each one's navigation bar from the OS-level colour
+  scheme, not from the components above. So `ThemeProvider` also calls
+  `Appearance.setColorScheme()` with the stored mode (`'unspecified'`
+  when there is none, which follows the phone). Both halves are needed:
+  the component for the main window, the scheme for every `<Modal>`.
+- `expo-navigation-bar` is a native module: adding or upgrading it means
+  rebuilding the dev client.
 
 ## Known costs we can't avoid forever
 

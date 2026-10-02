@@ -388,6 +388,19 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# The link inside a domain-verification email is opened from a mail client
+# or a browser, which sends no Authorization header. By default the gateway
+# refuses a request without a JWT before the function ever runs (401
+# UNAUTHORIZED_NO_AUTH_HEADER), so this one function has to be declared
+# public. The emailed token is its credential — see the function's own
+# top-of-file comment. Every other function keeps the default: each is
+# called by the app with the user's session, or by the database (the push
+# webhooks, the story-cleanup cron job), which sends the anon key. Applies
+# to hosted deploys as well as the local stack; locally it takes a
+# `supabase stop` / `supabase start` to pick up.
+[functions.verify-room-email]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

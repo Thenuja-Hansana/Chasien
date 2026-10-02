@@ -7,6 +7,198 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-02 — The three bugs from the unchecked-items pass, fixed
+
+The entry below found them; this is the fixes, in the order they were
+done. One config line, one new dependency (`expo-navigation-bar`, free,
+part of the Expo SDK), and small changes to five client files.
+
+**1. The emailed verification link (401).** `supabase/config.toml` now
+has `[functions.verify-room-email]` with `verify_jwt = false`.
+- **Why config and not code:** the gateway refused the request before
+  the function ran, so nothing inside the function could have fixed it.
+  The function was always written to be public; this is the missing
+  declaration. The same section is read by `supabase functions deploy`,
+  so the hosted project gets it too.
+- **Only this function.** The other seven keep the JWT check. The
+  emailed token stays the credential, and the function still re-checks
+  the address against the Room's required domain (2026-09-16).
+- A `config.toml` change needs the stack stopped and started
+  (`running-locally.md`, gotcha #11).
+
+**2. System bars follow the app's mode, not the phone's.** Three parts,
+because Android has three things to tell:
+- **Status bar:** `<StatusBar style={mode === 'light' ? 'dark' : 'light'} />`
+  in the root layout. Nothing set it before, so Android's default (light
+  icons) applied everywhere.
+- **Navigation bar, main window:** `<NavigationBar>` from
+  `expo-navigation-bar`, same style, same place. React Native sets this
+  bar once, when the activity is created, from the *phone's* theme, and
+  has no API to change it afterwards. React Native Screens has no option
+  for it in this version (4.26) either. So this needed a native module
+  and a dev-client rebuild.
+- **Navigation bar, sheets and dialogs:** `Appearance.setColorScheme()`
+  with the stored mode, in `ThemeProvider`. A `<Modal>` is its own
+  window, and React Native styles that window's bar from the OS-level
+  colour scheme. The module alone left every sheet in a Dark app on a
+  light bar; the scheme alone left the main window on one. Each was
+  tried by itself on the phone before both went in.
+- **Not `style="auto"`.** It follows the phone's theme, which is the bug.
+- The clips and story viewers, dark in both modes, mount their own pair
+  with `style="light"`. The story viewer had neither before.
+- `setColorScheme` is skipped on web: react-native-web's `Appearance`
+  doesn't have it.
+
+**3. Theme swatches in New Room.** `create-community.tsx` keeps the
+selected *position* (`accentIndex`) instead of the selected colour, and
+derives the colour from it. Two swatches share a hex in Dark mode, so
+comparing colours lit both. It also means a mode change while the form is
+open can't leave a colour from the other palette selected.
+
+**Considered and left for the APK Beta Phase:** the push notification
+icon and channels. The only monochrome icon in the repo is the Expo
+template's, and a channel's importance can't be changed once it exists
+on someone's phone, so both wait for real branding and a decision. Now a
+sub-item in `roadmap.md`, with a second one under Phase 11 for
+`PUBLIC_FUNCTIONS_URL` (the emailed link defaults to `127.0.0.1`).
+
+**Verified on the Galaxy A14, local stack:**
+- **Link, before:** `verify-room-email`, `room-membership` and
+  `notify-new-message` all answered 401 with no key.
+- **Link, after:** `verify-room-email` reaches its own code (a bad token
+  gets its "invalid link" page); the other two still answer 401.
+- **Link, end to end:** a throwaway domain-verified Room, the address
+  typed into the app's Verify screen, the link from the email opened in
+  Chrome on the phone with nothing added. "You're verified!", an
+  approved membership, "Already verified" on a second open, and the app
+  then opens the Room.
+- **Bars,** read from screenshots (bar background, and whether the
+  icons are lighter or darker than it):
+
+  | Case | Status bar | Navigation bar |
+  |---|---|---|
+  | App Dark, phone Light: Home, Settings, a sheet, cold start | light icons | dark, light buttons |
+  | App Light, phone Light: Home, Settings, a sheet, cold start | dark icons | light, dark buttons |
+  | App Light, phone Dark: Settings, a sheet, cold start | dark icons | light, dark buttons |
+  | App Dark, phone Dark | light icons | dark, light buttons |
+  | Clips viewer and story viewer, app Light | light icons | dark, light buttons |
+  | Back on the feed after each viewer, app Light | dark icons | light, dark buttons |
+
+  Before the fix: App Light had white icons on white, and App Dark on a
+  Light phone had a light navigation bar, on the main screen and under
+  every sheet. The two viewer rows were taken before `setColorScheme`
+  went in and not repeated after; that call doesn't touch what they
+  mount.
+- **Swatches,** Dark mode: opens with only swatch 1 selected; tapping 5
+  selects only 5; tapping 1, only 1; tapping 3, only 3. Before, 1 and 5
+  lit together.
+- Typecheck, lint and the React Compiler check pass (111 components, 0
+  skipped). `npm ci --dry-run` accepts the lockfile.
+- Test Rooms, files, the verification row and the test emails removed;
+  every count matches the baseline (15 Rooms, 25 memberships, 66
+  notifications, 33 posts, 7 messages, 0 stories, 35 stored files).
+
+**Not checked:** iOS (no device; `Appearance.setColorScheme` and both
+components exist there, the navigation bar one as a no-op) and the web
+build.
+
+**Found while rebuilding:** `npx expo run:android`, started from a
+script, hung on its own `adb start-server` and left adb unresponsive,
+twice. The build was done with `gradlew.bat app:assembleDebug` and
+`adb install -r` instead (9 minutes). Gotcha #12 in
+`running-locally.md`.
+
+---
+
+## 2026-10-02 — Everything this log still listed as unchecked, checked on the A14
+
+No code changed. Three earlier entries ended with things that weren't
+exercised; this is the pass over all of them, on the Galaxy A14 against
+the local stack. It found three bugs, listed at the end, none fixed yet.
+
+**What was open:**
+- 2026-10-01: the ADMIN badge in light mode.
+- 2026-09-17 (React Compiler, batch 2): create-community, create-story,
+  the sub-group creator, verify-email, post detail and profile edit.
+- 2026-09-17 (batch 1): the clips viewer's `loadOlder`.
+- 2026-09-23 (Phase 10 slice 1): a chat push arriving on a real device
+  after `notify-new-message` was rewritten.
+
+**Verified:**
+- **ADMIN badge, light mode.** Same check as dark mode: a member made an
+  admin in the local database, ADMIN beside their post, role put back, no
+  badge. Readable in both themes.
+- **Post detail.** Opened from a notification; like and unlike; a comment
+  added, then deleted through the confirm sheet.
+- **Profile edit.** A bio saved, survived a reload, showed on the profile,
+  and was cleared again.
+- **Create-community.** A Room created from the form; the hardware back
+  button on a half-filled form asks before discarding.
+- **Sub-group creator.** An empty name is refused with the message shown;
+  a request-to-join sub-group was created.
+- **Create-story.** A gallery photo with a caption: the file landed in
+  `story-media` (39,640 bytes after compression), the ring appeared, the
+  viewer played it and closed itself.
+- **Verify-email.** An address at the wrong domain is refused with the
+  server's message. One at the right domain shows "Check your inbox",
+  writes the row and sends the email (Mailpit). The link in that email is
+  bug 1 below.
+- **Clips `loadOlder`.** 45 clips in a throwaway Room (one small video,
+  45 posts pointing at it), opened on the newest. Swiped to the last one
+  and back up: every clip once, in order, across both page boundaries
+  (25 to 24, 5 to 4), and swiping past the oldest stays on it.
+- **Chat push.** A seed account sent a message through the public API
+  into a channel the phone's account is in, with the app in the
+  background.
+  - The row was claimed (`pushed_at` set about a second after the
+    insert) and Expo answered `ok`.
+  - The notification arrived: the sender's name as the title, the message
+    as the body.
+  - Tapping it opened that chat in that Room.
+  - Calling the function again for the same message, with forged wording
+    in the body, sent nothing ("already pushed, or no such message").
+- Everything created for this was removed, files included, and every
+  count matches the baseline (15 Rooms, 25 memberships, 66 notifications,
+  20 conversations, 30 participants, 33 posts, 7 messages, 0 stories, 35
+  stored files, 6 comments, 7 likes).
+
+**Found, not fixed:**
+1. **The emailed verification link answers 401.** Opening it returns
+   `UNAUTHORIZED_NO_AUTH_HEADER`: the gateway wants a JWT before the
+   function runs. `verify-room-email` is meant to be public (its own
+   comment says so; the token is the credential), but nothing ever told
+   Supabase that. `config.toml` has no `[functions.verify-room-email]`
+   section with `verify_jwt = false`, and never had. With the anon key
+   added by hand the function works: "You're verified!", an approved
+   membership, "Already verified" the second time, and the app opens the
+   Room. So domain-verified Rooms can't be joined from a real email
+   today. The 2026-09-16 check of this function got "You're verified!",
+   so either it sent a key with the request or the edge runtime of the
+   time didn't ask for one; which isn't recorded.
+2. **In light mode the status bar is white on white.** Nothing sets the
+   status bar's icon colour. The generated Android theme leaves it at
+   light icons, which suits dark mode only by luck. The clips viewer is
+   the one screen that sets it. The navigation bar has the opposite
+   problem: it follows the *phone's* theme, not the app's, so it stays
+   light under a dark app on a light-mode phone.
+3. **New Room, dark mode: two theme swatches look selected.** Swatch 1
+   (`neutral[900]`) and swatch 5 (`accent.DEFAULT`) are the same hex in
+   dark mode, and "selected" compares the colour, not the position. The
+   `key` was already changed to the index for this reason; the selection
+   wasn't.
+
+**Noticed, for the APK Beta Phase** (with yesterday's default icon):
+pushes land in FCM's fallback channel, because the app creates no
+notification channel and the payload names none. It's the channel a user
+sees in Android's settings as "Miscellaneous".
+
+**Environment notes:** the phone's Wi-Fi was off, so it was switched on
+for the push check and off again after. Metro, started as a background
+task, was stopped by the task's 30-minute limit mid-session; the app
+kept running on the bundle it had, and Metro was started again.
+
+---
+
 ## 2026-10-01 — Two places the admin role never reached, and stale docs
 
 Found by reading the whole codebase at the start of a session, not by a

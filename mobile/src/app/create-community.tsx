@@ -40,7 +40,10 @@ export default function CreateCommunity() {
   const THEME_COLORS = useMemo(() => themeColorsFor(colors), [colors]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [accent, setAccent] = useState(THEME_COLORS[0]);
+  // The pick is a position in THEME_COLORS, not a color: two entries can be
+  // the same hex (see the swatch row below), and comparing colors lit both.
+  const [accentIndex, setAccentIndex] = useState(0);
+  const accent = THEME_COLORS[accentIndex];
   const [category, setCategory] = useState<RoomCategory | null>(null);
   const [visibility, setVisibility] = useState<RoomVisibility>('public');
   const [requiredDomain, setRequiredDomain] = useState('');
@@ -279,18 +282,18 @@ export default function CreateCommunity() {
         <View style={styles.swatchRow}>
           {THEME_COLORS.map((c, i) => (
             <Pressable
-              // Index, not the color itself: in Dark mode neutral[900] and
-              // accent.DEFAULT are the exact same hex (#F2F2F2 — see
-              // constants/theme.ts), so two entries in this fixed 5-item
-              // list can collide on value even though they're meant to be
-              // distinct picks.
+              // Index, not the color itself, for the key and for which one
+              // is selected: in Dark mode neutral[900] and accent.DEFAULT
+              // are the exact same hex (#F2F2F2 — see constants/theme.ts),
+              // so two entries in this fixed 5-item list can collide on
+              // value even though they're meant to be distinct picks.
               key={i}
-              onPress={() => setAccent(c)}
-              style={[styles.swatch, { backgroundColor: c }, accent === c && styles.swatchActive]}
+              onPress={() => setAccentIndex(i)}
+              style={[styles.swatch, { backgroundColor: c }, accentIndex === i && styles.swatchActive]}
               hitSlop={6}
               accessibilityRole="radio"
               accessibilityLabel={`Theme color ${i + 1}`}
-              accessibilityState={{ checked: accent === c }}
+              accessibilityState={{ checked: accentIndex === i }}
             />
           ))}
         </View>

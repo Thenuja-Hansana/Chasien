@@ -1,8 +1,10 @@
 import { Caprasimo_400Regular } from '@expo-google-fonts/caprasimo';
 import { Figtree_400Regular, Figtree_600SemiBold, Figtree_700Bold } from '@expo-google-fonts/figtree';
 import { useFonts } from 'expo-font';
+import { NavigationBar } from 'expo-navigation-bar';
 import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -111,6 +113,16 @@ function AppShell() {
 
   return (
     <ThemeProvider value={navigationTheme}>
+      {/* The system bars' icons, from the app's own mode. Nothing set them
+          before. The status bar kept Android's default (light icons): right
+          in Dark, white-on-white in Light. The navigation bar followed the
+          *phone's* theme, so a Dark app on a Light phone sat on a light
+          bar. Not "auto" for either — that follows the phone's theme too,
+          and the mode chosen in Settings can differ from it. The clips and
+          story viewers, dark in both modes, mount their own on top of these
+          while they're open. */}
+      <StatusBar style={mode === 'light' ? 'dark' : 'light'} />
+      <NavigationBar style={mode === 'light' ? 'dark' : 'light'} />
       <AuthProvider>
         <AuthGate>
           <UserPreviewProvider>

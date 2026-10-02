@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { NavigationBar } from 'expo-navigation-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -131,6 +132,7 @@ export default function Clips() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
+      <NavigationBar style="light" />
       {clips === null ? (
         <View style={styles.centered}>
           {error ? <Text style={styles.message}>{error}</Text> : <ActivityIndicator color="#ffffff" />}

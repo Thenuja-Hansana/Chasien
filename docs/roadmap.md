@@ -1029,6 +1029,13 @@ starts.
       the `pg_cron` story-cleanup job exist there too, and recreate any
       that were configured outside the migrations. Then add your own
       account to `app_admins` there, or reports reach nobody
+  - [ ] Set `PUBLIC_FUNCTIONS_URL` for `request-room-verification`. It
+        defaults to `http://127.0.0.1:54321/functions/v1`, so without it
+        every domain-verification email links to the reader's own phone.
+        Then open a real emailed link from a mail app with no key
+        attached: `verify-room-email` is public through `config.toml`
+        (2026-10-02), and the hosted gateway has to agree. Check the page
+        it returns renders as a page, not as HTML source
 - [ ] Point Auth's site URL and redirect URLs at something real.
       Confirmation and password-reset links default to `localhost`,
       which on a stranger's phone goes nowhere. Use a deep link back into
@@ -1114,6 +1121,13 @@ on this laptop.
 - [ ] Push notifications in the release build. FCM and EAS credentials
       are already set up (Phase 6), so this checks them against the hosted
       project's webhooks
+  - [ ] A notification icon and named channels (noticed 2026-10-01/02).
+        Pushes show Expo's default icon, because `app.json` sets none for
+        `expo-notifications`, and land in FCM's fallback channel
+        ("Miscellaneous" in Android's settings), because the app creates
+        no channel and the payload names none. Decide the channels before
+        the first public build: a channel's importance can't be changed
+        once it exists on someone's phone
 - [ ] Privacy policy and community guidelines hosted before the public
       link goes up. The app collects emails, photos, voice notes and
       push tokens. *Moved here from Phase 12 on 2026-09-21.* GitHub Pages

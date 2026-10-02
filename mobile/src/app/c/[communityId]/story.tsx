@@ -1,6 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
+import { NavigationBar } from 'expo-navigation-bar';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -218,6 +220,8 @@ export default function StoryViewer() {
   if (stories === null) {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
+        <StatusBar style="light" />
+        <NavigationBar style="light" />
         <ActivityIndicator color="rgba(242,230,212,.9)" />
       </SafeAreaView>
     );
@@ -226,6 +230,8 @@ export default function StoryViewer() {
   if (error || groups.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <StatusBar style="light" />
+        <NavigationBar style="light" />
         <View style={styles.header}>
           <Text style={styles.headingText} numberOfLines={1}>
             {communityId}
@@ -247,6 +253,10 @@ export default function StoryViewer() {
 
   return (
     <View style={styles.container}>
+      {/* Dark in both modes, like the clips viewer, so light icons on both
+          system bars whatever the root layout sets for the app's mode. */}
+      <StatusBar style="light" />
+      <NavigationBar style="light" />
       {url && (
         story.kind === 'video' ? (
           <StoryVideo key={story.id} uri={url} onProgress={handleVideoProgress} onEnd={next} />
