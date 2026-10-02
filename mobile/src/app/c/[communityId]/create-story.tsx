@@ -6,6 +6,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleShee
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import { Limits } from '@/constants/limits';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -148,6 +149,7 @@ export default function CreateStory() {
         <TextInput
           style={[styles.caption, captionFocus.focused && styles.captionFocused]}
           value={caption}
+          maxLength={Limits.storyCaption}
           onChangeText={setCaption}
           onFocus={captionFocus.onFocus}
           onBlur={captionFocus.onBlur}

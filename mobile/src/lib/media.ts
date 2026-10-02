@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 
+import { CLIP_TOO_LONG_MESSAGE, MAX_CLIP_SECONDS } from '@/constants/limits';
 import {
   compressImageForUpload,
   randomId,
@@ -114,7 +115,14 @@ export async function pickImageOrVideo(): Promise<PickedMedia | null> {
     quality: 1,
   });
   if (result.canceled) return null;
-  return assetToPickedMedia(result.assets[0]);
+  const asset = result.assets[0];
+  // The picker gives a video's length in milliseconds. The OS's own picker
+  // can't be told to hide long videos, so the check comes after the pick
+  // and the caller shows the message (create-story.tsx, via errorMessage()).
+  if (asset.type === 'video' && (asset.duration ?? 0) > MAX_CLIP_SECONDS * 1000) {
+    throw new Error(CLIP_TOO_LONG_MESSAGE);
+  }
+  return assetToPickedMedia(asset);
 }
 
 /**
@@ -134,12 +142,14 @@ export async function captureImageOrVideo(): Promise<PickedMedia | null> {
   const result = await ImagePicker.launchCameraAsync({
     mediaTypes: ['images', 'videos'],
     quality: 1,
+    // The OS camera stops recording by itself at the limit.
+    videoMaxDuration: MAX_CLIP_SECONDS,
   });
   if (result.canceled) return null;
   return assetToPickedMedia(result.assets[0]);
 }
 
-/** IG's own composer cap — client-enforced only, same as MAX_POLL_OPTIONS in components/create/PollTabFields.tsx. Also MediaGridPicker.tsx's cap on how many gallery items can be selected for a single Post. */
+/** IG's own composer cap. create_post() refuses an 11th too (20261002120000), as it does a 5th poll option — MAX_POLL_OPTIONS in components/create/PollTabFields.tsx — so this number has to match the function's. Also MediaGridPicker.tsx's cap on how many gallery items can be selected for a single Post. */
 export const MAX_POST_MEDIA_ITEMS = 10;
 
 /**

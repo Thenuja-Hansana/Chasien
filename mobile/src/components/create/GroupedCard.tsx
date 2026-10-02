@@ -74,6 +74,7 @@ export function GroupedTextInput({
   multiline = false,
   autoCapitalize,
   keyboardType,
+  maxLength,
 }: {
   value: string;
   onChangeText: (v: string) => void;
@@ -85,7 +86,7 @@ export function GroupedTextInput({
   onBlurField: (key: string) => void;
   editable?: boolean;
   multiline?: boolean;
-} & Pick<TextInputProps, 'autoCapitalize' | 'keyboardType'>) {
+} & Pick<TextInputProps, 'autoCapitalize' | 'keyboardType' | 'maxLength'>) {
   const colors = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -105,6 +106,7 @@ export function GroupedTextInput({
       multiline={multiline}
       autoCapitalize={autoCapitalize}
       keyboardType={keyboardType}
+      maxLength={maxLength}
       editable={editable}
     />
   );

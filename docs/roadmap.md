@@ -981,22 +981,38 @@ block is the original list; each slice says which of its items it closes.
       screen, edit screen and preview card on the A14. Left open on
       purpose: the banner *file* is still fetchable by someone who saved
       its path before being blocked
-- [ ] Slice 6 — rate limits **and size limits**. Nothing limits how long
+- [x] Slice 6 — rate limits **and size limits**. Nothing limits how long
       text can be anywhere: a 200,000-character post is accepted (found
       in slice 4), and the database cap is 500 MB. Posts, comments,
       messages, bios and names need a maximum each; the numbers are a
       product decision. Rate limits: the verification email (unlimited today),
       per-person caps on posts, messages, comments, reports and friend
-      requests, and a review of Auth's own limits
+      requests, and a review of Auth's own limits. **Done 2026-10-02**
+      (four migrations, `20261002140000` to `140300`, one new Edge
+      Function, and the app's inputs). Grew when Thenuja asked whether
+      the limits would actually keep storage from running out: per-minute
+      limits alone wouldn't, so it also has daily caps, a cap of 50
+      uploads a day, video at 25 MB instead of 50, clips at 60 seconds,
+      and cleanup jobs for unused files and old notifications. Numbers in
+      `architecture.md`, "Limits". 61 database checks, 16 over the live
+      API, and the input caps, the limit message and the clip cap on the
+      A14. See decision-log, 2026-10-02
 - [ ] Slice 7 — the full security re-check as one re-runnable script
-      kept in the repo (September's suites were never saved)
+      kept in the repo (September's suites were never saved). Also here,
+      found in slice 6: **a new table is open by default.** Supabase's
+      default privileges grant a table created by a migration to `anon`
+      (read) and `authenticated` (read and write), the same default
+      slice 2 withdrew for functions. RLS still decides rows, but it is
+      how the all-columns grants of slices 3 and 4 came to exist
 - [ ] Slice 8 — crash handling: an error boundary (there is none), and
       Sentry's free plan wired so it does nothing until a key is set.
       Needs a Sentry account, and a line in the privacy policy
 - [ ] Slice 9 — offline, "online-only but honest": a no-connection
       banner, requests that time out, retry buttons, and nothing typed
-      ever lost (a chat message that fails to send loses its text today).
-      No offline queue. Shares slice 8's dev-client rebuild. Also here:
+      ever lost. (Corrected 2026-10-02: this said a chat message that
+      fails to send loses its text. It doesn't; the screen puts the text
+      back. What it drops is the message being replied to.) No offline
+      queue. Shares slice 8's dev-client rebuild. Also here:
       signing out leaves the device's push token registered, so a
       signed-out phone keeps getting the old account's pushes until
       someone else signs in on it (noticed in slice 3)
@@ -1044,7 +1060,10 @@ block is the original list; each slice says which of its items it closes.
         slice 4. What's left of this item is the `edited_at` trigger,
         which is a condition on a future feature, not open work)
   - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
-        after Phase 9's features
+        after Phase 9's features. *(The app's own limits were slice 6,
+        2026-10-02. Auth's endpoints are limited by the Supabase project's
+        settings, sensible locally in `config.toml`; setting them on the
+        hosted project is a Phase 11 item. The re-verification is slice 7)*
   - [x] `my_inbox` (a view) still carries INSERT/UPDATE/DELETE grants
         for `authenticated` from the old blanket grants. They're harmless,
         because the view can't be written to (`is_insertable_into = NO`),
@@ -1132,6 +1151,23 @@ starts.
       deep-link screen (decision-log 2026-08-13), not because it depends
       on Apple. Real users without it who forget their password are
       locked out for good
+- [ ] Carry Phase 10's limits over to the hosted project (added
+      2026-10-02):
+      - **Auth rate limits** live in the project's settings, not in a
+        migration. Start from the local values in `config.toml`: 30
+        sign-ins or sign-ups per 5 minutes per IP, 30 token
+        verifications, 150 refreshes. The emails-per-hour limit depends
+        on the SMTP provider chosen below.
+      - **A signup captcha** (hCaptcha or Turnstile, both free): decide
+        whether the beta needs one. It adds a step to signup.
+      - **The cleanup jobs' URLs.** `cleanup-unused-media-daily` and the
+        story cleanup call `http://edge_runtime:8081/...` with the local
+        key. Both need the hosted project's function URL and a real
+        credential. The two plain-SQL jobs (old notifications, old
+        counters) need nothing.
+      - **The file-size limits** are rows in `storage.buckets`, set by
+        migrations, and come across with them. Check them once in the
+        dashboard: 25 MB for posts and stories.
 - [ ] Plan for the free tier's realities:
       - A free project **pauses after about a week without activity**,
         and the app stops working until it's unpaused.

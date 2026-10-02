@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
+import { Limits } from '@/constants/limits';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -254,6 +255,7 @@ export default function CreateCommunity() {
         <TextInput
           style={[styles.input, nameFocus.focused && styles.inputFocused]}
           value={name}
+          maxLength={Limits.roomName}
           onChangeText={setName}
           onFocus={nameFocus.onFocus}
           onBlur={nameFocus.onBlur}
@@ -270,6 +272,7 @@ export default function CreateCommunity() {
         <TextInput
           style={[styles.input, styles.textarea, descriptionFocus.focused && styles.inputFocused]}
           value={description}
+          maxLength={Limits.roomDescription}
           onChangeText={setDescription}
           onFocus={descriptionFocus.onFocus}
           onBlur={descriptionFocus.onBlur}
@@ -387,6 +390,7 @@ export default function CreateCommunity() {
             <TextInput
               style={[styles.input, styles.domainInput, domainFocus.focused && styles.inputFocused]}
               value={requiredDomain}
+              maxLength={Limits.emailDomain}
               onChangeText={setRequiredDomain}
               onFocus={domainFocus.onFocus}
               onBlur={domainFocus.onBlur}

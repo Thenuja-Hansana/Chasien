@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Icon from '@/components/Icon';
+import { Limits } from '@/constants/limits';
 import { Fonts, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { TaggedPerson } from '@/lib/posts';
@@ -46,6 +47,7 @@ export default function ReviewDetails({
         <TextInput
           style={styles.caption}
           value={text}
+          maxLength={Limits.postText}
           onChangeText={onChangeText}
           placeholder="Write a caption…"
           placeholderTextColor={colors.neutral[500]}

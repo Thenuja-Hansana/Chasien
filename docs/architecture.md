@@ -196,6 +196,57 @@ user load, real revenue) to spend money.
   Every other function keeps the gateway's JWT check, and a new one is
   gated unless it's added to `config.toml` deliberately.
 
+## Limits (current rule)
+
+Since 2026-10-02. The reason for all of it is the free tier: 500 MB of
+database and about 1 GB of files. Nothing was limited before.
+
+- **Text has a maximum, in the database.** CHECK constraints
+  (`20261002140000`): post 2,000 characters, comment 1,000, message
+  4,000, bio 160, display name 50, Room name 50 and description 300,
+  sub-group the same, story caption 200, poll question 150 and option 60,
+  event title and location 100, link 500. The app's inputs carry the same
+  numbers as `maxLength` (`mobile/src/constants/limits.ts`), so nobody
+  types past one. **A new text column gets a constraint and an entry
+  there.**
+- **Actions have a rate, per person.** A BEFORE INSERT trigger,
+  `enforce_rate_limit(action, bucket, max, …)`, on each limited table,
+  counting in `rate_limit_counters` (one row per person, action and
+  fixed minute/hour/day window). It limits `auth.uid()`, so the service
+  role, cron and seeds aren't limited. Messages 30 a minute and 2,000 a
+  day; comments 10 a minute and 500 a day; likes and reactions 60 a
+  minute each; posts and stories 10 an hour and 30 a day each; reports 10
+  an hour; friend requests 20 an hour; Rooms 5 a day; verification emails
+  1 a minute per Room and 5 an hour (applied in the Edge Function). One
+  message for all of them, shown by the app. **A new table people can
+  write to gets a trigger.**
+- **Per-minute limits don't protect storage by themselves; the daily
+  ones do.** One account at 30 messages a minute of 4,000 characters is
+  about 170 MB a day. With 2,000 a day it's about 8 MB.
+- **Uploads: 50 files per person in 24 hours, and video at most 25 MB**
+  in posts and stories. The count is a RESTRICTIVE policy on
+  `storage.objects` that counts the person's recent files. It can't use
+  the counter table: the Storage service checks the INSERT policy in a
+  transaction it rolls back, then writes the row itself, so anything a
+  policy writes is lost.
+- **Clips are 60 seconds at most**, in the app: the camera stops, and a
+  longer gallery video is shown dimmed and can't be picked. The server
+  can't see duration; the 25 MB limit is its half. There is no video
+  compression in the app.
+- **Things that would otherwise pile up are deleted on a schedule**
+  (`pg_cron`):
+  - expired stories, hourly (Phase 7)
+  - files nothing points at, daily: uploads never attached after 24
+    hours, replaced profile and Room pictures, and the media of posts and
+    messages removed more than 7 days ago. `unused_media()` decides,
+    the `cleanup-unused-media` Edge Function removes
+  - notifications older than 90 days, daily
+  - rate-limit counters older than two days, hourly
+- **Not limited here:** Auth's own endpoints (sign-in, sign-up, token
+  refresh, emails). Those are settings on the Supabase project, already
+  at sensible values in `config.toml` for the local stack and to be set
+  on the hosted one in Phase 11, with the decision on a signup captcha.
+
 ## System bars (current rule)
 
 - **The status bar and Android's navigation bar follow the app's own

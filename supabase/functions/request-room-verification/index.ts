@@ -106,6 +106,33 @@ Deno.serve(async (req) => {
     return json({ error: 'You are already a member of this Room.' }, 409);
   }
 
+  // Phase 10: an email costs something each time, the SMTP provider's
+  // quota and a stranger's inbox (any address at the Room's domain can be
+  // typed in), and nothing limited how often this could be asked for.
+  // One a minute per Room, five an hour in all, counted in the same table
+  // as every other limit (20261002140100_rate_limits.sql). Checked before
+  // the token is replaced, so a refused request leaves the link already
+  // sent still working.
+  const limits: [string, string, number][] = [
+    [`verify_email:${room_id}`, 'minute', 1],
+    ['verify_email', 'hour', 5],
+  ];
+  for (const [action, bucket, max] of limits) {
+    const { error: limitError } = await admin.rpc('hit_rate_limit', {
+      p_user_id: user.id,
+      p_action: action,
+      p_bucket: bucket,
+      p_max: max,
+    });
+    if (limitError) {
+      // P0001 is the limit itself, with a sentence written for people.
+      // Anything else is the database being unreachable.
+      return limitError.code === 'P0001'
+        ? json({ error: limitError.message }, 429)
+        : json({ error: 'Could not send the verification email — try again.' }, 500);
+    }
+  }
+
   const token = crypto.randomUUID();
   const { error: upsertError } = await admin.from('room_email_verifications').upsert(
     {

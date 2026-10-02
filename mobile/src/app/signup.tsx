@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import { Limits } from '@/constants/limits';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -140,6 +141,7 @@ export default function SignUp() {
                 <TextInput
                   style={[styles.input, handleFocus.focused && styles.inputFocused]}
                   value={handle}
+                  maxLength={Limits.handle}
                   onChangeText={(v) => setHandle(v.replace(/\s/g, '').toLowerCase())}
                   onFocus={handleFocus.onFocus}
                   onBlur={handleFocus.onBlur}
@@ -157,6 +159,7 @@ export default function SignUp() {
                 <TextInput
                   style={[styles.input, nameFocus.focused && styles.inputFocused]}
                   value={name}
+                  maxLength={Limits.displayName}
                   onChangeText={setName}
                   onFocus={nameFocus.onFocus}
                   onBlur={nameFocus.onBlur}

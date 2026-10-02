@@ -7,6 +7,174 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-02 — Phase 10, slice 6: limits, so one account can't fill the database or the file store
+
+Four migrations (`20261002140000_text_length_limits`,
+`140100_rate_limits`, `140200_upload_limits`,
+`140300_unused_media_cleanup`), a new Edge Function
+(`cleanup-unused-media`), a change to `request-room-verification`, and
+in the app `constants/limits.ts`, a `maxLength` on 22 inputs and a
+60-second clip cap.
+
+**What was wrong.** Nothing was limited. Slice 4's control run had a
+200,000-character post accepted. A survey for this slice found a length
+rule on four columns in the whole schema, a `maxLength` on two inputs,
+no limit on how often anyone could do anything, a verification email
+that could be requested without end, and no limit on how many files a
+person could upload.
+
+**The plan changed after a question.** The first proposal was size
+limits and per-minute or per-hour rates. Thenuja approved the numbers
+and asked whether they would actually stop the project running out of
+storage. They wouldn't have:
+- **Database (500 MB).** App data was 1.7 MB. A normal message row is
+  about 130 bytes. But one account at the proposed limit, 30 messages a
+  minute of 4,000 characters, writes about 170 MB a day. A rate per
+  minute caps speed, not the total.
+- **Files (about 1 GB on the free tier).** 38 MB in 28 post files, 1.4
+  MB each on average, because video is uploaded as recorded: up to 50 MB
+  a file, no compression module in the app, no limit on the number of
+  uploads, and an upload doesn't need a post. Deleting a post left its
+  files. Twenty maximum-size videos would fill it.
+
+So the slice gained daily caps, an upload cap, a smaller video limit,
+cleanup jobs, and a clip length. All numbers agreed with Thenuja, who
+also asked for the 60-second clip cap.
+
+**What was built.**
+- **Text limits,** as CHECK constraints: post 2,000, comment 1,000,
+  message 4,000, bio 160, name 50, Room name 50 and description 300,
+  sub-group the same, story caption 200, poll question 150 and option
+  60, event title and location 100 and link 500. Each is far above the
+  longest value in the data, so they were added validated. The same
+  numbers are `maxLength` on the inputs.
+- **Rate limits,** per person: messages 30 a minute and 2,000 a day;
+  comments 10 a minute and 500 a day; likes 60 a minute; reactions 60 a
+  minute; posts and events 10 an hour and 30 a day; stories the same;
+  reports 10 an hour; friend requests 20 an hour; Rooms 5 a day.
+- **The verification email:** 1 a minute per Room and 5 an hour, in the
+  Edge Function, checked before the token is replaced so a refused
+  request leaves the earlier link working.
+- **Uploads:** 50 files per person in 24 hours, across all buckets.
+  Video in posts and stories 25 MB, down from 50.
+- **Clips: 60 seconds.** The in-app camera and the OS camera stop there.
+  A longer gallery video is dimmed in the grid and says why when tapped;
+  the story picker refuses one with the same sentence.
+- **Cleanup, on `pg_cron`:** files nothing points at (daily), old
+  notifications (90 days, daily), old counters (hourly).
+
+**How the rate limits work, and why this way.**
+- **A counter table, not a count of recent rows.** `rate_limit_counters`
+  has a row per person, action and window. `hit_rate_limit()` adds one
+  and raises past the limit: one indexed upsert whatever the table's
+  size. Counting a person's messages in the last minute would need an
+  index `messages` doesn't have, on its hottest path, and slow down as
+  it grew.
+- **Fixed windows** (the minute, hour or day it falls in), not sliding.
+  Someone can do a minute's worth either side of a boundary. It's a
+  ceiling, not a meter, and a sliding window costs a row per action.
+- **A trigger per table,** limiting `auth.uid()`. No user, no limit: the
+  service role, cron and seeds pass. A post made inside `create_post()`
+  counts against its caller.
+- **A refused insert leaves nothing behind.** The increment is in the
+  refused statement and rolls back with it, so hammering a limit doesn't
+  extend it.
+- **One sentence for every limit,** raised as `P0001`, so the app shows
+  it. It doesn't say which limit or when to try again: every limit is a
+  minute, an hour or a day, and "wait a moment" is true of the ones a
+  person meets by accident.
+
+**The upload cap didn't work the first way.** It was written like the
+others: a policy function that counted the upload in the counter table.
+The upload succeeded and the counter stayed at 0. The Storage service
+evaluates the INSERT policy inside a transaction it rolls back (a
+permission test), uploads the bytes, then writes the row as its own
+role, past RLS. Anything a policy writes is undone. So the function
+counts what persists, the person's own rows in `storage.objects` over
+the last 24 hours. Two consequences: deleting your uploads gives the
+allowance back, which is right for a limit on what's stored; and the
+count is an unindexed scan, since the table belongs to the Storage
+service and a migration may add policies to it but not indexes. Fine at
+free-tier size; to revisit with R2.
+
+**Cleanup: what counts as unused.**
+- A file no row points at, once it's 24 hours old.
+- A file whose only posts or messages were removed, once the removal is
+  7 days old. The proposal said "files of deleted posts" with no delay.
+  Seven days is so a report about removed content can still be reviewed
+  with its media; the report's text snapshot stays for good.
+- `unused_media()` decides and returns paths; the Edge Function removes
+  them through the Storage API, because a file can't be deleted by
+  deleting its row.
+
+**Verified:**
+- **The suite, 61 of 61.** Before the migrations every over-length value
+  and the 31st message in a minute were accepted. After: each text limit
+  with the limit accepted and one more refused; each rate limit with the
+  last allowed and the next refused; a refusal not resetting the count;
+  another person and the service role unaffected; the daily cap, by
+  setting the day's counter to 1,999; the upload allowance at 49, 50 and
+  with older files not counting; the counters and internal functions
+  closed to clients; a 91-day-old notification deleted and an 89-day-old
+  kept; of five stored files, exactly the two that should be unused
+  listed.
+- **Slices 2 to 5 again:** 52, 50, 42 and 26, all passing, with rate
+  limits now on the tables they write. 231 checks across the five
+  suites.
+- **16 checks over the live API:** the second verification email
+  refused (429, the sentence), the first link still working; a 26 MB
+  video refused by the bucket; 50 real uploads accepted and the 51st
+  refused, in another bucket too, someone else unaffected, and the
+  allowance back after deleting; the 11th comment in a minute refused as
+  the app sees it.
+- **The cleanup function, for real:** an upload backdated two days was
+  removed and one made a minute earlier wasn't. It also removed three
+  files already in the local data that nothing pointed at: a 4.1 MB clip
+  from a post deleted 17 days before, and two replaced Room pictures. A
+  second call found nothing.
+- **Typecheck, lint, the React Compiler check** (111 components, 0
+  skipped).
+- **On the Galaxy A14:**
+  - A poll option stopped at 60 characters and the question at 150 with
+    80 and 200 typed, and that poll, at both limits, was accepted by the
+    server. The bio stopped at 160.
+  - With the account's daily message count set to the limit, sending
+    showed "You're doing that too often. Wait a moment and try again."
+    and kept the typed text.
+  - In the Clip tab, a video over 60 seconds was dimmed; tapping it
+    showed the reason and didn't select it; tapping one within the limit
+    cleared the notice.
+  - A recording left running stopped by itself, first seen stopped 64
+    seconds after the tap (polled every few seconds).
+- Everything created was removed. Counts match the baseline, except
+  stored files: 32, was 35, the three unused ones.
+
+**Not checked:**
+- The 4,000-character message cap by typing on the phone. `adb` drops
+  input at that length, so the cap was checked on shorter fields; the
+  message box has the same prop.
+- A long video refused in the *story* composer. It uses the phone's own
+  photo picker, which wasn't driven. The check is three lines in
+  `lib/media.ts`.
+- iOS.
+
+**Corrected along the way:** the slice 9 plan said a chat message that
+fails to send loses its text. The limit test on the phone showed it
+doesn't; the screen restores the draft. What it drops is the message
+being replied to. Roadmap fixed.
+
+**Noticed, for slice 7:** a new table is open by default. Supabase's
+default privileges gave `rate_limit_counters` to `anon` and
+`authenticated` on creation (revoked in the same migration). It's the
+default slice 2 withdrew for functions, and where the all-columns grants
+of slices 3 and 4 came from.
+
+**For Phase 11:** Auth's own rate limits and a signup captcha are
+settings on the hosted project, not code; the two cleanup jobs that call
+Edge Functions carry the local URL and key. All in the roadmap.
+
+---
+
 ## 2026-10-02 — Phase 10, slice 5: profile details sit behind get_profile()
 
 Migration `20261002130000_profile_details_behind_get_profile.sql`, and

@@ -52,7 +52,6 @@ const short = (r) => `${r.status} ${r.text.slice(0, 110)}`;
   check('account confirmed', confirm.status === 200, `${confirm.status}`);
   const me = await signIn(EMAIL, PASSWORD);
   const eve = await signIn('eve@example.com');
-  const tobi = await signIn('tobi@example.com');
   const outsider = await signIn('outsider@example.com');
 
   console.log('\n== a throwaway request-to-join Room, created over the API by a seed account');
@@ -95,10 +94,25 @@ const short = (r) => `${r.status} ${r.text.slice(0, 110)}`;
   const memberFeed = await call(`/rest/v1/posts?room_id=eq.${roomId}&select=id`, { token: eve.token });
   check('a member reads the post', memberFeed.json?.length === 1, short(memberFeed));
 
-  console.log('\n== storage: signing a Room file calls the helpers from storage policies');
-  const file = 'a0000000-0000-0000-0000-000000000001/11111111-1111-1111-1111-111111111111/941bf245b6c412ed9004ed7e0477a08a.mp4';
-  const memberSign = await call(`/storage/v1/object/sign/post-media/${file}`, { token: tobi.token, method: 'POST', body: { expiresIn: 60 } });
-  check('a member of that Room can sign its file', memberSign.status === 200 && !!memberSign.json?.signedURL, short(memberSign));
+  console.log('\n== storage: uploading and signing a Room file calls the helpers from storage policies');
+  // Its own file, not one already in the local data: the unused-media
+  // cleanup (slice 6) removes files nothing points at, so a path borrowed
+  // from the seed data isn't guaranteed to be there next week.
+  const file = `${roomId}/${me.id}/zzslice2.jpg`;
+  const upload = async (token, path) => {
+    const res = await fetch(`${API}/storage/v1/object/post-media/${path}`, {
+      method: 'POST',
+      headers: { apikey: ANON, Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg' },
+      body: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+    });
+    return { status: res.status, text: await res.text() };
+  };
+  const memberUpload = await upload(me.token, file);
+  check('a member uploads into the Room\'s folder under their own id', memberUpload.status === 200, short(memberUpload));
+  const outsiderUpload = await upload(outsider.token, `${roomId}/${outsider.id}/zzslice2.jpg`);
+  check('an outsider cannot upload there', outsiderUpload.status >= 400, short(outsiderUpload));
+  const memberSign = await call(`/storage/v1/object/sign/post-media/${file}`, { token: eve.token, method: 'POST', body: { expiresIn: 60 } });
+  check('another member of the Room can sign that file', memberSign.status === 200 && !!memberSign.json?.signedURL, short(memberSign));
   const outsiderSign = await call(`/storage/v1/object/sign/post-media/${file}`, { token: outsider.token, method: 'POST', body: { expiresIn: 60 } });
   check('an outsider cannot', outsiderSign.status >= 400, short(outsiderSign));
 

@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from '@/components/Icon';
 import ReportSheet from '@/components/ReportSheet';
 import Skeleton from '@/components/Skeleton';
+import { Limits } from '@/constants/limits';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -416,6 +417,7 @@ export default function CommunitySettings() {
         <TextInput
           style={[styles.input, styles.textarea, descriptionFocus.focused && styles.inputFocused]}
           value={description}
+          maxLength={Limits.roomDescription}
           onChangeText={setDescription}
           selection={descriptionSelection}
           onFocus={() => {
@@ -496,6 +498,7 @@ export default function CommunitySettings() {
             <TextInput
               style={[styles.input, styles.domainInput, domainFocus.focused && styles.inputFocused]}
               value={requiredDomain}
+              maxLength={Limits.emailDomain}
               onChangeText={setRequiredDomain}
               onFocus={domainFocus.onFocus}
               onBlur={domainFocus.onBlur}

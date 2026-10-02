@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import GroupedCard, { GroupedDivider, GroupedRow, GroupedTextInput } from '@/components/create/GroupedCard';
+import { Limits } from '@/constants/limits';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatEventDate, formatEventTime } from '@/lib/posts';
@@ -63,6 +64,7 @@ export default function EventTabFields({
       <GroupedCard>
         <GroupedTextInput
           value={title}
+          maxLength={Limits.eventTitle}
           onChangeText={onChangeTitle}
           placeholder="Add event name"
           fieldKey="event-title"
@@ -74,6 +76,7 @@ export default function EventTabFields({
         <GroupedDivider />
         <GroupedTextInput
           value={description}
+          maxLength={Limits.postText}
           onChangeText={onChangeDescription}
           placeholder="Add description (optional)"
           fieldKey="event-description"
@@ -114,6 +117,7 @@ export default function EventTabFields({
       <GroupedCard>
         <GroupedTextInput
           value={location}
+          maxLength={Limits.eventLocation}
           onChangeText={onChangeLocation}
           placeholder="Add location (optional)"
           fieldKey="event-location"
@@ -125,6 +129,7 @@ export default function EventTabFields({
         <GroupedDivider />
         <GroupedTextInput
           value={link}
+          maxLength={Limits.eventLink}
           onChangeText={onChangeLink}
           placeholder="Add a link (optional)"
           fieldKey="event-link"

@@ -6,6 +6,7 @@ import BottomSheet, { BottomSheetFlatList } from '@/components/BottomSheet';
 import ConfirmModal from '@/components/ConfirmModal';
 import ReportSheet, { type ReportTarget } from '@/components/ReportSheet';
 import Icon from '@/components/Icon';
+import { Limits } from '@/constants/limits';
 import { Fonts, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/lib/errors';
@@ -259,6 +260,7 @@ const CommentsSheet = forwardRef<
             <TextInput
               style={styles.input}
               value={draft}
+              maxLength={Limits.comment}
               onChangeText={setDraft}
               placeholder={replyTo ? `Reply to ${replyTo.authorHandle}…` : 'Join the conversation…'}
               placeholderTextColor={colors.neutral[500]}

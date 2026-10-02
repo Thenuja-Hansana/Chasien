@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import { Limits } from '@/constants/limits';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -187,6 +188,7 @@ export default function EditProfile() {
             <TextInput
               style={[styles.input, nameFocus.focused && styles.inputFocused]}
               value={name}
+              maxLength={Limits.displayName}
               onChangeText={setName}
               onFocus={nameFocus.onFocus}
               onBlur={nameFocus.onBlur}
@@ -198,6 +200,7 @@ export default function EditProfile() {
             <TextInput
               style={[styles.input, styles.textarea, bioFocus.focused && styles.inputFocused]}
               value={bio}
+              maxLength={Limits.bio}
               onChangeText={setBio}
               selection={bioSelection}
               onFocus={() => {

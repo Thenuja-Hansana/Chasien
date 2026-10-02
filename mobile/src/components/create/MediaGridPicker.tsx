@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 
 import Icon from '@/components/Icon';
+import { CLIP_TOO_LONG_MESSAGE, MAX_CLIP_SECONDS } from '@/constants/limits';
 import { Fonts, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { PickedMedia } from '@/lib/media';
@@ -136,6 +137,9 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
     stagedMedia.flatMap((item) => (item.assetId ? [item.assetId] : [])),
   );
   const [capturedItems, setCapturedItems] = useState<PickedMedia[]>([]);
+  // Shown beside "Recents" after a tap on a video that's over the clip
+  // limit, until the next tap on something that can be picked.
+  const [clipTooLongNotice, setClipTooLongNotice] = useState(false);
   // Camera shots from an earlier visit to this grid — not gallery assets, so
   // they can't be shown or unticked here; they stay in the post and count
   // toward its limit. (Removable with the × on the review screen.)
@@ -253,7 +257,14 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
     [selectedAssetIds, stagedMedia, stagedCaptures, assets, capturedItems, onConfirm],
   );
 
-  function toggleAsset(id: string, isVideo: boolean) {
+  function toggleAsset(id: string, isVideo: boolean, tooLong: boolean) {
+    // A video over the clip limit can't be picked, in either mode. The tile
+    // is dimmed, and tapping it says why rather than doing nothing.
+    if (tooLong) {
+      setClipTooLongNotice(true);
+      return;
+    }
+    setClipTooLongNotice(false);
     if (mode === 'clip') {
       if (!isVideo) return;
       setCapturedItems([]);
@@ -296,7 +307,9 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
     setSelectedAssetIds([]);
     setIsRecording(true);
     try {
-      const video = await cameraRef.current.recordAsync();
+      // Stops by itself at the clip limit; the promise resolves with what
+      // was recorded up to then, exactly as it does on a second tap.
+      const video = await cameraRef.current.recordAsync({ maxDuration: MAX_CLIP_SECONDS });
       if (video) setCapturedItems([{ kind: 'video', uri: video.uri }]);
     } catch {
       // Recording failure — capturedItems stays empty, user can retry.
@@ -343,6 +356,7 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
       */}
       <View style={isFullscreen && styles.hiddenWhileFullscreen} pointerEvents={isFullscreen ? 'none' : 'auto'}>
         <Text style={styles.recentsLabel}>Recents</Text>
+        {clipTooLongNotice && <Text style={styles.recentsNotice}>{CLIP_TOO_LONG_MESSAGE}</Text>}
       </View>
       <FlatList
         // FlatList doesn't support changing numColumns on the fly — a
@@ -366,11 +380,18 @@ const MediaGridPicker = forwardRef<MediaGridPickerHandle, Props>(function MediaG
         }
         renderItem={({ item }) => {
           const isVideo = item.mediaType === 'video';
+          // expo-media-library gives a video's length in seconds.
+          const tooLong = isVideo && item.duration > MAX_CLIP_SECONDS;
           const isSelected = selectedAssetIds.includes(item.id);
           const order = selectedAssetIds.indexOf(item.id);
           return (
-            <Pressable style={[styles.gridTile, { flex: 1 / numColumns }]} onPress={() => toggleAsset(item.id, isVideo)} disabled={busy}>
-              <Image source={{ uri: item.uri }} style={styles.gridImage} contentFit="cover" />
+            <Pressable
+              style={[styles.gridTile, { flex: 1 / numColumns }]}
+              onPress={() => toggleAsset(item.id, isVideo, tooLong)}
+              disabled={busy}
+              accessibilityLabel={tooLong ? 'Video longer than the clip limit' : undefined}
+            >
+              <Image source={{ uri: item.uri }} style={[styles.gridImage, tooLong && styles.gridImageTooLong]} contentFit="cover" />
               {isVideo && (
                 <View style={styles.gridPlayBadge}>
                   <Icon name="play" size={11} color="#ffffff" />
@@ -682,6 +703,12 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.neutral[500],
       marginBottom: Spacing[2],
     },
+    recentsNotice: {
+      color: colors.text,
+      fontSize: 12.5,
+      fontFamily: Fonts.body,
+      marginBottom: Spacing[2],
+    },
     grid: {
       flex: 1,
     },
@@ -700,6 +727,11 @@ const makeStyles = (colors: ThemeColors) =>
     gridImage: {
       width: '100%',
       height: '100%',
+    },
+    // A video over the clip limit: still shown, so the gallery doesn't look
+    // like it's missing things, but visibly not available.
+    gridImageTooLong: {
+      opacity: 0.3,
     },
     gridPlayBadge: {
       position: 'absolute',

@@ -12,6 +12,7 @@ import MessageBubble from '@/components/MessageBubble';
 import OptionsSheet from '@/components/OptionsSheet';
 import ReportSheet, { type ReportTarget } from '@/components/ReportSheet';
 import Skeleton from '@/components/Skeleton';
+import { Limits } from '@/constants/limits';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -474,6 +475,7 @@ export default function ChatView() {
             <TextInput
               style={styles.input}
               value={draft}
+              maxLength={Limits.message}
               onChangeText={handleDraftChange}
               onFocus={draftFocus.onFocus}
               onBlur={draftFocus.onBlur}

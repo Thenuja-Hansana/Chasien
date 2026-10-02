@@ -166,6 +166,13 @@ GitHub Actions → EAS builds.
   answer only about `auth.uid()`: always pass `auth.uid()` to them in a
   policy, and use `room_rank()` from SECURITY DEFINER code that has to ask
   about someone else.
+- **Everything people can write is limited**, because the free tier is
+  500 MB of database and about 1 GB of files — see "Limits" in
+  `docs/architecture.md`. A new text column gets a `char_length` CHECK
+  and the same number in `mobile/src/constants/limits.ts` (the input's
+  `maxLength`); a new table people insert into gets an
+  `enforce_rate_limit(...)` trigger (`20261002140100_rate_limits.sql`);
+  anything that accumulates needs a cleanup job.
 - `functions/` (Deno Edge Functions) is for anything beyond what RLS can
   safely express: cross-table checks, role changes, join-approval flow,
   webhook-triggered push notification fan-out.

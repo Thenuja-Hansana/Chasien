@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import GroupedCard, { GroupedDivider, GroupedRow, GroupedTextInput } from '@/components/create/GroupedCard';
+import { Limits } from '@/constants/limits';
 import { Fonts, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -53,6 +54,7 @@ export default function PollTabFields({
       <TextInput
         style={[styles.input, focusedField === 'poll-question' && styles.inputFocused]}
         value={question}
+        maxLength={Limits.pollQuestion}
         onChangeText={onChangeQuestion}
         onFocus={() => onFocusField('poll-question')}
         onBlur={() => onBlurField('poll-question')}
@@ -68,6 +70,7 @@ export default function PollTabFields({
             {index > 0 && <GroupedDivider />}
             <GroupedTextInput
               value={option}
+              maxLength={Limits.pollOption}
               onChangeText={(v) => onChangeOption(index, v)}
               placeholder="Add"
               fieldKey={`poll-option-${index}`}

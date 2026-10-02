@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import { Limits } from '@/constants/limits';
 import { Fonts, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -73,6 +74,7 @@ export default function CreateSubgroup() {
         <TextInput
           style={[styles.input, nameFocus.focused && styles.inputFocused]}
           value={name}
+          maxLength={Limits.subgroupName}
           onChangeText={setName}
           onFocus={nameFocus.onFocus}
           onBlur={nameFocus.onBlur}
@@ -84,6 +86,7 @@ export default function CreateSubgroup() {
         <TextInput
           style={[styles.input, descriptionFocus.focused && styles.inputFocused]}
           value={description}
+          maxLength={Limits.subgroupDescription}
           onChangeText={setDescription}
           onFocus={descriptionFocus.onFocus}
           onBlur={descriptionFocus.onBlur}

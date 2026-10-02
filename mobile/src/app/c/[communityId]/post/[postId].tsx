@@ -24,6 +24,7 @@ import PostMediaCarousel from '@/components/PostMediaCarousel';
 import PostOptionsMenu from '@/components/PostOptionsMenu';
 import ReportSheet, { type ReportTarget } from '@/components/ReportSheet';
 import { PostTagsLine, PostTagsOverlay } from '@/components/PostTags';
+import { Limits } from '@/constants/limits';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
@@ -445,6 +446,7 @@ export default function PostDetail() {
             <TextInput
               style={[styles.composerInput, commentFocus.focused && styles.composerInputFocused]}
               value={draft}
+              maxLength={Limits.comment}
               onChangeText={setDraft}
               onFocus={commentFocus.onFocus}
               onBlur={commentFocus.onBlur}
