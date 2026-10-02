@@ -44,19 +44,34 @@ user load, real revenue) to spend money.
 - **Row Level Security decides which rows; column grants decide which
   fields.** Every table has RLS on. Client-writable tables grant
   `authenticated` INSERT/UPDATE on named columns only — exactly what the app
-  and the SECURITY INVOKER functions (`create_post`, `create_event_post`,
-  `vote_poll`) write. Since 2026-09-16; before that, a blanket
-  grant left authority-bearing columns writable (see decision-log). The
-  tables that pass missed were closed on 2026-10-02; `polls`,
-  `poll_options` and `events` are the last on the old grant (Phase 10,
-  slice 4).
+  and the one remaining SECURITY INVOKER function (`vote_poll`) write.
+  Since 2026-09-16; before that, a blanket grant left authority-bearing
+  columns writable (see decision-log). The tables that pass missed were
+  closed on 2026-10-02 (Phase 10, slices 3 and 4). No table is on the old
+  grant now.
 - **A function that enforces a rule can't be SECURITY INVOKER over a table
   the caller may also write.** The caller needs the same permission the
-  function uses, so they can skip the function. `start_dm()` was the
-  case: "must be friends" and "not blocked" lived in it, and anyone could
-  insert the DM row themselves. It's SECURITY DEFINER now, and
-  `conversations` has no client write access at all: DMs come from
-  `start_dm()`, sub-groups from the room-membership Edge Function.
+  function uses, so they can skip the function. Two cases, both closed
+  2026-10-02:
+  - `start_dm()`: "must be friends" and "not blocked" lived in it, and
+    anyone could insert the DM row themselves. `conversations` has no
+    client write access now: DMs come from `start_dm()`, sub-groups from
+    the room-membership Edge Function.
+  - `create_post()` and `create_event_post()`: an author could attach a
+    poll, an event or media to an existing post, add options to a live
+    poll, or delete media, all directly. `posts` (insert), `post_media`,
+    `polls`, `poll_options` and `events` have no client write access now.
+  `vote_poll()` stays INVOKER because its one rule (single choice) is also
+  a trigger on the table, so skipping the function skips nothing.
+- **A post is made by `create_post()` or `create_event_post()` and
+  nothing else** (since 2026-10-02). Both are SECURITY DEFINER, so they
+  enforce what the `posts` INSERT policy used to: `can_post_in_room()`,
+  an approved member who is a moderator or in a Room that lets members
+  post. The author is always `auth.uid()`. The server applies the limits
+  the app does (10 media, 2 to 4 poll options), and a media path must be
+  `{room}/{author}/{file}`, so a post can only point at what its author
+  uploaded for that Room. A new kind of post attachment means a change to
+  these functions, not a new client-writable table.
 - **A grant with no policy behind it is withdrawn,** not left for RLS to
   filter. `room_memberships`, the `my_inbox` view, and DELETE on posts,
   comments, messages, profiles and chat participants: a write is refused
@@ -65,9 +80,9 @@ user load, real revenue) to spend money.
   state (room-membership Edge Function), pins and removals (SECURITY DEFINER
   functions), domain verification (service-role Edge Functions), counters
   and notifications (SECURITY DEFINER triggers), and post tags
-  (`tag_people_in_post()`, SECURITY DEFINER, which silently drops anyone not
-  allowed so no error can reveal a block — clients may only read tags and
-  remove their own).
+  (`tag_people_in_post()`, SECURITY DEFINER, called only by `create_post()`,
+  which silently drops anyone not allowed so no error can reveal a block —
+  clients may only read tags and remove their own).
 - **One rule decides who can remove content** (since 2026-09-21):
   `can_remove_content()`. Authors can always remove their own content;
   otherwise the actor must be an owner/admin/mod who strictly outranks the
@@ -151,9 +166,9 @@ user load, real revenue) to spend money.
   function to everyone unless told otherwise, so the defaults are
   withdrawn: a new function is callable by nobody but the service role
   until it's granted on purpose. `authenticated` holds the functions the
-  app calls, the helpers its RLS policies evaluate, and
-  `tag_people_in_post`. `anon` holds one, `text_is_allowed`, for the
-  signup screen. Trigger functions need no grant.
+  app calls and the helpers its RLS policies evaluate. `anon` holds one,
+  `text_is_allowed`, for the signup screen. Trigger functions need no
+  grant.
 - **The membership helpers answer only about the caller.**
   `is_room_member`, `is_room_moderator`, `is_room_admin`, `is_room_owner`
   and `is_conversation_participant` have to be executable by

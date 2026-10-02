@@ -7,6 +7,110 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-02 — Phase 10, slice 4: a post is made by create_post() and nothing else
+
+Migration `20261002120000_posts_only_through_create_post.sql`. No app
+change. Closes the oldest open item of the 2026-09-16 audit, "direct
+inserts into `polls`/`poll_options`/`post_media`/`events` that skip
+`create_post`'s validation".
+
+**What was wrong.** The cause slice 3 found behind `start_dm()`, again.
+`create_post()` and `create_event_post()` were SECURITY INVOKER, so their
+caller needed INSERT on five tables and policies letting an author attach
+to their own post. Those let the author skip the functions.
+
+**Reproduced first,** as a post's author, rolled back (and as
+`supabase/tests/phase10_slice4_suite.js`, which failed 25 of its 42
+checks before the migration):
+- a post with no text, media or poll, inserted directly
+- a one-option poll attached to an existing post
+- 29 more options added to a poll people could already be voting on
+- an event attached to a post that already has a poll
+- 40 media items added to an old post, pointing at another Room's file
+- media rows deleted from a published post, an edit nobody can see
+- people tagged on an old post, by calling `tag_people_in_post()`
+- through `create_post()` itself: 60 media items and a 40-option poll.
+  The limits of 10 and 4 existed only in the app.
+
+**The choice, and why A.** Put to Thenuja as two options:
+- **A, taken:** both functions become SECURITY DEFINER and enforce the
+  posting rule themselves; clients lose every direct write on the five
+  tables.
+- **B:** leave the functions and add guard triggers on the four
+  attachment tables.
+
+B keeps RLS as the thing that decides who may post, which is where this
+codebase prefers that decision to live. But it needs a trigger per
+table that can tell "inside `create_post`" from "afterwards", it leaves
+`posts` itself insertable (so an empty post stays possible), and every
+future attachment table needs its own guard. A has one place that says
+what a post is. Its cost is that a function, not a policy, now decides
+who may post, so that check carries the Room invariant and had to be
+verified as carefully as a policy would be.
+
+**What changed.**
+- **`can_post_in_room(room, user)`**, internal: rank 1 or above, or rank
+  0 in a Room with `members_can_post`. It reads `room_rank()`. This is
+  the dropped `posts` INSERT policy, as a function.
+- **Both functions** check it first, set the author to `auth.uid()`, and
+  refuse everyone else with one sentence, "You can't post in this Room.",
+  whether the caller isn't a member, is pending, is in a moderators-only
+  Room, or named a Room that doesn't exist. No difference to probe.
+- **Limits on the server:** at most 10 media, 2 to 4 options.
+- **A media path must be `{room}/{caller}/{one file name}`.** That's what
+  the upload produces and what the storage policy lets that person
+  upload, so a post can only point at media its author uploaded for that
+  Room. All 28 existing media rows already fit.
+- **No client writes** on `posts` (insert), `post_media`, `polls`,
+  `poll_options`, `events`. Six write policies dropped.
+- **`tag_people_in_post()` is no longer callable over the API.** It was
+  granted only because `create_post()` called it as the caller.
+
+**Decisions inside it.**
+- **The path check doesn't look the file up in storage.** It could
+  (`storage.objects`), and would then prove the upload exists. But media
+  is due to move to R2 behind `lib/media.ts`'s seam, and a check tied to
+  Supabase Storage's own table would break on that day. The shape check
+  survives the move. A path to a file that was never uploaded shows as a
+  broken image on the author's own post, which harms nobody else.
+- **The message is people-facing now.** The RLS refusal it replaces came
+  back as a permission error, which `errorMessage()` hides behind the
+  screen's fallback. This one is raised without an errcode, so the app
+  shows it.
+- **`vote_poll()` stays INVOKER.** Its rule, one choice unless the poll
+  allows several, is also a trigger on `poll_votes`. Skipping the
+  function skips nothing.
+- **Text length is not here.** Nothing limits it anywhere; a
+  200,000-character post was accepted in the control run. That needs
+  numbers, and they're a product decision. Moved into slice 6.
+
+**Verified** against the local stack:
+- **The slice's suite: 42 of 42** after the migration. Every kind of
+  post still made (plain, poll, media with framing and location and
+  tags, event); the limits, each refused for its own reason, and the
+  boundary values (10 and 4) accepted; ten ways of writing around the
+  functions refused with "permission denied"; who may post, as a member,
+  an outsider, a pending requester, a member of a moderators-only Room, a
+  mod, the owner, a removed member and a signed-out caller; reads
+  unchanged, members read and an outsider reads none.
+- **Slice 2's and slice 3's suites again:** 52 of 52 and 50 of 50. Their
+  live scripts: 17 of 17 and 21 of 21.
+- **On the Galaxy A14,** from the app's own composer, as a plain member
+  of a throwaway Room: a post with a gallery video (902 KB uploaded, the
+  real path accepted), a poll, and an event. Then, with the composer
+  open, the Room was switched to moderators-only and a poll sent: the
+  screen showed "You can't post in this Room." and nothing was created.
+- Signed-in callers can execute 24 functions now (was 25).
+- Everything created was removed, the uploaded file included; counts
+  match the baseline.
+
+**The stack was down at the start of this slice** (the machine had
+restarted). Docker Desktop started, the containers came back by
+themselves except the edge runtime, as `running-locally.md` says, and
+the data was intact at 82 migrations.
+
+---
+
 ## 2026-10-02 — Phase 10, slice 3: the tables the column lockdown missed, and a way around start_dm()
 
 Migration `20261002110000_remaining_blanket_grants.sql`. No app change.

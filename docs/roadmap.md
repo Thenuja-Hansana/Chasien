@@ -960,14 +960,25 @@ block is the original list; each slice says which of its items it closes.
       rules, and a Room admin could write sub-group rows directly. Both
       closed; `conversations` has no client writes now. 50 database
       checks and 21 over the live API. See decision-log, 2026-10-02
-- [ ] Slice 4 — post attachments only through `create_post`: direct
+- [x] Slice 4 — post attachments only through `create_post`: direct
       inserts into `polls`, `poll_options`, `post_media`, `events`; the
       10-media and 4-option limits exist only in the app. These three
       tables are also the last on the old all-columns grant, with UPDATE
-      and DELETE grants no policy backs
+      and DELETE grants no policy backs. **Done 2026-10-02**
+      (`20261002120000_posts_only_through_create_post.sql`):
+      `create_post()` and `create_event_post()` are SECURITY DEFINER and
+      enforce the posting rule themselves, the limits and a media-path
+      check are on the server, and `posts` (insert), `post_media`,
+      `polls`, `poll_options` and `events` have no client writes. 42
+      database checks, and a media post, a poll and an event made from
+      the A14. See decision-log, 2026-10-02
 - [ ] Slice 5 — `profiles` between blocked people (bio, banner, last
       active)
-- [ ] Slice 6 — rate limits: the verification email (unlimited today),
+- [ ] Slice 6 — rate limits **and size limits**. Nothing limits how long
+      text can be anywhere: a 200,000-character post is accepted (found
+      in slice 4), and the database cap is 500 MB. Posts, comments,
+      messages, bios and names need a maximum each; the numbers are a
+      product decision. Rate limits: the verification email (unlimited today),
       per-person caps on posts, messages, comments, reports and friend
       requests, and a review of Auth's own limits
 - [ ] Slice 7 — the full security re-check as one re-runnable script
@@ -1009,7 +1020,7 @@ block is the original list; each slice says which of its items it closes.
         30-check backend test, all against the live local stack. See
         decision-log, 2026-09-16 (two entries) and migrations
         `20260916140000`/`20260916150000`
-  - [ ] Still open from that audit: client-written timestamps on likes,
+  - [x] Still open from that audit: client-written timestamps on likes,
         reactions, hidden posts and push tokens (`blocks` closed
         2026-09-21: writes now go only through `block_user()`); direct inserts into
         `polls`/`poll_options`/`post_media`/`events` that skip
@@ -1022,7 +1033,9 @@ block is the original list; each slice says which of its items it closes.
         closed 2026-09-22: a trigger captures it when a report is filed)
         (The timestamps closed 2026-10-02, slice 3. So did the DM case,
         which turned out wider than blocks: the row could be inserted by
-        anyone, friend or not. The direct inserts are slice 4)
+        anyone, friend or not. The direct inserts closed the same day,
+        slice 4. What's left of this item is the `edited_at` trigger,
+        which is a condition on a future feature, not open work)
   - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
         after Phase 9's features
   - [x] `my_inbox` (a view) still carries INSERT/UPDATE/DELETE grants

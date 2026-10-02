@@ -134,7 +134,12 @@ GitHub Actions → EAS builds.
   `create_event_post`) are Postgres RPC functions, not several sequential
   client inserts — there's no client-side rollback if a later insert in a
   sequence fails, and several tables deliberately have no client DELETE
-  policy to unwind a partial write by hand.
+  policy to unwind a partial write by hand. A function that enforces a
+  rule is SECURITY DEFINER and the tables it writes carry no client write
+  grant, otherwise the caller can skip it: `posts`, `post_media`, `polls`,
+  `poll_options`, `events` and `conversations` are written only by
+  `create_post` / `create_event_post` / `start_dm` and the Edge Functions
+  (`20261002110000`, `20261002120000`).
 - Table `GRANT`s to the `authenticated` role (`grants.sql`-style
   migrations) are required in addition to RLS policies — RLS alone still
   returns "permission denied" without them.
