@@ -949,14 +949,22 @@ block is the original list; each slice says which of its items it closes.
       for signed-in), new ones start closed, and the helpers answer only
       about the caller. 52 database checks and 17 over the live API, kept
       in `supabase/tests/`. See decision-log, 2026-10-02
-- [ ] Slice 3 — grant tidy-up: client-written timestamps on likes,
+- [x] Slice 3 — grant tidy-up: client-written timestamps on likes,
       reactions, hidden posts and push tokens; `my_inbox`'s stale grants.
       Also `conversations`, noticed in slice 2: its INSERT and UPDATE
       grants still list every column, `member_count` and `created_at`
-      included
+      included. **Done 2026-10-02**
+      (`20261002110000_remaining_blanket_grants.sql`), and it was more
+      than tidying: anyone could open a DM with anyone by inserting the
+      conversation row, around `start_dm()`'s friends-only and block
+      rules, and a Room admin could write sub-group rows directly. Both
+      closed; `conversations` has no client writes now. 50 database
+      checks and 21 over the live API. See decision-log, 2026-10-02
 - [ ] Slice 4 — post attachments only through `create_post`: direct
       inserts into `polls`, `poll_options`, `post_media`, `events`; the
-      10-media and 4-option limits exist only in the app
+      10-media and 4-option limits exist only in the app. These three
+      tables are also the last on the old all-columns grant, with UPDATE
+      and DELETE grants no policy backs
 - [ ] Slice 5 — `profiles` between blocked people (bio, banner, last
       active)
 - [ ] Slice 6 — rate limits: the verification email (unlimited today),
@@ -970,7 +978,10 @@ block is the original list; each slice says which of its items it closes.
 - [ ] Slice 9 — offline, "online-only but honest": a no-connection
       banner, requests that time out, retry buttons, and nothing typed
       ever lost (a chat message that fails to send loses its text today).
-      No offline queue. Shares slice 8's dev-client rebuild
+      No offline queue. Shares slice 8's dev-client rebuild. Also here:
+      signing out leaves the device's push token registered, so a
+      signed-out phone keeps getting the old account's pushes until
+      someone else signs in on it (noticed in slice 3)
 - [ ] Slice 10 — loading, empty and error states on Phase 9's screens,
       then `docs/phase/phase10.md`
 
@@ -1009,12 +1020,16 @@ block is the original list; each slice says which of its items it closes.
         writes (e.g. starting a DM with someone who blocked you). That
         case now belongs to Phase 9's block item. (`content_snapshot`
         closed 2026-09-22: a trigger captures it when a report is filed)
+        (The timestamps closed 2026-10-02, slice 3. So did the DM case,
+        which turned out wider than blocks: the row could be inserted by
+        anyone, friend or not. The direct inserts are slice 4)
   - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
         after Phase 9's features
-  - [ ] `my_inbox` (a view) still carries INSERT/UPDATE/DELETE grants
+  - [x] `my_inbox` (a view) still carries INSERT/UPDATE/DELETE grants
         for `authenticated` from the old blanket grants. They're harmless,
         because the view can't be written to (`is_insertable_into = NO`),
-        but they should be revoked so the grants say what's true
+        but they should be revoked so the grants say what's true.
+        *Revoked 2026-10-02, slice 3*
   - [ ] Between blocked people, `profiles` is still fully readable through
         the API, including bio and `last_active_at` (presence). The screens
         hide them, but only column-level rules on `profiles` would stop a

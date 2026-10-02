@@ -14,11 +14,27 @@ one re-runnable security sweep.
 |---|---|---|
 | `phase10_slice2_suite.js` | Prints SQL. 52 checks that every function the app calls still works, the membership helpers answer only about the caller, and non-members read nothing. Runs as each account the way PostgREST would, in one transaction. | Nothing: it rolls back, and no push is sent. |
 | `phase10_slice2_live.js` | 17 checks over the real API for what a transaction can't cover: signup, the `room-membership` and `delete-account` Edge Functions, storage signing. | A Room `zz-live2` and one Mailpit email. Delete both afterwards. |
+| `phase10_slice3_suite.js` | Prints SQL. 50 checks: a DM can only be opened through `start_dm()`, sub-groups only through the service role, timestamps on likes, reactions, hidden posts and push tokens come from the server, unused grants are gone, and every direct write the app makes still works. | Nothing: it rolls back. |
+| `phase10_slice3_live.js` | 21 checks over the real API: the direct DM and sub-group writes are refused, friends can DM, sub-groups work through the Edge Function. | A Room `zz-live3`, one DM between tobi and kwame, and two friend notifications. Delete them afterwards. |
+
+`sqlsuite.js` is the shared builder for the SQL suites: `as('tobi')` to
+become an account, `check`, `refused` (with the reason it must be refused
+for) and `allowed`.
 
 ```bash
 # from the repo root
 node supabase/tests/phase10_slice2_suite.js | docker exec -i supabase_db_chasien psql -U postgres -d postgres -X -q -t -A
 node supabase/tests/phase10_slice2_live.js
+node supabase/tests/phase10_slice3_suite.js | docker exec -i supabase_db_chasien psql -U postgres -d postgres -X -q -t -A
+node supabase/tests/phase10_slice3_live.js
+```
+
+Cleaning up after the live scripts (as the database owner):
+
+```sql
+delete from rooms where slug like 'zz-live%';
+delete from conversations where kind = 'dm' and dm_user_a = '22222222-2222-2222-2222-222222222222' and dm_user_b = '44444444-4444-4444-4444-444444444444';
+delete from notifications where type in ('friend_request', 'friend_accept') and created_at > now() - interval '1 hour';
 ```
 
 A check prints `PASS` or `FAIL`. A refusal prints the reason it was

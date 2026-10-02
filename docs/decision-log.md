@@ -7,6 +7,110 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-02 — Phase 10, slice 3: the tables the column lockdown missed, and a way around start_dm()
+
+Migration `20261002110000_remaining_blanket_grants.sql`. No app change.
+The roadmap called this a tidy-up (client-written timestamps, stale
+grants on a view). Surveying every table for it found two things that
+weren't tidying.
+
+**What was wrong.** The 2026-09-16 lockdown replaced the blanket grant
+with column lists for the tables the app writes by column. Ten objects
+stayed on the old grant, every column insertable and updatable.
+- **A DM with anyone.** `start_dm()` enforces "you must be friends" and
+  "not blocked". It was SECURITY INVOKER, so its caller needed INSERT on
+  `conversations` and a policy allowing a DM they're part of. The same
+  grant and policy let them insert the row without the function.
+- **Sub-groups written directly.** Three policies from 2026-09-05 let a
+  Room admin insert, update and delete sub-group rows. The app goes
+  through the room-membership Edge Function, which validates them; the
+  direct path skipped that, and the grant covered `member_count` and
+  `created_at`.
+- **Client-written timestamps** on likes, reactions, hidden posts and
+  push tokens, open since the 2026-09-16 audit.
+- **Grants nothing could use:** writes on `room_memberships` (no policy,
+  by design) and on the `my_inbox` view, and DELETE on six tables with no
+  DELETE policy.
+
+**Reproduced first** (`supabase/tests/phase10_slice3_suite.js`, run
+before the migration: 24 of its 50 checks failed):
+- A non-friend inserted the DM and sent a message into it. With a block
+  in place the message was refused, but the empty DM still appeared in
+  the other person's chat list.
+- A Room owner inserted a sub-group with `member_count` 9999 and a 2020
+  `created_at`, then updated and deleted one.
+- A like, a reaction and a hidden post dated 2020; a push token inserted
+  directly and re-dated.
+- DELETE on a post, a message, a comment, a profile: each "succeeded"
+  and deleted nothing.
+
+**What changed.**
+- `start_dm()` is SECURITY DEFINER, body unchanged. The DM insert policy
+  is dropped.
+- `conversations` has no client INSERT, UPDATE or DELETE, and its three
+  sub-group write policies are dropped. DMs come from `start_dm()`,
+  sub-groups from the Edge Function.
+- `post_likes`, `message_reactions`, `hidden_posts`: INSERT on the
+  columns the app sends, no UPDATE. `push_tokens`: no INSERT or UPDATE;
+  `register_push_token()` writes it.
+- `room_memberships` and `my_inbox`: no write grants. DELETE revoked on
+  comments, messages, posts, profiles and chat participants.
+
+**Why this shape.**
+- **The rule this slice turned up:** a function that enforces something
+  can't be SECURITY INVOKER over a table its caller may also write,
+  because the permission it runs on is the permission to skip it.
+  2026-09-16 chose INVOKER for `create_post()` and `vote_poll()` on
+  purpose ("atomicity without adding trust"), and for those the argument
+  holds only as far as RLS and constraints carry every rule. `vote_poll`
+  was already backed by a trigger for that reason. `create_post` is
+  slice 4.
+- **Policies dropped, not left behind a revoked grant.** A policy with
+  no grant under it does nothing, but it reads as if a path exists, and
+  one stray `grant` would bring the path back.
+- **Refused outright rather than filtered to nothing.** RLS turns an
+  UPDATE or DELETE with no matching policy into a statement that
+  succeeds on zero rows. That's safe, and silent: nothing distinguishes
+  "you may not" from "there was nothing to change". Without the grant
+  it's "permission denied".
+- **`polls`, `poll_options` and `events` left alone** for slice 4. They
+  have the same problem and the same cause as `conversations` had, and
+  the fix depends on what `create_post()` becomes.
+
+**Verified** against the local stack:
+- **The slice's suite: 50 of 50** after the migration, in one rolled-back
+  transaction as real accounts. It covers the DM rules (non-friend,
+  pending request, friends, the same DM from both sides, an outsider,
+  after a block), sub-groups (owner refused, service role allowed),
+  timestamps, the dead grants, and then every direct write in
+  `mobile/src/lib`, inventoried by script: comment, unlike, untag, vote
+  and retract, chat message, remove reaction, mark read, notifications,
+  profile edit and heartbeat, report, story, unfriend, unblock, Room
+  settings. One check was wrong, not the fix: a write to `my_inbox` is
+  refused for being a non-updatable view before its grants are looked
+  at, so the check reads the grants instead.
+- **Slice 2's suite again, 52 of 52,** and its live script, 17 of 17.
+- **21 checks over the live API:** the direct DM insert refused (403),
+  `start_dm` refusing non-friends with its own message, a friendship
+  made and a DM opened, used, read by the friend and by nobody else; a
+  Room, a sub-group refused when inserted or patched directly and
+  created, renamed, joined and deleted through the Edge Function; a
+  dated like refused and a plain one dated by the server.
+- **On the Galaxy A14:** a like, a hidden post and a chat reaction, each
+  from the app, each landing with a server timestamp.
+- Everything created was removed; counts match the baseline.
+
+**Not checked on the phone:** push-token registration after this
+migration. The phone was offline (Wi-Fi off), so the app couldn't fetch
+a token to register. The suite calls `register_push_token()` as a
+signed-in account and it passes.
+
+**Noticed, for slice 9:** signing out doesn't remove the device's push
+token, so a signed-out phone keeps getting the old account's pushes
+until someone else signs in on it.
+
+---
+
 ## 2026-10-02 — Phase 10, slice 2: functions are closed unless granted, and the helpers answer only about the caller
 
 Migration `20261002100000_functions_closed_by_default.sql`. No app

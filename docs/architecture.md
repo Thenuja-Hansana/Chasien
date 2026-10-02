@@ -45,8 +45,22 @@ user load, real revenue) to spend money.
   fields.** Every table has RLS on. Client-writable tables grant
   `authenticated` INSERT/UPDATE on named columns only — exactly what the app
   and the SECURITY INVOKER functions (`create_post`, `create_event_post`,
-  `vote_poll`, `start_dm`) write. Since 2026-09-16; before that, a blanket
-  grant left authority-bearing columns writable (see decision-log).
+  `vote_poll`) write. Since 2026-09-16; before that, a blanket
+  grant left authority-bearing columns writable (see decision-log). The
+  tables that pass missed were closed on 2026-10-02; `polls`,
+  `poll_options` and `events` are the last on the old grant (Phase 10,
+  slice 4).
+- **A function that enforces a rule can't be SECURITY INVOKER over a table
+  the caller may also write.** The caller needs the same permission the
+  function uses, so they can skip the function. `start_dm()` was the
+  case: "must be friends" and "not blocked" lived in it, and anyone could
+  insert the DM row themselves. It's SECURITY DEFINER now, and
+  `conversations` has no client write access at all: DMs come from
+  `start_dm()`, sub-groups from the room-membership Edge Function.
+- **A grant with no policy behind it is withdrawn,** not left for RLS to
+  filter. `room_memberships`, the `my_inbox` view, and DELETE on posts,
+  comments, messages, profiles and chat participants: a write is refused
+  outright, where it used to succeed and touch nothing.
 - **Authority-bearing changes are server-side:** membership, roles and join
   state (room-membership Edge Function), pins and removals (SECURITY DEFINER
   functions), domain verification (service-role Edge Functions), counters
