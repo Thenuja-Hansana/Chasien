@@ -7,6 +7,102 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-01 — Two places the admin role never reached, and stale docs
+
+Found by reading the whole codebase at the start of a session, not by a
+report. Migration `20261001100000_join_requests_notify_admins.sql`, a
+change to `PostCard.tsx`, and a refresh of `README.md`,
+`architecture.md` and `running-locally.md`.
+
+**Admins weren't told about join requests.** `notify_on_join_request()`
+was written on 2026-09-02 with the roles typed out: `('owner', 'mod')`.
+The admin role arrived on 2026-09-05. That work widened
+`is_room_moderator()`, so every policy calling the helper picked admins
+up, but this trigger doesn't call it and was left as it was. So an admin
+could approve a request (the Edge Function's `requireModerator` allows
+it) without ever getting the notification or the push.
+
+**The fix asks the helper instead of naming roles.** The recipients are
+now `is_room_moderator(rm.room_id, rm.user_id)`, so the people told about
+a request are the people who can answer it, and the next role change
+can't leave this behind. Adding `'admin'` to the list would have fixed
+today's bug and kept the cause. Every migration and Edge Function was
+searched for the same pattern; this was the only one. Requests already
+pending aren't notified again.
+
+**An admin's posts had no badge.** `PostCard` decided the badge with
+`authorRole === 'owner' || authorRole === 'mod'` and labelled it OWNER or
+MOD. `FeedPost.authorRole` gained `'admin'` on 2026-09-21, but this check
+didn't. It's a lookup now (`ROLE_BADGE`: OWNER, ADMIN, MOD), so a role
+without an entry shows nothing, rather than a wrong label. Every other
+role check in the client already included admin.
+
+**The docs had drifted.** `README.md` still said "pre-implementation" and
+listed `mobile/` and `supabase/` as planned. The top of `architecture.md`
+still had three roles, three visibility modes, R2 as the media store, CI
+running tests, and a "Not yet decided" list of things decided long ago.
+`running-locally.md` had the repo's old path. All now describe what
+exists. None of the admin role, sub-groups, friends or domain
+verification (2026-09-03 to 2026-09-08) has an entry in this log; their
+migrations' own comments are the record.
+
+**Found while starting the stack: the repo had moved, and Docker hadn't
+noticed.** Every Edge Function answered 503 ("failed to determine
+entrypoint"). The containers were created when the repo lived at
+`Desktop\chasien`, and the edge runtime was still bind-mounted to
+`Desktop\chasien\supabase\functions`. Docker had recreated that path as
+an empty folder, so nothing failed loudly. `supabase stop` then
+`supabase start -x vector` from the new location recreated the containers
+with the right mount. The database is a named volume, so it came back
+whole: 79 migrations, and the row and file counts matched the ones taken
+before stopping (a dump was taken first as well). Now gotcha #10 in
+`running-locally.md`.
+
+**Verified:**
+- **The trigger, before and after,** with one script: a throwaway
+  request-to-join Room with an owner, an admin, an admin who muted the
+  Room, a mod and a member, built from seed accounts inside a transaction
+  that is rolled back. The request is inserted as the service role, the
+  way the Edge Function does it.
+  - Before: owner and mod notified, admin not. The bug, reproduced.
+  - After: owner, admin and mod each get one; the muted admin and the
+    member get none.
+  - Each notification names the requester as actor and target.
+  - Nothing left behind either time: no test Room, notifications still
+    66, memberships still 25, and the push queue empty, so nothing was
+    sent.
+- **The badge, on the Galaxy A14** (dark mode): one Uchihas member was
+  made an admin directly in the local database, the feed showed ADMIN
+  beside their post and OWNER beside the owner's, the role was put back,
+  and the feed showed no badge for them. No admin rows remain.
+- **End to end on the Galaxy A14, with the phone online.** A throwaway
+  request-to-join Room owned by a seed account, with the phone's own
+  account as its *admin*. A second account signed in with the anon key
+  and asked to join through the real `room-membership` Edge Function.
+  - The owner and the admin each got a `join_request` notification, and
+    both rows were claimed for push.
+  - Expo answered `ok` for the admin's device; the owner has no device
+    ("no registered devices").
+  - The push arrived on the phone with the app in the background:
+    "Outside Tester wants to join Push test room".
+  - Tapping it opened Activity with the request and Accept / Skip.
+  - Accept, as the admin, approved it: the requester became an approved
+    member, the member count and General chat went to 3, and the
+    notification was cleared.
+  - The Room was deleted afterwards, and every count matched the
+    baseline (15 Rooms, 25 memberships, 66 notifications, 20
+    conversations, 30 participants, 7 moderation rows).
+- Typecheck, lint and the React Compiler check pass (111 components, 0
+  skipped).
+
+**Not checked:** the badge in light mode. It reuses the existing badge
+style, which is unchanged.
+
+**Noticed, for the APK Beta Phase:** the push shows Expo's default
+notification icon, because `app.json` sets none for `expo-notifications`.
+
+---
+
 ## 2026-09-23 — Phase 10, slice 1: a push is built from the row, not the request
 
 Migration `20260923100000_push_claimed_from_the_row.sql`, and both push

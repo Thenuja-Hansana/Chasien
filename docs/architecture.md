@@ -11,12 +11,15 @@ user load, real revenue) to spend money.
 ## Product core (for context)
 
 - **Room** = self-contained social space: feed (reverse-chron only, no
-  algorithm), stories, and its own group chat. Visibility is one of
-  `public` / `request-to-join` / `invite-only`.
+  algorithm), stories, and its own group chat (one General channel that
+  every member is in, plus sub-groups members join separately). Visibility
+  is one of `public` / `request` (ask, a mod approves) / `invite` (hidden
+  unless invited) / `domain_verified` (prove an email address at the
+  Room's required domain).
 - Every user's access to every piece of content is gated by their
-  **membership + role** (`owner` / `mod` / `member`) in the Room that content
-  belongs to. This is the one invariant the whole system protects — it's the
-  line between "working app" and "data leak."
+  **membership + role** (`owner` / `admin` / `mod` / `member`) in the Room
+  that content belongs to. This is the one invariant the whole system
+  protects — it's the line between "working app" and "data leak."
 - Reference UI mock lives in `app_reference/` (React + Vite, web-only,
   throwaway — not the real client). Screens there already imply the data
   model: communities, posts w/ polls & comments, stories, chats (room-group +
@@ -31,9 +34,9 @@ user load, real revenue) to spend money.
 | 3 | Database | **Supabase Postgres** | Free (500MB cap) | Source of truth for users, rooms, memberships, posts, comments, polls, stories metadata, chats, messages, notifications. |
 | 4 | Authorization / business logic | **Supabase Edge Functions** (Deno) | Free (generous request quota) | Anything more complex than Postgres Row Level Security can safely express (join-approval flow, role changes, cross-table checks) goes here. Serverless — no idle server to pay for, no cold-start-sleep problem. |
 | 5 | Realtime | **Supabase Realtime** | Free (~200 concurrent connections cap) | Chat messages, typing indicators, presence, live comment/like counts. Gated by the same membership check as everything else before a client can subscribe to a Room's channel. |
-| 6 | Media storage + delivery | **Cloudflare R2** | Free (10GB, **zero egress fees**) | Post images, story media, chat attachments, voice notes. Egress being free (unlike S3/Supabase Storage) is the single biggest lever for staying free as media volume grows. |
+| 6 | Media storage + delivery | **Supabase Storage** now, **Cloudflare R2** planned | Free (R2: 10GB, **zero egress fees**) | Post images and clips, story media, chat attachments, voice notes, Room and profile pictures. Private buckets read through short-lived signed URLs. R2 is the intended home because its free egress is the single biggest lever for staying free as media volume grows, but it can't be provisioned or verified locally, so the swap is Phase 11's (decision-log, 2026-08-14). |
 | 7 | Push notifications | **Expo Push Service** | Free | No cap that matters pre-scale. |
-| 8 | CI | **GitHub Actions** | Free (minutes cap, fine at this scale) | Lint/typecheck/test on every push. |
+| 8 | CI | **GitHub Actions** | Free (minutes cap, fine at this scale) | Lint, typecheck and the React Compiler check on every push that touches `mobile/`. There is no test runner; behaviour is verified by hand against the local stack. |
 | 9 | App builds / distribution | **EAS (Expo Application Services)** | Free tier (limited builds/month), local builds free beyond that | Never fully blocked — local builds are slower but free. |
 
 ## Database write access (current rule)
@@ -133,9 +136,9 @@ user load, real revenue) to spend money.
 
 Not infra, but flagging now so nothing is a surprise later:
 
-- **Apple Developer Program** — $99/year. Only needed when we actually
-  distribute to TestFlight/App Store. Dev-time testing can happen via Expo
-  Go / internal builds without it.
+- **Apple Developer Program** — $99/year. Needed to put any build on a
+  real iPhone, test builds included, so iOS waits for it. Android
+  development needs none of this: a dev-client build installs over USB.
 - **Google Play Console** — $25 one-time. Same timing — needed at
   distribution, not before.
 - **Domain name** (e.g. `chasien.app`, seen in the mock's URL preview) —
@@ -157,13 +160,17 @@ in front of real users outside our own devices."
 
 ## Not yet decided
 
-- Full data model / schema (users, rooms, memberships, posts, comments,
-  polls, stories, chats, messages, notifications) — next up. Now includes
-  `Report`, `Block`, and a moderation action log — see
-  `store-compliance.md`, these are day-1 requirements for a UGC app, not
-  optional polish.
-- Client-side state management & offline/sync strategy for the RN app.
-- Exact Row Level Security policy set vs. what moves into Edge Functions.
+The three questions this section used to hold are settled: the schema is
+built (`supabase/migrations/`), the split between RLS and server-side
+code is the "Database write access" section above, and the client keeps
+no state library (screens call `mobile/src/lib/` directly and hold their
+own state). What's still open, each tracked in `roadmap.md`:
+
+- Offline behaviour for the feed and chat (Phase 10).
+- Which crash-reporting service to use (Phase 10).
+- Which SMTP provider sends real Auth emails (Phase 11).
+- Which release signing key to keep for good, and how it relates to Play
+  App Signing (APK Beta Phase).
 
 ## See also
 

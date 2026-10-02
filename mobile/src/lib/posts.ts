@@ -49,7 +49,7 @@ export type FeedPost = {
   authorId: string | null;
   authorHandle: string;
   authorName: string;
-  /** owner/mod in this Room — drives the MOD badge the mock shows. */
+  /** The author's role in this Room — drives the OWNER/ADMIN/MOD badge, and whether the viewer may remove the post. Null for someone who's left the Room. */
   authorRole: RoomRole | null;
   text: string | null;
   tag: string | null;

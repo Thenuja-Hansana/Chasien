@@ -30,7 +30,7 @@ this doc assumes plain `adb` works — do this first.
 2. **Start the Supabase stack.** Directory: **repo root**
    (`chasien/`, the folder containing `supabase/`):
    ```powershell
-   cd C:\Users\conta\Desktop\chasien
+   cd C:\Users\conta\Desktop\work\chasien
    npx supabase start
    ```
    Wait for the JSON block with `API_URL`, `ANON_KEY`, etc.
@@ -75,7 +75,7 @@ this doc assumes plain `adb` works — do this first.
 
 7. **Start Metro.** Directory: **`mobile/`**:
    ```powershell
-   cd C:\Users\conta\Desktop\chasien\mobile
+   cd C:\Users\conta\Desktop\work\chasien\mobile
    npx expo start --dev-client --port 8081
    ```
    Wait for `Waiting on http://localhost:8081`.
@@ -94,7 +94,7 @@ Same as above through step 6, then instead of step 7. Directory:
 **`mobile/`**:
 
 ```powershell
-cd C:\Users\conta\Desktop\chasien\mobile
+cd C:\Users\conta\Desktop\work\chasien\mobile
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 npx expo run:android
 ```
@@ -126,7 +126,7 @@ command needed, no adb/network setup either, since a browser on this
 machine reaches `localhost` directly. Alternatively, run a dedicated web
 session from **`mobile/`**:
 ```powershell
-cd C:\Users\conta\Desktop\chasien\mobile
+cd C:\Users\conta\Desktop\work\chasien\mobile
 npx expo start --web
 ```
 
@@ -226,3 +226,21 @@ Signup confirmation emails don't go to a real inbox locally — check
    - `supabase stop` keeps the database volume unless you pass
      `--no-backup`. Even so, a `pg_dump` from inside the
      `supabase_db_chasien` container first is cheap insurance.
+
+10. **Moving the repo folder breaks the Edge Functions until the stack
+    is recreated** (hit 2026-10-01, after the repo moved from
+    `Desktop\chasien` to `Desktop\work\chasien`). The containers keep
+    the folder they were created with: the edge runtime stays
+    bind-mounted to the *old* `supabase\functions` path, and Docker
+    quietly recreates that path as an empty folder. Everything looks
+    healthy, the app loads, and the database works, but every Edge
+    Function returns 503 with `failed to determine entrypoint` in
+    `docker logs supabase_edge_runtime_chasien`. So joining a Room,
+    invites, role changes, reports and account deletion all fail.
+    - Check where it's mounted:
+      `docker inspect supabase_edge_runtime_chasien --format "{{range .Mounts}}{{.Source}}{{println}}{{end}}"`
+    - Fix it from the repo's new root: `npx supabase stop`, then
+      `npx supabase start -x vector` (see gotcha #9 for the image pins,
+      and take the `pg_dump` first). The database is a named volume, not
+      a folder, so the data comes back as it was.
+    - The empty folder Docker left at the old path can be deleted.

@@ -4,9 +4,11 @@ A hybrid of Telegram and Instagram: users join **Rooms** — self-contained
 social spaces, each with its own posts, stories, and group chat. No
 algorithmic feed anywhere in the app; everything is reverse-chronological.
 
-**Status:** pre-implementation. Architecture and data model are being
-designed in `docs/`. No production app code exists yet — see the tree below
-for what's real vs. planned.
+**Status:** built and running locally, not yet released. The app and
+backend are real and verified against a local Supabase stack and a
+physical Android phone; nothing is hosted yet, so nobody outside this
+machine can use it. `docs/roadmap.md` has the current phase and what's
+left before a public build.
 
 ## Repo layout
 
@@ -28,33 +30,38 @@ chasien/
 │   │                         account deletion) — not just launch paperwork.
 │   ├── roadmap.md           Ordered, checkable solo-dev task list — start
 │   │                         here for "what do I actually do next."
+│   ├── running-locally.md   Local runbook, plus every environment
+│   │                         problem already hit and how it was fixed.
 │   └── phase/               One study-book-style .md per completed phase —
 │                             decisions *and* a full code walkthrough, deep
 │                             enough to onboard someone from zero.
 │
-├── mobile/          (planned, not yet created) React Native (Expo) client
-│                     — the actual shipped app.
+├── mobile/          React Native (Expo Router, TypeScript) client — the
+│                     actual shipped app. Screens in src/app/, all data
+│                     access in src/lib/.
 │
-└── supabase/        (planned, not yet created) Postgres migrations +
-                      Edge Functions (Supabase CLI convention) — the
-                      backend/authorization layer.
+└── supabase/        The backend (Supabase CLI convention): Postgres
+                      migrations and Row Level Security policies in
+                      migrations/, Deno Edge Functions in functions/.
 ```
 
 ## Stack (zero-budget, see docs/architecture.md for the full table)
 
-React Native (Expo) · Supabase (Auth, Postgres, Realtime) · Supabase Edge
-Functions · Cloudflare R2 (media) · Expo Push · GitHub Actions · EAS builds.
-Every layer runs on a free tier through development and early beta; where
-each one's free-tier ceiling is, and what to do when we hit it, is in
-`docs/architecture.md`.
+React Native (Expo) · Supabase (Auth, Postgres, Realtime, Storage) ·
+Supabase Edge Functions · Expo Push · GitHub Actions · EAS builds. Media
+runs on Supabase Storage for now, with a move to Cloudflare R2 planned
+for its free egress. Every layer runs on a free tier through development
+and early beta; where each one's free-tier ceiling is, and what to do
+when we hit it, is in `docs/architecture.md`.
 
 ## Core invariant
 
-Every Room has a visibility mode (`public` / `request-to-join` /
-`invite-only`) and every piece of content in it is gated by the requesting
-user's membership + role (`owner` / `mod` / `member`) in that Room. Nearly
-every query in the system has to check that before returning anything —
-it's the line between "working app" and a cross-Room data leak.
+Every Room has a visibility mode (`public` / `request` / `invite` /
+`domain_verified`) and every piece of content in it is gated by the
+requesting user's membership + role (`owner` / `admin` / `mod` /
+`member`) in that Room. Nearly every query in the system has to check
+that before returning anything — it's the line between "working app" and
+a cross-Room data leak.
 
 ## Where to start reading
 

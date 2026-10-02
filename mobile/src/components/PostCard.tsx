@@ -20,6 +20,13 @@ import { isClipPost, relativeTime, type FeedPost } from '@/lib/posts';
 import type { RoomRole } from '@/lib/rooms';
 import { useUserPreview } from '@/lib/user-preview-context';
 
+/**
+ * The badge beside an author's name. Members get none. It used to test for
+ * owner and mod by name, written before the admin role existed, so an
+ * admin's posts carried no badge at all.
+ */
+const ROLE_BADGE: Partial<Record<RoomRole, string>> = { owner: 'OWNER', admin: 'ADMIN', mod: 'MOD' };
+
 /** Leaves the rest of the window free for the caption/actions row below and a peek of the next card, the way Instagram's own feed keeps scrolling legible. */
 /**
  * One post in a Room feed — ported from app_reference/src/screens/Home.jsx.
@@ -67,7 +74,7 @@ export default function PostCard({
   /** Someone else's post only — the menu doesn't offer it on your own, or when the author deleted their account. */
   onBlockAuthor: () => void;
 }) {
-  const isModerator = post.authorRole === 'owner' || post.authorRole === 'mod';
+  const roleBadge = post.authorRole ? ROLE_BADGE[post.authorRole] : undefined;
   const isOwnPost = post.authorId === viewerId;
   // A mod removing someone else's post, which the server allows only if
   // they outrank its author (can_remove_content, 20260921110100).
@@ -110,9 +117,7 @@ export default function PostCard({
               <Text style={styles.authorName} numberOfLines={1}>
                 {post.authorName}
               </Text>
-              {isModerator && (
-                <Text style={styles.modBadge}>{post.authorRole === 'owner' ? 'OWNER' : 'MOD'}</Text>
-              )}
+              {roleBadge && <Text style={styles.modBadge}>{roleBadge}</Text>}
             </View>
             <Text style={styles.time}>
               @{post.authorHandle} · {relativeTime(post.createdAt)}
