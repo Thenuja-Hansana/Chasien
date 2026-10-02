@@ -7,6 +7,102 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-02 — Phase 10, slice 5: profile details sit behind get_profile()
+
+Migration `20261002130000_profile_details_behind_get_profile.sql`, and
+two call sites in the app (`lib/profiles.ts`, `UserPreviewCard.tsx`).
+Open since Phase 9's block slice (2026-09-21).
+
+**What was wrong.** `profiles` has one SELECT policy, "readable by any
+authenticated user", and RLS filters rows, not columns. That's on
+purpose for handles and names: they appear wherever Room members are
+shown, including between two people who have blocked each other in a
+Room they share. The same policy gave out bio, `banner_url` and
+`last_active_at`. The profile screen hides those once there's a block;
+the API didn't.
+
+**Reproduced first** (the suite, before the migration): the blocked
+account selected the blocker's bio, banner and `last_active_at` from the
+table, filtered on bio, and sorted every profile by `last_active_at`,
+which is a list of who's online.
+
+**What changed.**
+- **The table:** SELECT is granted by column, on id, handle, name,
+  `avatar_url` and `created_at`. The policy is unchanged. A hidden column
+  can't be selected, filtered on or sorted by. `anon` loses the SELECT
+  grant no policy ever let it use.
+- **`get_profile(p_user_id)`,** SECURITY DEFINER: one whole profile, with
+  bio, banner and last active null when `blocked_pair()` says there's a
+  block between the caller and that person, either way. Handle, name and
+  avatar always come back. Nobody: zero rows.
+- **The app:** `fetchProfile()` calls it. `UserPreviewCard` read the
+  table itself and now calls `fetchProfile()`. Nothing else read those
+  columns; every embed of `profiles` asks for id, handle and name.
+
+**Why this shape.**
+- **Not a second policy.** One that hid whole rows between blocked
+  people would hide their names in the Rooms and chats they share, which
+  2026-09-21 decided against.
+- **Not a second table** for the three columns. It would work, and RLS
+  on it could say `not is_blocked_with(id)`. But it's a data migration
+  and a second write path, for something two call sites read.
+- **Both directions, not just "the blocked can't see the blocker".** It's
+  the rule everywhere else (`is_blocked_with`), and the screen already
+  behaved that way.
+- **A new profile field is hidden by default.** It isn't in the table's
+  grant or the function until someone adds it. That's the same posture
+  as columns for writes (2026-09-16) and functions (slice 2).
+- **A null bio now means "none, or not yours to see".** The function
+  doesn't say which, on purpose: `block_status()` is what the screen
+  already asks, and a separate "blocked" flag here would be a second
+  place that answers it.
+
+**Not closed, on purpose:** the banner *file*. `profile-media` is
+readable by any signed-in person who knows a file's path, so someone who
+kept the path from before a block could still fetch the image. They can
+no longer learn the path. Closing it means changing the storage policy
+for profile media, and avatars have to stay readable. Offered to
+Thenuja with the plan; left for now.
+
+**Verified:**
+- **The slice's suite, 26 of 26** after the migration (16 failed
+  before): the table refused for each hidden column, including filter
+  and sort; `get_profile()` for an unblocked person, for yourself, for
+  nobody; blanks for the blocked and for the blocker, and back again
+  after an unblock; signed out refused; own edits and the heartbeat
+  still land, a handle change and an edit to someone else's profile
+  don't; the feed's join to authors, `search_profiles`, the inbox view
+  and a report on a person all still read names; the report's snapshot,
+  taken by a trigger, still has the bio.
+- **Slices 2, 3 and 4 again:** 52, 50 and 42, all passing, and both live
+  scripts.
+- **Typecheck, lint, the React Compiler check** (111 components, 0
+  skipped).
+- **On the Galaxy A14:** own profile and its edit screen load; another
+  person's profile shows their bio and "Active now"; the preview card
+  from search shows the same. With that person blocking the phone's
+  account, a fresh load of their profile shows name and handle, "This
+  account isn't available.", and no bio or activity, and search no
+  longer finds them.
+- Data restored; counts match the baseline.
+
+**Two things the phone check taught:**
+- A profile screen that's already open keeps what it loaded. Blocking
+  someone doesn't reach into their phone and clear it; the next load is
+  what's protected. Seen when the block was inserted with the screen
+  open, and it looked like a failure until a fresh load.
+- The preview card under a block wasn't seen on the phone, because the
+  only way to open it for someone outside your Rooms is search, and
+  search rightly doesn't return a person there's a block with. The
+  function's answer for that case is covered by the suite.
+
+**Test helper:** `sqlsuite.js`'s `check` now reports an expression that
+errors as a FAIL with the error. Before, one missing function in a
+before-the-migration run aborted the transaction and took every later
+check with it.
+
+---
+
 ## 2026-10-02 — Phase 10, slice 4: a post is made by create_post() and nothing else
 
 Migration `20261002120000_posts_only_through_create_post.sql`. No app

@@ -100,9 +100,19 @@ user load, real revenue) to spend money.
   friend requests between blocked users are refused by triggers, and
   notifications between them are dropped before insert. Two deliberate
   exceptions: Room group-chat messages (collapsed on the blocker's device
-  only) and profiles (readable by everyone, because names appear wherever
-  Room members are shown). `blocked_pair()` isn't callable over the API, so
-  nobody can probe whether two *other* people have blocked each other.
+  only) and a profile's handle, name and avatar (readable by everyone,
+  because names appear wherever Room members are shown). `blocked_pair()`
+  isn't callable over the API, so nobody can probe whether two *other*
+  people have blocked each other.
+- **The `profiles` table gives out id, handle, name and avatar; the rest
+  comes from `get_profile()`** (since 2026-10-02). RLS can't hide a
+  column, so bio, banner and `last_active_at` (presence) were readable by
+  someone you'd blocked. SELECT on the table is granted by column now,
+  and `get_profile(user)` returns the whole profile with those three
+  blanked when there's a block in either direction. In the app that's
+  `fetchProfile()`; embeds of `profiles` ask for handle and name and are
+  unaffected. A new profile field is hidden by default: it has to be
+  added to the table's SELECT grant or to `get_profile()` on purpose.
 - **Reports go to app admins, who sit above every Room** (since
   2026-09-22). `app_admins` is written only with the service role; clients
   can't even read it, and `current_user_is_app_admin()` answers only about

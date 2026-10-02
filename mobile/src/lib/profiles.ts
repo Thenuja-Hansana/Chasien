@@ -11,10 +11,23 @@ export type Profile = {
   last_active_at: string | null;
 };
 
-const PROFILE_COLUMNS = 'id, handle, name, bio, avatar_url, banner_url, last_active_at';
-
+/**
+ * One person's whole profile, through get_profile() rather than the table.
+ *
+ * The table gives every signed-in person id, handle, name and avatar, and
+ * nothing else: RLS can't hide a column, so bio, banner_url and
+ * last_active_at used to be readable by someone you'd blocked even though
+ * the screens hid them. get_profile() returns all seven fields and blanks
+ * those three when there's a block between you and them, in either
+ * direction — see 20261002130000_profile_details_behind_get_profile.sql.
+ * So a null bio here means "none, or not yours to see"; block_status()
+ * (lib/blocks.ts) is what says which.
+ *
+ * Don't select those three columns from `profiles` directly: the request
+ * is refused. Embeds elsewhere ask for handle and name, which still work.
+ */
 export async function fetchProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', userId).maybeSingle();
+  const { data, error } = await supabase.rpc('get_profile', { p_user_id: userId }).maybeSingle();
   if (error) throw error;
   return data as Profile | null;
 }

@@ -10,10 +10,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { signMediaUrls } from '@/lib/media';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { fetchRecentPostsByAuthor, type AuthorPostPreview } from '@/lib/posts';
-import { formatLastActive } from '@/lib/profiles';
-import { supabase } from '@/lib/supabase';
+import { fetchProfile, formatLastActive, type Profile } from '@/lib/profiles';
 
-type PreviewProfile = { id: string; handle: string; name: string; bio: string | null; last_active_at: string | null };
+type PreviewProfile = Pick<Profile, 'id' | 'handle' | 'name' | 'bio' | 'last_active_at'>;
 
 /**
  * The Instagram-style "tap a person, see a small preview" card — every
@@ -41,12 +40,13 @@ export default function UserPreviewCard({ userId, visible, onClose }: { userId: 
 
   useEffect(() => {
     if (!userId || !visible) return;
-    supabase
-      .from('profiles')
-      .select('id, handle, name, bio, last_active_at')
-      .eq('id', userId)
-      .maybeSingle()
-      .then(({ data }) => setProfileResult({ userId, profile: data }));
+    // Through fetchProfile() (get_profile), not the table: the table no
+    // longer gives out bio or last_active_at, and get_profile blanks them
+    // when there's a block either way (20261002130000). A failed load shows
+    // as "no profile", as it did when this read the table itself.
+    fetchProfile(userId)
+      .then((fetched) => setProfileResult({ userId, profile: fetched }))
+      .catch(() => setProfileResult({ userId, profile: null }));
     fetchRecentPostsByAuthor(userId)
       .then((fetched) => setPostsResult({ userId, posts: fetched }))
       .catch(() => setPostsResult({ userId, posts: [] }));

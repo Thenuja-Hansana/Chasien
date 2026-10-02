@@ -31,10 +31,24 @@ function createSuite() {
   /** Back to the database owner, to look at what happened without RLS in the way. */
   const asOwner = () => sql(`reset role; select set_config('request.jwt.claims', '', true) \\gset zz_`);
 
-  const section = (title) => sql(`\\echo\n\\echo == ${title}`);
+  // A notice, like every result line, so headings and results come out of
+  // the same stream in the order they ran.
+  const section = (title) => sql(`do $$ begin raise notice '== ${quote(title).replace(/%/g, '%%')}'; end $$;`);
 
-  /** One line, PASS or FAIL, from a boolean SQL expression. */
-  const check = (label, expr) => sql(`select case when (${expr}) then 'PASS  ' else 'FAIL  ' end || '${quote(label)}';`);
+  /**
+   * One line, PASS or FAIL, from a boolean SQL expression. An expression
+   * that errors (a function that doesn't exist yet, in a run before the
+   * migration) is a FAIL with the error, not an aborted transaction that
+   * takes every later check down with it.
+   */
+  const check = (label, expr) => {
+    const l = quote(label).replace(/%/g, '%%');
+    sql(`do $$ declare ok boolean; begin
+  select (${expr}) into ok;
+  if ok then raise notice 'PASS  ${l}'; else raise notice 'FAIL  ${l}'; end if;
+exception when others then raise notice 'FAIL  ${l}  [error: %]', sqlerrm;
+end $$;`);
+  };
 
   /**
    * A statement that must be refused. The reason is printed, and with

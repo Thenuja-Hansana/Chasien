@@ -151,7 +151,10 @@ GitHub Actions → EAS builds.
   never re-grant table-wide `INSERT`/`UPDATE`. Anything authority-bearing
   (roles, join state, pins, timestamps, moderation fields, verification)
   goes through SECURITY DEFINER functions or Edge Functions instead. `anon`
-  holds no write privileges on any table.
+  holds no write privileges on any table. Reads on `profiles` are by column
+  too: the table gives out id, handle, name and avatar, and bio, banner and
+  `last_active_at` come from `get_profile()` (`fetchProfile()` in the app),
+  which blanks them between blocked people (`20261002130000`).
 - **A database function is an API endpoint only if a migration grants
   it.** Every function in `public` is reachable at `/rpc/<name>`, so
   defaults are withdrawn — see

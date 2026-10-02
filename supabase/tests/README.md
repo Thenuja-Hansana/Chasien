@@ -17,6 +17,7 @@ one re-runnable security sweep.
 | `phase10_slice3_suite.js` | Prints SQL. 50 checks: a DM can only be opened through `start_dm()`, sub-groups only through the service role, timestamps on likes, reactions, hidden posts and push tokens come from the server, unused grants are gone, and every direct write the app makes still works. | Nothing: it rolls back. |
 | `phase10_slice3_live.js` | 21 checks over the real API: the direct DM and sub-group writes are refused, friends can DM, sub-groups work through the Edge Function. | A Room `zz-live3`, one DM between tobi and kwame, and two friend notifications. Delete them afterwards. |
 | `phase10_slice4_suite.js` | Prints SQL. 42 checks: the two post functions still make every kind of post, the server applies the 10-media and 4-option limits and checks media paths, nothing can be attached or changed around the functions, and who may post is who could before (member, moderators-only Room, pending, removed, outsider, signed out). | Nothing: it rolls back. |
+| `phase10_slice5_suite.js` | Prints SQL. 26 checks: the `profiles` table gives out names but not bio, banner or last active (not to select, filter or sort by), `get_profile()` returns them and blanks them between blocked people in both directions, and everything that shows a name still reads it. | Nothing: it rolls back. |
 
 `sqlsuite.js` is the shared builder for the SQL suites: `as('tobi')` to
 become an account, `check`, `refused` (with the reason it must be refused
@@ -29,6 +30,7 @@ node supabase/tests/phase10_slice2_live.js
 node supabase/tests/phase10_slice3_suite.js | docker exec -i supabase_db_chasien psql -U postgres -d postgres -X -q -t -A
 node supabase/tests/phase10_slice3_live.js
 node supabase/tests/phase10_slice4_suite.js | docker exec -i supabase_db_chasien psql -U postgres -d postgres -X -q -t -A
+node supabase/tests/phase10_slice5_suite.js | docker exec -i supabase_db_chasien psql -U postgres -d postgres -X -q -t -A
 ```
 
 Cleaning up after the live scripts (as the database owner):

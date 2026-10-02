@@ -972,8 +972,15 @@ block is the original list; each slice says which of its items it closes.
       `polls`, `poll_options` and `events` have no client writes. 42
       database checks, and a media post, a poll and an event made from
       the A14. See decision-log, 2026-10-02
-- [ ] Slice 5 — `profiles` between blocked people (bio, banner, last
-      active)
+- [x] Slice 5 — `profiles` between blocked people (bio, banner, last
+      active). **Done 2026-10-02**
+      (`20261002130000_profile_details_behind_get_profile.sql`): the
+      table gives out id, handle, name and avatar; `get_profile()`
+      returns the rest and blanks it when there's a block either way. Two
+      call sites in the app changed. 26 database checks, and the profile
+      screen, edit screen and preview card on the A14. Left open on
+      purpose: the banner *file* is still fetchable by someone who saved
+      its path before being blocked
 - [ ] Slice 6 — rate limits **and size limits**. Nothing limits how long
       text can be anywhere: a 200,000-character post is accepted (found
       in slice 4), and the database cap is 500 MB. Posts, comments,
@@ -1043,7 +1050,7 @@ block is the original list; each slice says which of its items it closes.
         because the view can't be written to (`is_insertable_into = NO`),
         but they should be revoked so the grants say what's true.
         *Revoked 2026-10-02, slice 3*
-  - [ ] Between blocked people, `profiles` is still fully readable through
+  - [x] *(closed 2026-10-02, slice 5)* Between blocked people, `profiles` is still fully readable through
         the API, including bio and `last_active_at` (presence). The screens
         hide them, but only column-level rules on `profiles` would stop a
         blocked person fetching them directly. Found in Phase 9's block
