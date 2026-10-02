@@ -7,6 +7,135 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-02 — Phase 10, slice 7: the security re-check, as something that can be run again
+
+Migration `20261002150000_closed_by_default_the_rest.sql`, and five new
+files in `supabase/tests/`: `security_invariants.js`,
+`security_isolation_suite.js`, `security_edge_live.js`, `run.js`, and a
+helper added to `sqlsuite.js`. No app change.
+
+**What it is.** `node supabase/tests/run.js --live`: 521 checks against
+the local stack, one summary, the row counts before and after. Three
+kinds:
+- **23 rules read from the catalogs** (`security_invariants.js`). No
+  data, no throwaway Rooms. Each asks whether anything in the schema
+  breaks a rule and names what does: a table without RLS, a function
+  that's an endpoint and isn't on the list, a server-set column a client
+  may write, a write grant with no policy or a policy with no grant, a
+  text column with no limit, a writable table with no rate limit, a
+  public bucket, a default that opens new objects.
+- **An isolation matrix, 156 checks** (`security_isolation_suite.js`).
+  One Room with one of everything, each of its 16 tables read as a
+  member, an outsider, a removed member, a pending requester, a member
+  the author has blocked, and signed out.
+- **Every Edge Function action by someone who may not, 54 checks**
+  (`security_edge_live.js`), then that nothing changed.
+- Plus the suites written with slices 2 to 6, which were already
+  there.
+
+**Why rules, and not only more test cases.** Every hole this phase
+closed was a default nobody chose: functions open to all, tables granted
+whole, policies left behind by a feature that moved. A test case checks
+the thing someone thought of. A rule over the catalogs checks the thing
+nobody did: the next function, the next column. Run before this
+migration, it failed 8 of its rules.
+
+**The worst finding of the phase came out of writing one rule.** "The
+tables only the server writes grant clients nothing" flagged
+`room_email_verifications`, because clients can read it. They need to:
+the app shows "we sent a link to x". But the policy was "a user can see
+their own verification requests", on every column, and one of the
+columns is the token. The token is the whole proof that someone received
+an email. So:
+1. ask for a link to be sent to any address at the Room's domain;
+2. read the token out of your own row over the API;
+3. open the link.
+
+Done as a seed account against the real API, with the address
+`the-dean@example.com`: "You're verified!", an approved membership, the
+email never looked at. A domain-verified Room could be joined by anyone
+with an account. The 2026-09-16 audit had closed *writing* your own
+verification row; reading the secret out of it stayed open for
+sixteen days. Fixed with a column grant: SELECT on everything but the
+token. `security_invariants.js` now has a list of secret columns no
+client may read.
+
+**The rest of what the rules found,** all in the same migration:
+- **New tables and sequences were open by default,** as functions were
+  before slice 2. Supabase's default privileges give a table made by a
+  migration to `anon` (read) and `authenticated` (read and write, every
+  column). That is where the blanket grants of slices 3 and 4 came
+  from. Withdrawn.
+- **`anon` held SELECT on 24 tables and the inbox view.** No policy ever
+  let it read a row. Revoked: signed out, a table is now refused, not
+  empty.
+- **50 unusable grants** to `authenticated` (TRUNCATE, REFERENCES,
+  TRIGGER). Revoked.
+- **Two policies named no role,** so applied to signed-out callers too.
+  Narrowed to `authenticated`.
+- **Three policies had no grant:** "authors can edit their own" on
+  posts, comments and messages. Nothing can edit today. Dropped, by
+  slice 3's reasoning: a policy with no grant is one stray `grant` away
+  from silent editing. When editing ships it brings policy, grant and
+  `edited_at` trigger together.
+- **Hiding a post and voting had no rate limit.** 60 a minute each.
+- **Fifteen text columns had no length**: removal and moderation
+  reasons, stored file paths, a Room's accent colour, the address a
+  verification email goes to. Limited; an accent colour must be a
+  six-digit hex colour.
+
+**Checked and found sound** (worth recording, since it was a doubt):
+- **A blocked member can't read a blocking author's post through its
+  attachments.** The policies on `post_media`, `polls`, `poll_options`,
+  `events`, `post_tags` and `post_likes` don't mention blocks; they say
+  "readable wherever the post is". That holds, because the subquery on
+  `posts` inside each is itself filtered by `posts`' policy, which does.
+  Ten tables, all zero rows for the blocked member.
+- **The helper rule from slice 2:** every one of the 38 policy calls
+  still passes `auth.uid()`.
+- **All 34 wrong-role attempts on Edge Functions are refused,** with a
+  status and a sentence, and change nothing. The functions run as the
+  service role, so those checks are only in their own code.
+
+**Two things the tests got wrong before the code did:**
+- An accepted friendship is readable by anyone signed in. The matrix
+  first called that a leak. It's by design: profiles list friends. A
+  *pending* request is its two people's only, and that's what it checks
+  now.
+- "No key" has to mean no `apikey` header either. With the anon key and
+  no session, the three functions the database calls run, as they're
+  built to: they act only on rows they read themselves.
+
+**One flaky check, and what it showed.** The email limit's check failed
+once in the full run: its two requests fell either side of a minute
+boundary and both were accepted. That is the fixed-window behaviour
+slice 6 chose, seen in the wild. The check now asks until one is
+refused.
+
+**Verified:**
+- `run.js --live`: 521 of 521, row counts identical before and after.
+- The token attack repeated after the migration: reading the token is
+  refused (403), no membership.
+- On the Galaxy A14: the app's verify-email flow, start to finish. The
+  email was requested from the phone, the screen was left and reopened
+  and still said where the link went (the read the app is allowed), the
+  emailed link opened with no key, and the Room opened in the app.
+
+**Found on the phone, not fixed:** on that screen, "Resend email" does
+nothing once you've left and come back. The handler takes the address
+from the input's state, which is empty after a reload, and returns
+early. A dead control. Listed under slice 10.
+
+**Not covered by the re-check:** Realtime (that a subscriber only
+receives rows RLS lets them read) is exercised by hand on the phone, not
+by a script. Storage rules are covered for post media only.
+
+**Environment:** Metro's background task reached its two-hour limit
+during the slice and was not restarted; the phone was unplugged shortly
+after. Both were only needed for the phone check, which was done.
+
+---
+
 ## 2026-10-02 — Phase 10, slice 6: limits, so one account can't fill the database or the file store
 
 Four migrations (`20261002140000_text_length_limits`,

@@ -76,14 +76,26 @@ const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
   const ask = () => call('/functions/v1/request-room-verification', { token: tobi.token, method: 'POST', body: { room_id: roomId, email: 'tobi@example.com' } });
   const first = await ask();
   check('the first request sends', first.status === 200, short(first));
-  const tokenBefore = await service(`/rest/v1/room_email_verifications?room_id=eq.${roomId}&user_id=eq.${tobi.id}&select=token`);
-  const second = await ask();
-  check('a second one straight away is refused, with a sentence for people', second.status === 429 && /too often/.test(second.text), short(second));
+  // The limit is one per clock minute, so a second request is refused
+  // unless the minute turned over in between, in which case it is accepted
+  // and the one after it is refused. Ask until one is refused (the hourly
+  // limit of five leaves room for that).
+  const currentToken = async () => (await service(`/rest/v1/room_email_verifications?room_id=eq.${roomId}&user_id=eq.${tobi.id}&select=token`)).json?.[0]?.token;
+  let accepted = 1;
+  let refusedRequest = null;
+  let tokenBefore = null;
+  for (let i = 0; i < 3 && !refusedRequest; i++) {
+    tokenBefore = await currentToken();
+    const again = await ask();
+    if (again.status === 429) refusedRequest = again;
+    else if (again.status === 200) accepted++;
+  }
+  check('another in the same minute is refused, with a sentence for people', !!refusedRequest && /too often/.test(refusedRequest.text), refusedRequest ? short(refusedRequest) : `none refused in ${accepted} requests`);
   const tokenAfter = await service(`/rest/v1/room_email_verifications?room_id=eq.${roomId}&user_id=eq.${tobi.id}&select=token`);
-  check('and it didn\'t replace the link already sent', tokenBefore.json?.[0]?.token && tokenBefore.json[0].token === tokenAfter.json?.[0]?.token);
+  check('and the refusal didn\'t replace the link already sent', !!tokenBefore && tokenBefore === tokenAfter.json?.[0]?.token);
   const perRoom = await counter(tobi.id, `verify_email:${roomId}`, 'minute');
   const perHour = await counter(tobi.id, 'verify_email', 'hour');
-  check('counted once against the Room\'s minute and once against the hour', perRoom?.count === 1 && perHour?.count === 1, JSON.stringify({ perRoom, perHour }));
+  check('counted: once this minute for the Room, and each accepted request against the hour', perRoom?.count === 1 && perHour?.count === accepted, JSON.stringify({ accepted, perRoom, perHour }));
   const verify = await fetch(`${API}/functions/v1/verify-room-email?token=${tokenAfter.json?.[0]?.token}`);
   check('the emailed link still joins the Room', verify.status === 200 && /verified/i.test(await verify.text()), `${verify.status}`);
 

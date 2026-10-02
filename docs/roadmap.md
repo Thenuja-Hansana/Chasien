@@ -997,13 +997,22 @@ block is the original list; each slice says which of its items it closes.
       `architecture.md`, "Limits". 61 database checks, 16 over the live
       API, and the input caps, the limit message and the clip cap on the
       A14. See decision-log, 2026-10-02
-- [ ] Slice 7 — the full security re-check as one re-runnable script
+- [x] Slice 7 — the full security re-check as one re-runnable script
       kept in the repo (September's suites were never saved). Also here,
       found in slice 6: **a new table is open by default.** Supabase's
       default privileges grant a table created by a migration to `anon`
       (read) and `authenticated` (read and write), the same default
       slice 2 withdrew for functions. RLS still decides rows, but it is
-      how the all-columns grants of slices 3 and 4 came to exist
+      how the all-columns grants of slices 3 and 4 came to exist.
+      **Done 2026-10-02**
+      (`20261002150000_closed_by_default_the_rest.sql`).
+      `node supabase/tests/run.js --live` is the re-check: 521 checks,
+      23 of them rules read from the database's own catalogs, 156 an
+      isolation matrix, 54 every Edge Function action with the wrong
+      role. Writing the rules found the worst hole of the phase: **the
+      email-verification token was readable by the person it was meant
+      to be emailed to**, so a domain-verified Room could be joined
+      without the email. Closed. See decision-log, 2026-10-02
 - [ ] Slice 8 — crash handling: an error boundary (there is none), and
       Sentry's free plan wired so it does nothing until a key is set.
       Needs a Sentry account, and a line in the privacy policy
@@ -1017,7 +1026,11 @@ block is the original list; each slice says which of its items it closes.
       signed-out phone keeps getting the old account's pushes until
       someone else signs in on it (noticed in slice 3)
 - [ ] Slice 10 — loading, empty and error states on Phase 9's screens,
-      then `docs/phase/phase10.md`
+      then `docs/phase/phase10.md`. Known already (found in slice 7):
+      on the verify-email screen, **"Resend email" does nothing after you
+      leave the screen and come back.** The sent state is restored from
+      the database, but the handler reads the address from the input
+      field's state, which is empty by then, and returns. A dead control
 
 - [ ] Crash reporting (free tier — e.g. Sentry free tier)
 - [ ] Offline behavior: what happens with no connection, for feed and chat
@@ -1026,9 +1039,10 @@ block is the original list; each slice says which of its items it closes.
       caching still hold after Phase 9's new screens — the audit itself
       moved to Bones Phase, done ahead of Trust & Safety; this is a
       re-check, not the first pass
-- [ ] Security pass: re-verify RLS + Edge Function checks from Phase 1
+- [x] Security pass: re-verify RLS + Edge Function checks from Phase 1
       still hold after all the features built on top; rate-limit auth
-      endpoints.
+      endpoints. *(Slices 2 to 7, 2026-10-02. Auth's own endpoint limits
+      are project settings: Phase 11.)*
   - [x] **Column-level writes, done early (2026-09-16).** RLS filters rows,
         not columns, and `grants.sql` had granted every column of every
         table. Audited all 24 tables; reproduced and closed: joining a
@@ -1059,7 +1073,7 @@ block is the original list; each slice says which of its items it closes.
         anyone, friend or not. The direct inserts closed the same day,
         slice 4. What's left of this item is the `edited_at` trigger,
         which is a condition on a future feature, not open work)
-  - [ ] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
+  - [x] Rate-limit auth endpoints; re-verify RLS + Edge Function checks
         after Phase 9's features. *(The app's own limits were slice 6,
         2026-10-02. Auth's endpoints are limited by the Supabase project's
         settings, sensible locally in `config.toml`; setting them on the

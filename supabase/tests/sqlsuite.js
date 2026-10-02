@@ -74,6 +74,20 @@ end $$;`);
     sql(`do $$ begin ${stmt}; raise notice 'PASS  ${l}'; exception when others then raise notice 'FAIL  ${l}  [refused: %]', sqlerrm; end $$;`);
   };
 
+  /**
+   * A rule about the schema itself. `offenders` is a query returning one
+   * text column, a row per thing that breaks the rule; no rows is a pass,
+   * and a failure names them.
+   */
+  const invariant = (label, offenders) => {
+    const l = quote(label).replace(/%/g, '%%');
+    sql(`do $$ declare bad text; begin
+  select string_agg(o, ', ' order by o) into bad from (${offenders}) q(o);
+  if bad is null then raise notice 'PASS  ${l}'; else raise notice 'FAIL  ${l}  [%]', bad; end if;
+exception when others then raise notice 'FAIL  ${l}  [error: %]', sqlerrm;
+end $$;`);
+  };
+
   /** Keep a value for later statements, readable by any role: g('name'). */
   const remember = (name, expr) => sql(`select set_config('zz.${name}', (${expr})::text, true) \\gset zz_`);
   const g = (name) => `current_setting('zz.${name}')::uuid`;
@@ -82,7 +96,7 @@ end $$;`);
   const rollback = () => sql(`rollback;`);
   const print = () => console.log(out.join('\n'));
 
-  return { U, sql, as, asService, asOwner, section, check, refused, allowed, remember, g, begin, rollback, print };
+  return { U, sql, as, asService, asOwner, section, check, invariant, refused, allowed, remember, g, begin, rollback, print };
 }
 
 module.exports = { U, createSuite };

@@ -1,14 +1,44 @@
 # Backend checks
 
-Scripts that exercise the local Supabase stack as real accounts. There is
-no test runner; each is run by hand with `node`, against `supabase start`
-with the seed data loaded (`docs/running-locally.md`). They use the seed
-accounts (password `password123`) and the local stack's well-known demo
-keys, so they only ever work against a local stack.
+Scripts that exercise the local Supabase stack as real accounts, against
+`supabase start` with the seed data loaded (`docs/running-locally.md`).
+They use the seed accounts (password `password123`) and the local stack's
+well-known demo keys, so they only ever work against a local stack.
+
+```bash
+# from the repo root
+node supabase/tests/run.js           # every SQL suite; leaves nothing behind
+node supabase/tests/run.js --live    # those, then the scripts that use the real API, then cleans up
+```
+
+That is the full security re-check: 521 checks, a few minutes with
+`--live`. **Run it after any change to a
+migration, a policy, a grant or an Edge Function.** It prints one line per
+suite, the failures in full, and the row counts before and after, which
+must match. It is not in CI: it needs the Docker stack.
 
 Started in Phase 10 (2026-10-02). The checks written for earlier phases
-were run once and never kept; Phase 10's slice 7 gathers what follows into
-one re-runnable security sweep.
+were run once and never kept.
+
+## The three that aren't about one change
+
+- **`security_invariants.js`** — the rules the schema is meant to keep,
+  read back from the database's own catalogs: every table has RLS, no
+  function is an endpoint unless listed, no client can set a server-set
+  column, every text column has a limit, every writable table has a rate
+  limit, nothing new starts open. It looks at no data. A migration that
+  breaks a rule fails here without anyone remembering to test for it. Its
+  allow-lists (which functions the app calls, which columns are secret)
+  are at the top of the file: **a new function the app calls is added
+  there in the same change.**
+- **`security_isolation_suite.js`** — one throwaway Room with one of
+  everything, read table by table as a member, an outsider, a pending
+  requester, a removed member, a member the author has blocked, and a
+  signed-out caller.
+- **`security_edge_live.js`** — every Edge Function action called by an
+  outsider, a plain member and a mod, and that nothing changed.
+
+## The ones written with each slice
 
 | Script | What it proves | Leaves behind |
 |---|---|---|
@@ -19,11 +49,17 @@ one re-runnable security sweep.
 | `phase10_slice4_suite.js` | Prints SQL. 42 checks: the two post functions still make every kind of post, the server applies the 10-media and 4-option limits and checks media paths, nothing can be attached or changed around the functions, and who may post is who could before (member, moderators-only Room, pending, removed, outsider, signed out). | Nothing: it rolls back. |
 | `phase10_slice5_suite.js` | Prints SQL. 26 checks: the `profiles` table gives out names but not bio, banner or last active (not to select, filter or sort by), `get_profile()` returns them and blanks them between blocked people in both directions, and everything that shows a name still reads it. | Nothing: it rolls back. |
 | `phase10_slice6_suite.js` | Prints SQL. 61 checks: every text limit (the limit accepted, one more refused), every rate limit (the last allowed, the next refused, someone else and the service role unaffected), the daily message cap, the 50-file upload allowance, the counters closed to clients, and which notifications and stored files the cleanup jobs take. | Nothing: it rolls back. |
+| `security_invariants.js` | Prints SQL. 23 rules read from the catalogs (above). | Nothing: it only reads. |
+| `security_isolation_suite.js` | Prints SQL. 156 checks: the isolation matrix (above). | Nothing: it rolls back. |
+| `security_edge_live.js` | 54 checks over the real API: no key, the anon key with no session, and 34 actions by someone who may not. | A Room `zz-edge`. |
 | `phase10_slice6_live.js` | 16 checks over the real API: the verification email's limit and that it leaves the earlier link working, a 26 MB video refused, 50 real uploads and the 51st refused in any bucket, the allowance back after deleting, the 11th comment in a minute as the app sees it. | A Room `zz-live6`, one Mailpit email, rate-limit counters. Clean up afterwards. |
 
 `sqlsuite.js` is the shared builder for the SQL suites: `as('tobi')` to
 become an account, `check`, `refused` (with the reason it must be refused
-for) and `allowed`.
+for), `allowed`, and `invariant` (a query that returns what breaks a
+rule).
+
+Any one of them by itself:
 
 ```bash
 # from the repo root
@@ -48,7 +84,8 @@ A SQL suite's transaction has one `now()`, so everything in it falls in
 the same minute, hour and day. That is what lets a suite reach "the 31st
 message this minute" without waiting.
 
-Cleaning up after the live scripts (as the database owner):
+Cleaning up after a live script run by itself (`run.js --live` does this
+for you), as the database owner:
 
 ```sql
 delete from rooms where slug like 'zz-live%';

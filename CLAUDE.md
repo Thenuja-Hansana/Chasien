@@ -55,9 +55,20 @@ npm run ios         # expo run:ios
 npm run web         # expo start --web
 ```
 
-There is no test suite/runner configured in this project (no `test` script,
-no Jest config) — `lint` + `typecheck` are what CI (and you) can verify
-mechanically. Everything else is verified by hand against a live local
+There is no test runner for the app (no `test` script, no Jest config) —
+`lint` + `typecheck` are what CI (and you) can verify mechanically. The
+backend has a re-runnable security check, run by hand against the local
+stack from the repo root:
+
+```bash
+node supabase/tests/run.js           # SQL suites: schema rules, isolation matrix, per-slice checks
+node supabase/tests/run.js --live    # plus the scripts that call the real API; cleans up after itself
+```
+
+Run it after any change to a migration, policy, grant or Edge Function
+(`supabase/tests/README.md`). A function the app calls, or a column that
+must stay secret, is added to the lists at the top of
+`supabase/tests/security_invariants.js` in the same change. Everything else is verified by hand against a live local
 Supabase stack (see `docs/running-locally.md`); phase write-ups in
 `docs/phase/` describe what was actually checked, not TypeScript's ability
 to compile.
@@ -142,7 +153,11 @@ GitHub Actions → EAS builds.
   (`20261002110000`, `20261002120000`).
 - Table `GRANT`s to the `authenticated` role (`grants.sql`-style
   migrations) are required in addition to RLS policies — RLS alone still
-  returns "permission denied" without them.
+  returns "permission denied" without them. Nothing is granted by
+  default: a new table, sequence or function starts closed to `anon` and
+  `authenticated` (`20261002150000`), and `anon` holds no privilege on any
+  table. A column that must not be read (a token, anything secret) is
+  left out of the SELECT grant; a policy can't hide a column.
 - **RLS restricts rows, not columns.** Client-writable tables use
   column-level `INSERT`/`UPDATE` grants listing exactly what the app (and
   any SECURITY INVOKER function) writes — see

@@ -36,7 +36,7 @@ user load, real revenue) to spend money.
 | 5 | Realtime | **Supabase Realtime** | Free (~200 concurrent connections cap) | Chat messages, typing indicators, presence, live comment/like counts. Gated by the same membership check as everything else before a client can subscribe to a Room's channel. |
 | 6 | Media storage + delivery | **Supabase Storage** now, **Cloudflare R2** planned | Free (R2: 10GB, **zero egress fees**) | Post images and clips, story media, chat attachments, voice notes, Room and profile pictures. Private buckets read through short-lived signed URLs. R2 is the intended home because its free egress is the single biggest lever for staying free as media volume grows, but it can't be provisioned or verified locally, so the swap is Phase 11's (decision-log, 2026-08-14). |
 | 7 | Push notifications | **Expo Push Service** | Free | No cap that matters pre-scale. |
-| 8 | CI | **GitHub Actions** | Free (minutes cap, fine at this scale) | Lint, typecheck and the React Compiler check on every push that touches `mobile/`. There is no test runner; behaviour is verified by hand against the local stack. |
+| 8 | CI | **GitHub Actions** | Free (minutes cap, fine at this scale) | Lint, typecheck and the React Compiler check on every push that touches `mobile/`. The app has no test runner; its behaviour is verified by hand on a device. The backend has a re-runnable check, `node supabase/tests/run.js` (since 2026-10-02), run by hand because it needs the local Docker stack. |
 | 9 | App builds / distribution | **EAS (Expo Application Services)** | Free tier (limited builds/month), local builds free beyond that | Never fully blocked — local builds are slower but free. |
 
 ## Database write access (current rule)
@@ -170,6 +170,20 @@ user load, real revenue) to spend money.
   ships, grant UPDATE on the content column together with a trigger that
   stamps `edited_at`, so edits can't be silent.
 - `anon` has no write privileges on any table, including future ones.
+- **A new table, sequence or function is closed until a migration opens
+  it** (since 2026-10-02). Supabase's default privileges, which handed
+  each new one to `anon` and `authenticated`, are withdrawn; `anon`
+  holds no privilege on any table at all. So a new table needs its
+  `grant`s written out, by column for anything writable, alongside its
+  policies. `supabase/tests/security_invariants.js` reads these rules
+  back from the catalogs and fails when one is broken; a function the
+  app calls is added to its list in the same change.
+- **A secret is kept out of reach by a column grant, not a policy.** The
+  email-verification token sat in a row its owner could read, so the
+  person it was emailed to could read it without the email and join a
+  domain-verified Room. `room_email_verifications` grants SELECT on
+  every column but `token` (2026-10-02). RLS picks rows; only a grant
+  picks columns.
 - **A database function is callable over the API only if a migration
   grants it** (since 2026-10-02, `20261002100000`). PostgREST turns every
   function in `public` into an `/rpc` endpoint, and Postgres opens a new
