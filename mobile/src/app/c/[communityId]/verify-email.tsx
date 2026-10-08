@@ -34,6 +34,8 @@ export default function VerifyEmail() {
   const [status, setStatus] = useState<VerificationStatus>(null);
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
+  /** True once "Resend email" has gone through, until the next attempt. */
+  const [resent, setResent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const userId = session?.user.id;
@@ -66,14 +68,28 @@ export default function VerifyEmail() {
   if (!session) return null;
 
   async function handleSend() {
-    if (room === 'loading' || !room || !email.trim() || sending) return;
+    if (room === 'loading' || !room || sending) return;
+    // "Resend email" has no input to read from: it sends to the address the
+    // link already went to. It used to read `email`, the input's state, like
+    // the first send does. That worked right after sending, while the state
+    // still held what was typed, and did nothing once the screen had been
+    // left and reopened: the "check your inbox" state comes back from the
+    // database, the input's state comes back empty, and this returned early.
+    // Outside the try: the React Compiler can't compile a conditional in one.
+    const awaiting = status && !status.verifiedAt ? status : null;
+    const address = (awaiting ? awaiting.email : email).trim();
+    if (!address) return;
     setSending(true);
     setError(null);
+    setResent(false);
     // No `finally`: the React Compiler skips a component that has one, and
     // the catch handles every error, so this is equivalent.
     try {
-      await requestRoomVerification(room.id, email.trim());
-      setStatus({ email: email.trim().toLowerCase(), verifiedAt: null, expiresAt: new Date(Date.now() + 3600_000).toISOString() });
+      await requestRoomVerification(room.id, address);
+      setStatus({ email: address.toLowerCase(), verifiedAt: null, expiresAt: new Date(Date.now() + 3600_000).toISOString() });
+      // The first send changes the whole screen. A resend changes nothing
+      // on it, so it has to say that it happened.
+      setResent(awaiting !== null);
     } catch (e) {
       setError(errorMessage(e, 'Could not send that verification email.'));
     }
@@ -106,6 +122,7 @@ export default function VerifyEmail() {
               {room.name} — you can close this screen and come back later.
             </Text>
             {error && <Text style={styles.error}>{error}</Text>}
+            {resent && <Text style={styles.notice}>Sent again. Check your inbox.</Text>}
             <Pressable style={styles.secondaryButton} onPress={handleSend} disabled={sending}>
               {sending ? <ActivityIndicator color={colors.text} /> : <Text style={styles.secondaryButtonText}>Resend email</Text>}
             </Pressable>
@@ -210,6 +227,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 13,
     color: colors.accent.DEFAULT,
+    marginBottom: Spacing[3],
+  },
+  notice: {
+    fontFamily: Fonts.body,
+    fontSize: 13,
+    color: colors.neutral[400],
     marginBottom: Spacing[3],
   },
   submitButton: {

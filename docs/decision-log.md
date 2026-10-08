@@ -7,6 +7,66 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-08 — "Resend email" did nothing after leaving the verify-email screen
+
+One file, `mobile/src/app/c/[communityId]/verify-email.tsx`. Found on
+the Galaxy A14 during slice 7's phone check, listed under slice 10, and
+fixed ahead of it at Thenuja's request. The fix and its phone check were
+done on 2026-10-02; the session ended before the write-up.
+
+**What was wrong.** The screen has two states: a form with an address
+input, and "Check your inbox" with a Resend button. Both buttons called
+one handler, and the handler read the address from the input's state. In
+the second state there is no input. Straight after the first send that
+state still held what had been typed, so Resend worked. But the "check
+your inbox" state is also restored from the database when the screen is
+opened again, and then the input's state is empty: the handler's
+`!email.trim()` guard returned, silently. The button the screen tells
+you to come back to was the one that didn't work when you came back.
+
+**The fix.** Resend sends to the address the link already went to
+(`status.email`); the form still sends what's typed.
+
+**Also in it:** a successful resend now says "Sent again. Check your
+inbox." The first send changes the whole screen; a resend changed
+nothing on it, so a working Resend and a dead one looked the same. That
+was half of why the bug went unseen.
+
+**Verified on the Galaxy A14** (2026-10-02), in a throwaway
+domain-verified Room:
+- Before the fix (slice 7's run): Resend after returning to the screen
+  did nothing, and Mailpit still held one email.
+- After: sent from the form (1 email), left the screen, reopened it,
+  tapped Resend. 2 emails, and "Sent again. Check your inbox." on
+  screen.
+- Two taps inside one clock minute: the first sent, the second showed
+  "You're doing that too often. Wait a moment and try again." and sent
+  nothing. That's slice 6's limit reaching this screen as intended.
+- Typecheck, lint and the React Compiler check pass (111 components, 0
+  skipped).
+
+**Verified over the API** (2026-10-08, the phone not connected): what
+Resend does, as a seed account. Two requests for the same address: the
+first email's link answers "This verification link is invalid." and the
+resent one "You're verified!", with an approved membership. A resend
+replaces the token, so only the newest link works. Nothing in the
+function changed; this is to have it on record.
+
+**Not checked on the phone:** opening a *resent* link there and seeing
+the Room open. The link itself was opened over the API, and the Room
+opening after a verified link was seen on the phone in slice 7.
+
+**Noticed, not fixed** (now under slice 10): a mistyped address can't be
+corrected. Once a link has been sent the screen only ever shows "Check
+your inbox" for that address. It needs a "use a different address"
+control, which is a small addition, not part of this bug.
+
+**Seen in passing:** the rate-limit counters left by the interrupted
+test on 2026-10-02 were gone by 2026-10-08, removed by the hourly purge
+job. Its first run outside a test.
+
+---
+
 ## 2026-10-02 — Phase 10, slice 7: the security re-check, as something that can be run again
 
 Migration `20261002150000_closed_by_default_the_rest.sql`, and five new

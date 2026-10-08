@@ -1026,11 +1026,12 @@ block is the original list; each slice says which of its items it closes.
       signed-out phone keeps getting the old account's pushes until
       someone else signs in on it (noticed in slice 3)
 - [ ] Slice 10 — loading, empty and error states on Phase 9's screens,
-      then `docs/phase/phase10.md`. Known already (found in slice 7):
-      on the verify-email screen, **"Resend email" does nothing after you
-      leave the screen and come back.** The sent state is restored from
-      the database, but the handler reads the address from the input
-      field's state, which is empty by then, and returns. A dead control
+      then `docs/phase/phase10.md`. Found in slice 7 and **fixed ahead
+      of this slice** (2026-10-08): on the verify-email screen, "Resend
+      email" did nothing after you left the screen and came back. Still
+      open on that screen: **a mistyped address can't be corrected.**
+      Once a link has been sent, the screen only ever shows "Check your
+      inbox" for that address, with Resend and nothing else
 
 - [ ] Crash reporting (free tier — e.g. Sentry free tier)
 - [ ] Offline behavior: what happens with no connection, for feed and chat
