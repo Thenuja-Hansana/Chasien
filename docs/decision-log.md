@@ -29,6 +29,9 @@ typecheck and the compiler check pass.
 **Not done:** upgrading npm on this laptop, which is what would stop a
 third time. Until then, any `npm install` here needs the same
 regeneration afterwards.
+*(Done the same day: this laptop's npm is 11.21.2 now, and an
+`npm install --package-lock-only` with it leaves the lock unchanged,
+`@emnapi` entries included.)*
 
 ---
 
