@@ -2,18 +2,25 @@ import { Caprasimo_400Regular } from '@expo-google-fonts/caprasimo';
 import { Figtree_400Regular, Figtree_600SemiBold, Figtree_700Bold } from '@expo-google-fonts/figtree';
 import { useFonts } from 'expo-font';
 import { NavigationBar } from 'expo-navigation-bar';
-import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider, usePathname } from 'expo-router';
+import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider, usePathname, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, type ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import ErrorScreen from '@/components/ErrorScreen';
+import { DarkColors, LightColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
+import { initCrashReporting, reportError } from '@/lib/crash-reporting';
 import { configureForegroundNotificationHandler, registerForPushNotifications, subscribeToNotificationTaps } from '@/lib/push';
 import { ThemeProvider as ChasienThemeProvider, useThemeContext } from '@/lib/theme-context';
 import { UserPreviewProvider } from '@/lib/user-preview-context';
+
+// First, so a crash anywhere after this is caught. Does nothing until a
+// Sentry key is set (lib/crash-reporting.ts).
+initCrashReporting();
 
 // Held open until fonts resolve so screens never flash with the platform
 // default font before Caprasimo/Figtree are ready — see constants/theme.ts.
@@ -83,6 +90,32 @@ function AuthGate({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+// One screen crashed: it's replaced by this, inside the app, so the theme
+// still applies and there's somewhere to go. Without it, one screen's
+// crash blanked the whole app (Phase 10 slice 8). A screen with nothing
+// behind it (opened from a link or a notification) offers Home instead of
+// Back, unless it is Home.
+function ScreenError({ error, retry }: ErrorBoundaryProps) {
+  const colors = useTheme();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    reportError(error, 'screen');
+  }, [error]);
+
+  const canGoBack = router.canGoBack();
+  const goHome = pathname !== '/';
+  return (
+    <ErrorScreen
+      colors={colors}
+      error={error}
+      onRetry={retry}
+      backLabel={canGoBack ? 'Go back' : goHome ? 'Go to Home' : undefined}
+      onBack={canGoBack ? () => router.back() : goHome ? () => router.replace('/') : undefined}
+    />
+  );
+}
+
 // React Navigation's own chrome (headers, tab bars it draws itself, the
 // native back-swipe/status-bar tinting) is tinted to match whichever mode
 // is active — this has to live inside ChasienThemeProvider to read it.
@@ -126,7 +159,7 @@ function AppShell() {
       <AuthProvider>
         <AuthGate>
           <UserPreviewProvider>
-          <Stack screenOptions={{ headerShown: false }}>
+          <Stack screenOptions={{ headerShown: false }} unstable_screenErrorBoundary={ScreenError}>
             {/* The four main tab destinations (Home/Explore/Chats/You)
                 swap instantly instead of sliding in from the right — each
                 is its own Stack screen (see TabBar.tsx's comment on why
@@ -168,6 +201,31 @@ function AppShell() {
         </AuthGate>
       </AuthProvider>
     </ThemeProvider>
+  );
+}
+
+// The last resort: a crash outside any one screen (fonts, theme, sign-in
+// state, the layout itself). expo-router wraps this whole file in it, so
+// it's drawn outside every provider: no theme context, no router state
+// worth trusting. It takes Light or Dark from the phone, not from Settings
+// (the stored choice is behind the provider that may have crashed), and
+// hides the splash screen itself in case the crash came before AppShell
+// did. `unstable_screenErrorBoundary` is expo-router's own name for the
+// per-screen boundary above; typecheck will catch a rename on an upgrade.
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const scheme = useColorScheme();
+  const colors = scheme === 'dark' ? DarkColors : LightColors;
+
+  useEffect(() => {
+    reportError(error, 'app');
+    SplashScreen.hideAsync();
+  }, [error]);
+
+  return (
+    <>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <ErrorScreen colors={colors} error={error} onRetry={retry} />
+    </>
   );
 }
 

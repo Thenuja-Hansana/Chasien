@@ -127,6 +127,13 @@ GitHub Actions → EAS builds.
   `src/constants/theme.ts` are the single source of truth for colors/type/
   spacing (Light/Dark). Always read colors via `useTheme()`, never a static
   import — screens re-render on theme-mode change through this hook.
+- Crashes: `src/app/_layout.tsx` has two error boundaries, one per
+  screen (the Stack's `unstable_screenErrorBoundary`) and one for the
+  whole app (its exported `ErrorBoundary`, drawn outside every provider,
+  so it takes its colors from the phone, not `useTheme()`). Both report
+  through `src/lib/crash-reporting.ts`, which does nothing until
+  `EXPO_PUBLIC_SENTRY_DSN` is set. Read its file comment before letting a
+  report carry anything new: a report leaves the Room-isolation guarantee.
 - Multi-tab creation flows (Post/Clip/Poll/Event) lift shared state into one
   parent shell rather than owning it per-tab, so switching tabs mid-draft
   never loses input — see `create-post.tsx` and `src/components/create/`.

@@ -1027,9 +1027,22 @@ block is the original list; each slice says which of its items it closes.
       email-verification token was readable by the person it was meant
       to be emailed to**, so a domain-verified Room could be joined
       without the email. Closed. See decision-log, 2026-10-02
-- [ ] Slice 8 — crash handling: an error boundary (there is none), and
+- [x] Slice 8 — crash handling: an error boundary (there is none), and
       Sentry's free plan wired so it does nothing until a key is set.
-      Needs a Sentry account, and a line in the privacy policy
+      Needs a Sentry account, and a line in the privacy policy.
+      **Done 2026-11-09**, built with no Sentry account (Thenuja's
+      choice; the account is an APK Beta Phase item). Two error screens
+      in `app/_layout.tsx`: one per screen, inside the app, with Try again
+      and Go back; one for the whole app, outside every provider, with Try
+      again. Before, one screen's crash blanked the whole app.
+      `lib/crash-reporting.ts` starts Sentry only when
+      `EXPO_PUBLIC_SENTRY_DSN` is set, and sends only from release builds:
+      crashes, with no user, IP, screenshots, sessions, console text or
+      query strings. Checked on the A14, and against a stand-in Sentry
+      server on the laptop for what a report holds. The privacy-policy
+      line is in `store-compliance.md`, for when the policy is written
+      (Phase 12). `expo-network` is installed for slice 9 in the same
+      dev-client rebuild. See decision-log, 2026-11-09
 - [ ] Slice 9 — offline, "online-only but honest": a no-connection
       banner, requests that time out, retry buttons, and nothing typed
       ever lost. (Corrected 2026-10-02: this said a chat message that
@@ -1047,7 +1060,8 @@ block is the original list; each slice says which of its items it closes.
       Once a link has been sent, the screen only ever shows "Check your
       inbox" for that address, with Resend and nothing else
 
-- [ ] Crash reporting (free tier — e.g. Sentry free tier)
+- [x] Crash reporting (free tier — e.g. Sentry free tier) *(Slice 8,
+      2026-11-09. Sentry, switched off until a key is set)*
 - [ ] Offline behavior: what happens with no connection, for feed and chat
       — at minimum, don't crash or silently drop user actions
 - [ ] Re-verify loading/empty/error states and list virtualization/image
@@ -1265,6 +1279,20 @@ code and loads everything from Metro on this laptop.
       same as CI. EAS runs `npm ci`, which refuses a lock file missing
       entries a current npm expects. That's what broke CI from 2026-09-07
       to 2026-09-22 (decision-log, 2026-09-22)
+- [ ] Crash reports from testers' phones (added 2026-11-09, from Phase
+      10 slice 8, which built it switched off):
+      - A Sentry account (free plan) and a project. Set its DSN as
+        `EXPO_PUBLIC_SENTRY_DSN` in the EAS build profiles; nothing else
+        in the app changes.
+      - Turn on "Prevent Storing of IP Addresses" in the project's
+        settings, for native crash reports.
+      - Readable stack traces: Sentry's config plugin
+        (`@sentry/react-native/expo` in `app.json`), a `metro.config.js`
+        from `getSentryExpoConfig`, and `SENTRY_AUTH_TOKEN` as an EAS
+        secret so source maps upload. Left out until now on purpose:
+        without a token, a release build's upload step has nothing to
+        log in with. Without source maps, reports arrive minified.
+      - Check one real crash from the APK reaches the project.
 - [ ] Pick one release signing key and keep it forever. Today
       `android/app/build.gradle` signs release builds with the **debug
       keystore**. Every future version has to be signed with the key

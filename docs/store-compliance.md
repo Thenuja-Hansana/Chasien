@@ -75,6 +75,17 @@ later" item; submissions get rejected without them.
     row. This is a scheduling constraint, not a code one, but it's the
     longest lead time before a Play launch.
 
+*Added 2026-11-09, from Phase 10 slice 8 (crash reporting):*
+
+13. **Crash reports are data the app collects.** Once a Sentry key is
+    set, a crash sends a stack trace, device facts (model, OS, memory,
+    storage, battery, locale, time zone) and Sentry's own random install
+    id to Sentry. No account, IP, content, screenshots or usage
+    sessions. The privacy policy has to name Sentry and say this, and
+    Google's Data safety form has to declare "Crash logs" and
+    "Diagnostics" (the install id falls under "Device or other IDs",
+    which push tokens already need). See decision-log, 2026-11-09.
+
 ## Sideloaded APK distribution (no store)
 
 This is the roadmap's APK Beta Phase: since 2026-10-08, a private build

@@ -104,6 +104,15 @@ automatically. `JAVA_HOME` must point at Android Studio's bundled JDK 21
 — see gotcha #5. After it launches, if it opens pointed at a LAN IP
 instead of `localhost`, redo step 8 above to fix it.
 
+## Crash reporting stays off locally
+
+`mobile/src/lib/crash-reporting.ts` starts Sentry only when
+`EXPO_PUBLIC_SENTRY_DSN` is set, and even then sends nothing from a
+development build. Leave it out of `.env.local`. To see what a report
+would hold without a Sentry account, point a temporary DSN at a small
+local server through `adb reverse` (decision-log, 2026-11-09), and
+remove it again.
+
 ## Test accounts (local seed data)
 
 All seeded accounts use the password `password123`:

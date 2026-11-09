@@ -37,6 +37,7 @@ user load, real revenue) to spend money.
 | 6 | Media storage + delivery | **Supabase Storage** now, **Cloudflare R2** planned | Free (R2: 10GB, **zero egress fees**) | Post images and clips, story media, chat attachments, voice notes, Room and profile pictures. Private buckets read through short-lived signed URLs. R2 is the intended home because its free egress is the single biggest lever for staying free as media volume grows, but it can't be provisioned or verified locally, so the swap is Phase 11's (decision-log, 2026-08-14). |
 | 7 | Push notifications | **Expo Push Service** | Free | No cap that matters pre-scale. |
 | 8 | CI | **GitHub Actions** | Free (minutes cap, fine at this scale) | Lint, typecheck and the React Compiler check on every push that touches `mobile/`. The app has no test runner; its behaviour is verified by hand on a device. The backend has a re-runnable check, `node supabase/tests/run.js` (since 2026-10-02), run by hand because it needs the local Docker stack. |
+| 8a | Crash reporting | **Sentry** (free plan), switched off until a key is set | Free (5,000 errors/month) | Two error screens in `app/_layout.tsx` (one per screen, one for the whole app) and `lib/crash-reporting.ts`, since 2026-11-09. Starts only when `EXPO_PUBLIC_SENTRY_DSN` is set, sends only from release builds, and sends crashes only: no user, IP, screenshots, sessions, console text or query strings. The account and readable stack traces are APK Beta Phase items. |
 | 9 | App builds / distribution | **EAS (Expo Application Services)** | Free tier (limited builds/month), local builds free beyond that | Never fully blocked — local builds are slower but free. |
 
 ## Database write access (current rule)
@@ -333,7 +334,6 @@ no state library (screens call `mobile/src/lib/` directly and hold their
 own state). What's still open, each tracked in `roadmap.md`:
 
 - Offline behaviour for the feed and chat (Phase 10).
-- Which crash-reporting service to use (Phase 10).
 - Which SMTP provider sends real Auth emails (Phase 11).
 - Which release signing key to keep for good, and how it relates to Play
   App Signing (APK Beta Phase).

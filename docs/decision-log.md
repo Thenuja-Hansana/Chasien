@@ -7,6 +7,110 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-09 — Phase 10 slice 8: error screens, and Sentry switched off until there's a key
+
+Decided with Thenuja: build crash reporting now with no Sentry account,
+and add slice 9's connectivity module to the same dev-client rebuild.
+
+**Before.** There was no error boundary anywhere. Control run on the A14,
+a `throw` in Explore: Metro's red screen in development, and behind it
+a blank app, with no way out but closing it. A release build shows only
+the blank.
+
+**Two error screens** (`components/ErrorScreen.tsx`, used twice in
+`app/_layout.tsx`):
+- **Per screen**, through the Stack's `unstable_screenErrorBoundary`.
+  The crashed screen is replaced inside the app, in the app's theme,
+  with Try again and Go back (Go to Home when nothing is behind it, and
+  neither on Home itself). The `unstable_` prefix is expo-router's;
+  typecheck catches a rename on an upgrade.
+- **For the whole app**, `ErrorBoundary` exported from `_layout.tsx`.
+  expo-router wraps the whole root layout in it, so it's drawn outside
+  every provider: `useTheme()` throws there. It takes Light or Dark from
+  the phone, not from Settings, which is the one deliberate exception
+  to "always `useTheme()`", and hides the splash screen itself in case
+  the crash came before the app could. Try again only.
+
+**Crash reporting** (`lib/crash-reporting.ts`, `@sentry/react-native`
+7.11.0, the version Expo 57 pins):
+- Starts only when `EXPO_PUBLIC_SENTRY_DSN` is set, and sends only from
+  release builds, so development crashes (already on Metro's screen)
+  don't use up the free plan's 5,000 errors a month.
+- The two error screens report what they catch. Sentry doesn't see a
+  crash expo-router's boundaries catch. Uncaught errors, unhandled
+  promise rejections and native crashes are Sentry's own.
+- A report carries a stack trace and device facts, and nothing a Room
+  member wrote: no user, no IP (`sendDefaultPii: false`; the SDK tells
+  the server never to infer one), no screenshot, no view hierarchy, no
+  replay, no tracing, no sessions, no console text, no touch
+  breadcrumbs (labelled with accessibility labels, which carry a chat
+  row's last message), and no query strings on request URLs (Supabase
+  filters carry ids, handles, search text and tokens).
+- **Left for the APK Beta Phase**, because they need the account and a
+  token at build time: the config plugin, `metro.config.js` and
+  source-map upload. `npx expo install` added the config plugin to
+  `app.json` on its own; it was taken back out.
+
+**Found while checking, and changed before it shipped:**
+- **Sessions.** With Sentry on, every app start and every move to the
+  background sent a "session" with Sentry's install id. That's usage
+  tracking, not crash reporting. `enableAutoSessionTracking: false`.
+- **Android's breadcrumbs skip `beforeBreadcrumb`.** Battery level,
+  power saving, and network type with signal strength and whether a
+  VPN was on, all arrived in a JS crash report. They are now filtered
+  in `beforeSend` as well; app foreground/background is kept.
+- **No network breadcrumbs are recorded at all** in this app, although
+  the SDK's setting for them is on. The stripping is kept as a guard
+  and was tested with an injected breadcrumb.
+
+**Kept, deliberately:** Sentry's own install id. It's random, made by
+Sentry on first launch, and tied to neither the account nor the
+hardware. Android's side adds it to native crash reports, where this
+code can't remove it. The Data safety form already needs "Device or
+other IDs" for push tokens, so it costs no new declaration.
+
+**Verified** on the A14 against the local stack:
+- A crash on Explore opened from Home: the error screen; Go back
+  returns to a working Home; Try again brings Explore back once the
+  crash stops.
+- A crash on Home from a cold start: Try again only.
+- A crash in `AuthGate`, outside every screen: the whole-app screen, in
+  the phone's Dark and Light modes with matching status-bar icons; Try
+  again brings the app back.
+- No key set: Sentry never starts. Android's side logs `auto-init read:
+  false` and nothing else.
+- With a temporary DSN pointing at a stand-in server on the laptop
+  (through `adb reverse`), and sending allowed in development for the
+  test only:
+  - the screen crash arrived tagged `boundary: screen`, and an
+    unhandled rejection arrived through Sentry's own handler
+  - a console line marked SECRET never left the phone
+  - an injected request breadcrumb arrived as `/rest/v1/rooms`, without
+    `?slug=eq.secret-room`
+  - no session envelopes; no battery or network events
+- A test detail worth knowing: React retries a failed render once
+  before an error boundary takes over, so a crash that happens only on
+  the first render never shows the error screen. The tests used a crash
+  that lasts a few seconds.
+- Typecheck, lint and the compiler check (114 components, 0 skipped)
+  pass. Every temporary change was removed, the phone's Sentry cache
+  cleared, and the phone's dark mode put back.
+
+**Also installed:** `expo-network` (~57.0.3) for slice 9, unused until
+then, so slice 9 needs no rebuild of its own. Chosen over
+`@react-native-community/netinfo` as the Expo module next to the other
+`expo-*` ones; either would do.
+
+**Privacy policy and Play's Data safety form:** they have to say crash
+logs and diagnostics go to Sentry. Recorded in `store-compliance.md`
+for when the policy is written (Phase 12).
+
+**What would make us revisit it:** an expo-router upgrade that renames
+`unstable_screenErrorBoundary`, or a Sentry upgrade that starts
+recording network breadcrumbs (check what a report holds again).
+
+---
+
 ## 2026-11-09 — CI failed at `npm ci` again: the lock file lost `@emnapi` a second time
 
 One file, `mobile/package-lock.json`. Found the first time Phase 10 was
