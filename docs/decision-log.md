@@ -7,6 +7,47 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-09 — `chasien.app` replaced with `chasien.com`
+
+Two files, decided with Thenuja. Closes the Phase 11 item
+"`chasien.app` is in two places and isn't ours", found 2026-10-08.
+
+**Cause.** The mock's URL preview used `chasien.app` as a placeholder.
+It was copied into the app and into `request-room-verification` before
+the project had a domain, and nothing replaced it once `chasien.com`
+was bought.
+
+**Decision.**
+- `request-room-verification` sends from `Chasien <noreply@chasien.com>`.
+  A real provider sends only from a domain it has verified, so the
+  default has to be ours. `SMTP_FROM` overrides it, for a provider that
+  wants a sending subdomain.
+- The Create Room form previews the Room's address as
+  `chasien.com/c/<slug>`. The `/c/` is the app's own route for a Room
+  (`app/c/[communityId]`), so if Room links are built, the address shown
+  today is the one that would work. Considered: `chasien.com/<slug>`
+  (shorter, but a second format to support or change later) and
+  dropping the line (it shows the slug, which has to be unique, before
+  the Room is made). Nothing serves that address yet.
+- The contact address stays `info.chasien@gmail.com` for now. Moving it
+  to `chasien.com` needs a real inbox behind it first (Namecheap's free
+  forwarding would do).
+
+**Not part of this:** the function still can't log in to a real mail
+provider (no username or password, TLS off). That stays a Phase 11
+item, done when the provider is chosen, since Mailpit can't test it.
+
+**Verified** against the local stack and the A14. Control run first:
+an email sent through the function came from `noreply@chasien.app`.
+After the change it came from `noreply@chasien.com`, but only once the
+edge runtime container was restarted (running-locally.md, gotcha 13).
+On the A14, typing "Chess Club" in New Room shows
+`chasien.com/c/chess-club`. Typecheck, lint and
+`node supabase/tests/run.js --live` (521 of 521) pass, and the data is
+back to the baseline.
+
+---
+
 ## 2026-10-08 — Release path: a private APK for a few testers, then Google Play; no public APK, Apple set aside
 
 No code. A session on what the project costs and where it goes next,

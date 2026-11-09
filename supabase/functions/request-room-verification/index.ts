@@ -13,7 +13,7 @@
 // Local dev sends real SMTP to the same Mailpit/Inbucket container
 // Supabase Auth's own emails already land in (localhost:54324) — no
 // separate mail provider account needed to test this. `SMTP_HOST`/
-// `SMTP_PORT` are overridable via env for the real-SMTP swap Phase 11
+// `SMTP_PORT`/`SMTP_FROM` are overridable via env for the real-SMTP swap Phase 11
 // will eventually need, same one-file-seam pattern the Storage-to-R2
 // swap already uses elsewhere in this codebase.
 
@@ -40,7 +40,10 @@ async function sendVerificationEmail(to: string, roomName: string, verifyUrl: st
     ignoreTLS: true,
   });
   await transport.sendMail({
-    from: 'Chasien <noreply@chasien.app>',
+    // chasien.com is the project's own domain. A real provider only sends
+    // from a domain it has verified, so the default has to be an address
+    // there; SMTP_FROM is for a provider that wants a sending subdomain.
+    from: Deno.env.get('SMTP_FROM') ?? 'Chasien <noreply@chasien.com>',
     to,
     subject: `Verify your email to join ${roomName}`,
     html: `

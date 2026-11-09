@@ -274,3 +274,11 @@ Signup confirmation emails don't go to a real inbox locally — check
       so you stay signed in.
     - Stop Metro while Gradle runs (gotcha #8): it's several hundred MB
       this machine doesn't have to spare.
+
+13. **An edit to an existing Edge Function can keep being served stale**
+    (hit 2026-11-09, changing `request-room-verification`'s sender). The
+    request succeeds and nothing looks wrong, but the old code runs.
+    `docker restart supabase_edge_runtime_chasien` is enough here, unlike
+    a new function or a `config.toml` change (gotchas #9 and #11), which
+    need the stack stopped and started. After editing a function, check
+    the change actually took effect before believing a test result.

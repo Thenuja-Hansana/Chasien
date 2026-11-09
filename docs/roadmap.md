@@ -1184,12 +1184,14 @@ starts.
         and reads only `SMTP_HOST` and `SMTP_PORT`: no username or
         password, and TLS switched off. That suits Mailpit and no real
         provider. Both kinds of email draw on one daily allowance
-  - [ ] `chasien.app` is in two places and isn't ours (added
+  - [x] `chasien.app` is in two places and isn't ours (added
         2026-10-08). `request-room-verification` sends from
         `noreply@chasien.app`; it has to be an address at `chasien.com`.
         `create-community.tsx` previews a Room's address as
         `chasien.app/<slug>`; change it, or drop the preview until Room
-        links exist
+        links exist. **Done 2026-11-09:** the email comes from
+        `noreply@chasien.com` (`SMTP_FROM` overrides it), and the preview
+        reads `chasien.com/c/<slug>`. See decision-log, 2026-11-09
 - [ ] Password-reset flow: a "Forgot password?" link, the email, and a
       screen that the reset link deep-links into. *Moved here from Phase
       12 on 2026-09-21.* It was cut from Phase 2 because it needs a

@@ -264,7 +264,7 @@ export default function CreateCommunity() {
         />
         {slug.length > 0 && (
           <Text style={styles.slugPreview}>
-            chasien.app/<Text style={styles.slugPreviewAccent}>{slug}</Text>
+            chasien.com/c/<Text style={styles.slugPreviewAccent}>{slug}</Text>
           </Text>
         )}
 
