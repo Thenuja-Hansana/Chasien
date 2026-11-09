@@ -7,6 +7,31 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-09 — CI failed at `npm ci` again: the lock file lost `@emnapi` a second time
+
+One file, `mobile/package-lock.json`. Found the first time Phase 10 was
+pushed: CI stopped at `npm ci`, before lint or typecheck ran.
+
+**Cause.** The same one as 2026-09-22. Adding `expo-navigation-bar` on
+2026-10-02 (`d0745f4`) ran `npm install` with this laptop's npm 11.6.2,
+which rewrites the lock without `@emnapi/core` and `@emnapi/runtime`.
+Nothing noticed for five weeks because the branch was never pushed, so
+CI never ran on it.
+
+**Fix.** The lock regenerated with `npx npm@11.21.2 install
+--package-lock-only`. Compared with the last lock CI accepted
+(`origin/main`), the only difference is `expo-navigation-bar`'s entry;
+the rest of the change is npm moving `"peer": true` flags, with no
+version changed. A clean `npm ci` passes with it; the old lock fails it
+with CI's own "Missing: @emnapi/core@1.11.3 from lock file". Lint,
+typecheck and the compiler check pass.
+
+**Not done:** upgrading npm on this laptop, which is what would stop a
+third time. Until then, any `npm install` here needs the same
+regeneration afterwards.
+
+---
+
 ## 2026-11-09 — `chasien.app` replaced with `chasien.com`
 
 Two files, decided with Thenuja. Closes the Phase 11 item
