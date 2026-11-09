@@ -77,10 +77,11 @@ later" item; submissions get rejected without them.
 
 ## Sideloaded APK distribution (no store)
 
-This is the roadmap's APK Beta Phase. No store reviews a sideloaded APK,
-but that doesn't make items 1, 2, 7 and 8 optional: real people still
-need them, and the same testers go on to the Play closed test. What's
-specific to sideloading:
+This is the roadmap's APK Beta Phase: since 2026-10-08, a private build
+sent to a few testers, with no public APK link (decision-log,
+2026-10-08). No store reviews a sideloaded APK, but that doesn't make
+items 1, 2, 7 and 8 optional: real people still need them, and the same
+testers go on to the Play closed test. What's specific to sideloading:
 - **The signing key is permanent.** Updates must be signed with the same
   key, or users have to uninstall and reinstall. That includes moving
   from the sideloaded APK to the Play version, which depends on how Play
@@ -88,8 +89,11 @@ specific to sideloading:
 - **Users have to opt in**, by allowing "Install unknown apps", and Play
   Protect may warn them.
 - **Google's developer verification** for apps on certified Android
-  devices has been rolling out country by country and covers sideloaded
-  apps too. Check whether it applies where your users are.
+  devices covers sideloaded apps too. Checked 2026-10-08: enforced since
+  2026-09-30 in Brazil, Indonesia, Singapore and Thailand, with more
+  countries from 2027. A free limited-distribution account covers up to
+  20 authorised devices; unlimited is $25, and a Play Console account
+  counts. Check again where your testers are before sending a build.
 - **iOS has no equivalent.** An APK is Android-only. iPhone users need
   TestFlight or the App Store, and both need the Apple Developer Program.
 

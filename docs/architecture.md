@@ -285,16 +285,23 @@ database and about 1 GB of files. Nothing was limited before.
 
 Not infra, but flagging now so nothing is a surprise later:
 
+- **Google Play Console** — $25 one-time. Due when the private APK's
+  testers move into Play's closed test (roadmap, Phase 12), not before.
+  The same account is what Google's developer verification asks of a
+  sideloaded app on more than 20 devices, which is why there's no
+  public APK link (decision-log, 2026-10-08).
+- **Domain name** — `chasien.com`, already owned (Namecheap); the cost
+  is its yearly renewal. It isn't cosmetic: the email provider sends
+  from a domain it has verified, and the privacy policy and
+  account-deletion pages need an address. *(Until 2026-10-08 this said
+  `chasien.app`, "optional, cosmetic".)*
 - **Apple Developer Program** — $99/year. Needed to put any build on a
-  real iPhone, test builds included, so iOS waits for it. Android
-  development needs none of this: a dev-client build installs over USB.
-- **Google Play Console** — $25 one-time. Same timing — needed at
-  distribution, not before.
-- **Domain name** (e.g. `chasien.app`, seen in the mock's URL preview) —
-  optional, cosmetic, not required for the app to function.
+  real iPhone, test builds included. **Set aside** (2026-10-08): iOS
+  isn't scheduled. Android development needs none of this: a dev-client
+  build installs over USB.
 
-None of these block development. They come due at "we're ready to put this
-in front of real users outside our own devices."
+Nothing is due before the private APK beta. The first payment is
+Google's $25.
 
 ## Where free tiers actually break (design around these, don't just hope)
 
@@ -302,10 +309,20 @@ in front of real users outside our own devices."
   social app — not compute, not DB rows. Mitigate by: compress/resize images
   client-side before upload, cap story/video length, let ephemeral content
   (stories) actually expire and get purged rather than accumulating.
+- **Egress on Supabase Storage is 5 GB a month** (checked 2026-10-08),
+  and it's the first ceiling video reaches: 200 views of one 25 MB
+  clip, or about 3,500 downloads at the 1.4 MB average measured in
+  Phase 10. R2's egress is free, so the R2 move (Phase 11) has to come
+  before strangers can watch clips, not after.
 - **Realtime concurrent connections** (~200 on Supabase free tier) — fine
   for dev + friends/beta, will need attention before any real growth.
 - Supabase free project **pauses after 7 days fully idle** — a non-issue
   once there's regular dev activity or a scheduled keep-alive ping.
+- **The first paid step is Supabase Pro, $25 a month** (checked
+  2026-10-08). It lifts the database to 8 GB, files to 100 GB and
+  Realtime to 500 connections, and ends the inactivity pause. It's the
+  first monthly bill, so it's the deadline for deciding how the app
+  earns anything; no revenue plan exists yet.
 
 ## Not yet decided
 

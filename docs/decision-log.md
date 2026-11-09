@@ -7,6 +7,93 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-10-08 — Release path: a private APK for a few testers, then Google Play; no public APK, Apple set aside
+
+No code. A session on what the project costs and where it goes next,
+decided with Thenuja.
+
+**Decision.**
+- A **private APK** goes to a few testers by hand, as soon as Phase 11
+  is done.
+- Then **Google Play**: pay the $25, move those testers into the closed
+  test, and release from there.
+- **No public APK link.** The public half of the APK Beta Phase is
+  dropped.
+- **Apple is set aside.** Not scheduled; its items are kept at the end
+  of Phase 12.
+
+**Why no public APK.** The 2026-09-21 entry put a public download link
+ahead of Play because it cost nothing. That stopped being true. Google's
+developer verification refuses to install a sideloaded app from an
+unverified developer. A free account covers 20 authorised devices; past
+that it's $25, and a Play Console account counts. It has been enforced
+since 2026-09-30 in Brazil, Indonesia, Singapore and Thailand, with more
+countries from 2027. At the same price, Play updates the app itself,
+shows no "Install unknown apps" or Play Protect warning, and leaves one
+signing key to think about. Thenuja asked the question that settled it:
+if both cost $25, why not Play.
+
+**Why the private APK stays.** Play can't be first. A new personal
+account has to run a closed test with 12 testers opted in for 14 days
+before it gets production access, and Google verifies the account and
+reviews the app on the way. An APK sent by hand is free and immediate,
+and it's where the hosted backend's first bugs should show, before
+Google or strangers see the app. The same testers then fill the closed
+test.
+
+**What it removes from the roadmap:** the download page (GitHub
+Releases, install steps, checksum) and the in-app "new version
+available" prompt. Hosting the privacy policy, the guidelines and the
+account-deletion page moves to Phase 12: Play needs them and a private
+test doesn't.
+
+**What it costs,** as checked today:
+- Nothing until the closed test. `chasien.com` is already owned
+  (Namecheap), so real email is DNS records, not a purchase.
+- $25 once, at the closed test.
+- $25 a month for Supabase Pro, when a free ceiling is reached.
+- Apple's $99 a year, if iOS is picked up.
+
+**Free-tier numbers checked.** Several were marked "check" in these
+docs. Supabase: 500 MB database, 1 GB files, 5 GB egress a month, 200
+Realtime connections, paused after a week idle. Resend: 3,000 emails a
+month and 100 a day. Brevo: 300 a day. EAS: 15 Android builds a month,
+and over-the-air updates to 1,000 monthly users. Sentry: 5,000 errors a
+month. R2: 10 GB, free egress. They came from pricing pages and
+summaries of them on the day, not from an account, so check again at
+sign-up.
+
+**Found while mapping this, not acted on:**
+- **Egress is the first ceiling, and these docs didn't name it.** 5 GB
+  a month is 200 views of one 25 MB clip. It's why the R2 move has to
+  come before the app is public. Added to `architecture.md`.
+- **By the numbers, one account can still fill the file store in a
+  day.** Slice 6 limits a person to 50 uploads in 24 hours and a video
+  to 25 MB: 1.25 GB, against about 1 GB. This is arithmetic from the
+  documented limits, not something run. To look at with the R2 move,
+  where the ceiling is 10 GB.
+- **`chasien.app` is in two places and isn't ours.**
+  `request-room-verification` sends from `noreply@chasien.app`, and
+  `create-community.tsx` previews a Room's address under it. Both are
+  Phase 11 items now.
+- **`request-room-verification` can't log in to a real mail provider.**
+  It reads a host and a port, no username or password, with TLS off.
+  Right for Mailpit. A Phase 11 item now.
+- **Ten commits exist only on this laptop.** GitHub's `main` ends at a
+  2026-09-22 commit, so Phase 10 so far has no copy anywhere else. The
+  release keystore is in the same position.
+- **No revenue plan exists anywhere in these docs.** Not decided today.
+  The first Supabase Pro bill is the deadline for one.
+
+**Not decided:** the email provider (Resend recommended, now that the
+domain is known to be owned), and whether the contact address moves
+from `info.chasien@gmail.com` to one at `chasien.com`.
+
+**What would make us revisit it:** testers who can't be reached through
+Play, or Google changing the closed-test rule or the verification fee.
+
+---
+
 ## 2026-10-08 — "Resend email" did nothing after leaving the verify-email screen
 
 One file, `mobile/src/app/c/[communityId]/verify-email.tsx`. Found on

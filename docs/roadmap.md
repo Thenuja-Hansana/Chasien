@@ -108,6 +108,16 @@ was missing, password reset moved from Phase 12 to Phase 11 because it
 never depended on Apple, and the privacy policy moved ahead of the first
 public download. See decision-log, 2026-09-21. Next: Phase 9.
 
+**2026-10-08: the release path changed, and Apple is set aside.** A
+private APK goes to a few testers first. The same testers then move into
+Google Play's closed test ($25 once), and the app is released from
+there. There is no public APK link any more: wherever Google's developer
+verification is enforced, a public sideloaded app needs the same $25
+account Play does, so the public half of the APK Beta Phase bought
+nothing Play doesn't. Apple ($99 a year) is not scheduled; its items sit
+at the end of Phase 12. `chasien.com` is already owned, so real email
+needs no new spending. See decision-log, 2026-10-08.
+
 Previously: the feed is real end to end — posts with text, images, and
 polls; likes; one-level threaded comments — all verified with two real
 accounts against the live local stack, with post images held in a
@@ -894,6 +904,8 @@ are expanded below to match what the stores actually check (see
       (`constants/contact.ts`), shown in Settings, the guidelines, and
       the suspended-account login message. The download page and store
       listing carry it through their own items (APK Beta Phase, Phase 12)
+      *(2026-10-08: the download page was dropped. The store listing in
+      Phase 12 carries it.)*
 - [x] In-app account deletion: actual deletion, not deactivation.
       - Decide per table what happens to the user's content: delete it,
         or keep it and show "Deleted user", which the client already
@@ -918,6 +930,8 @@ are expanded below to match what the stores actually check (see
       Delete an account, which finds the account by email. The text is the
       guidelines' "Deleting your account" section; putting it on a public
       URL is part of the APK Beta Phase's download page
+      *(2026-10-08: now a Phase 12 item, hosted at `chasien.com`. The
+      download page was dropped.)*
 
 **Exit condition:** you could pass an App Store UGC review today, not
 just "eventually". Full write-up: `docs/phase/phase09.md`. This is checked with three accounts at once (blocker,
@@ -1160,6 +1174,22 @@ starts.
       *(2026-09-21: this used to suggest SendGrid's free tier, which may
       no longer exist. Resend and Brevo both had free tiers at the time of
       writing. Check current limits before choosing.)*
+      *(2026-10-08: checked. Resend's free plan is 3,000 emails a month
+      and 100 a day; Brevo's is 300 a day. Resend sends to other people
+      only from a domain it has verified (confirm when setting up), and
+      `chasien.com` is already owned (Namecheap), so that part is DNS
+      records, not a purchase. Recommended: Resend. Not yet chosen.)*
+  - [ ] The same provider for `request-room-verification` (added
+        2026-10-08). It sends its own email, outside Auth's settings,
+        and reads only `SMTP_HOST` and `SMTP_PORT`: no username or
+        password, and TLS switched off. That suits Mailpit and no real
+        provider. Both kinds of email draw on one daily allowance
+  - [ ] `chasien.app` is in two places and isn't ours (added
+        2026-10-08). `request-room-verification` sends from
+        `noreply@chasien.app`; it has to be an address at `chasien.com`.
+        `create-community.tsx` previews a Room's address as
+        `chasien.app/<slug>`; change it, or drop the preview until Room
+        links exist
 - [ ] Password-reset flow: a "Forgot password?" link, the email, and a
       screen that the reset link deep-links into. *Moved here from Phase
       12 on 2026-09-21.* It was cut from Phase 2 because it needs a
@@ -1205,21 +1235,24 @@ can sign up, receive an actual confirmation email, and log in.
 
 ---
 
-## APK Beta Phase — downloadable Android build (inserted 2026-09-21)
+## APK Beta Phase — a private Android build for a few testers (inserted 2026-09-21, narrowed 2026-10-08)
 
-Goal: a real Android app that anyone with the link can download, install
-and use, **at $0**. It comes before the store phases because it's free,
-it gets the app onto real phones without waiting on any review, and its
-testers carry straight into Google Play's closed test in Phase 12. It
-depends on Phase 11: a build for other people has to point at the hosted
-backend. See decision-log, 2026-09-21.
+Goal: a real Android app on a few testers' phones, **at $0**. It comes
+before Phase 12 because it's free, it gets the app onto real phones
+without waiting on any review, and its testers carry straight into
+Google Play's closed test. It depends on Phase 11: a build for other
+people has to point at the hosted backend. See decision-log, 2026-09-21
+and 2026-10-08.
 
-**Two stages.** First, a **private** build shared only with testers you
-know. It can ship as soon as Phase 11 is done. Then, a **public** download
-link, which waits for Phase 9 and Phase 10's security pass, because
-"public link" means strangers. The dev client installed on the A14 today
-can't be shared: it contains no app code and loads everything from Metro
-on this laptop.
+**Private only** (since 2026-10-08). The APK is sent by hand to testers
+you know. The public download link this phase used to end with is
+dropped: wherever Google's developer verification is enforced, a public
+sideloaded app needs the same $25 account Play does, so the public step
+is Play itself (Phase 12). Keep the group to 20 phones or fewer, which
+is what Google's free limited-distribution account allows, and aim for
+at least 12 people, which is what Play's closed test needs. The dev
+client installed on the A14 today can't be shared: it contains no app
+code and loads everything from Metro on this laptop.
 
 - [ ] `mobile/eas.json` with an `apk` profile (`buildType: "apk"`) for
       sideloading, and a `production` profile (AAB) for Play later, since
@@ -1241,6 +1274,9 @@ on this laptop.
       - Decide now how it relates to Play App Signing in Phase 12. If
         Play signs with a different key, sideloaded users can't update
         in place to the Play version
+        *(2026-10-08: with a few known testers and no public APK, a
+        reinstall from Play means a message to a handful of people. The
+        choice still has to be made; it can't cost much now.)*
 - [ ] Version numbering: bump `version`, and increment `versionCode` on
       every release (EAS can auto-increment). Android refuses an
       "update" with a versionCode that isn't higher
@@ -1256,47 +1292,52 @@ on this laptop.
         `expo-notifications`, and land in FCM's fallback channel
         ("Miscellaneous" in Android's settings), because the app creates
         no channel and the payload names none. Decide the channels before
-        the first public build: a channel's importance can't be changed
-        once it exists on someone's phone
-- [ ] Privacy policy and community guidelines hosted before the public
-      link goes up. The app collects emails, photos, voice notes and
-      push tokens. *Moved here from Phase 12 on 2026-09-21.* GitHub Pages
-      is free
-- [ ] Download page: the APK on **GitHub Releases** (free, with a stable
-      link) and a simple page (GitHub Pages) with install steps. Explain
-      the "Install unknown apps" permission and the Play Protect warning
-      people will see, list a SHA-256 checksum, and link the abuse
-      contact and the web account-deletion page. That page is the
-      guidelines' "Deleting your account" section (`app/guidelines.tsx`,
-      kept as data so it can be reused), and its URL goes in Google
-      Play's Data safety form
-- [ ] An update path, since sideloaded apps never update themselves: EAS
-      Update over-the-air for JavaScript-only fixes (check the free-tier
-      limits), plus an in-app "new version available" prompt for native
-      changes that need a new APK
-- [ ] Check Google's developer-verification rules for sideloaded apps.
-      Google has been rolling out a requirement that apps on certified
-      Android devices come from verified developers, sideloaded apps
-      included, country by country. Check whether it applies where your
-      users are at release time, and register if so
+        the first build a tester installs: a channel's importance can't
+        be changed once it exists on someone's phone
+- [ ] Tell testers how to install: the "Install unknown apps" permission
+      and the Play Protect warning they'll see. A message is enough. The
+      download page this item used to be is dropped (2026-10-08)
+- [ ] Updates during the private test: send the new APK. EAS Update
+      over-the-air for JavaScript-only fixes is optional (free up to
+      1,000 monthly users, checked 2026-10-08). The in-app "new version
+      available" prompt is dropped: Play updates apps itself
+- [ ] Google's developer verification for sideloaded apps (checked
+      2026-10-08). Enforced since 2026-09-30 in Brazil, Indonesia,
+      Singapore and Thailand, with more countries from 2027. A free
+      limited-distribution account covers up to 20 authorised devices;
+      past that it's $25, and a Play Console account counts. If any
+      tester is in an enforced country, register the free account and
+      authorise their phone before sending the APK
 
-**Exit condition:** someone not on your network downloads the APK from
-the page onto a phone you don't own, installs it, signs up with a real
-email, and uses Rooms, posts, chat and push against the hosted backend.
+**Moved to Phase 12 on 2026-10-08,** because they were for the public
+link: hosting the privacy policy and guidelines, and the web
+account-deletion page.
+
+**Exit condition:** a tester not on your network installs the APK you
+sent them on a phone you don't own, signs up with a real email, and
+uses Rooms, posts, chat and push against the hosted backend.
 
 ---
 
-## Phase 12 — Store submission prep
+## Phase 12 — Google Play: closed test, then submission
 
-Goal: ready to actually submit. **Google Play first** ($25 one-time,
-and the APK Beta Phase's testers carry over), **then Apple** ($99 a year).
+Goal: on Google Play. **Google Play only for now** ($25 one-time, and
+the APK Beta Phase's testers carry over). **Apple is set aside**
+(2026-10-08): its items are kept at the end of this phase, unscheduled.
+See decision-log, 2026-10-08.
 
-- [ ] Re-check the privacy policy and terms (hosted since the APK Beta
-      Phase) against each store's requirements
-- [ ] Apple "App Privacy" label / Google "Data safety" form — filled to
-      match actual behavior, not boilerplate. Google's form also needs the
-      web account-deletion URL from Phase 9
-- [ ] Content rating: Google's IARC questionnaire and Apple's age rating.
+- [ ] Host the privacy policy, the community guidelines and the web
+      account-deletion page at `chasien.com` (GitHub Pages is free and
+      takes a custom domain). The app collects emails, photos, voice
+      notes and push tokens. The deletion page is the guidelines'
+      "Deleting your account" section (`app/guidelines.tsx`, kept as
+      data so it can be reused). Play asks for the policy's URL when
+      the app is set up, ahead of the closed test (confirm in the
+      Console). *Moved here from the APK Beta Phase on 2026-10-08*
+- [ ] Re-check the privacy policy and terms against Play's requirements
+- [ ] Google's "Data safety" form — filled to match actual behavior,
+      not boilerplate. It also needs the web account-deletion URL above
+- [ ] Content rating: Google's IARC questionnaire.
       A social app with user content and chat rates higher than a plain
       app. Keep it consistent with the "16 or older" that signup already
       asks people to confirm
@@ -1314,6 +1355,14 @@ and the APK Beta Phase's testers carry over), **then Apple** ($99 a year).
       Beta Phase), signed with the key that phase settled on, and
       meeting Play's target API level (Expo SDK upgrades handle this; confirm it at
       submission time)
+
+**Exit condition:** the closed test is passed and the app is submitted
+to Google Play for production.
+
+**Set aside, not scheduled: Apple** (2026-10-08). Nothing below is
+needed for Google Play. iOS has never run on a real device, so expect
+unknown work when this is picked up.
+
 - [ ] Apple Developer Program ($99/yr), the first recurring cost. You
       need it even to install a test build on a real iPhone. EAS builds
       iOS in the cloud, so no Mac is needed
@@ -1327,9 +1376,13 @@ and the APK Beta Phase's testers carry over), **then Apple** ($99 a year).
       since it never depended on Apple.)* If Google login is added, Sign
       in with Apple has to come with it; update the login/signup screens
       to match
-- [ ] TestFlight / Internal testing track with a small real beta group
+- [ ] TestFlight with a small real beta group
+- [ ] Apple's "App Privacy" label, filled to match actual behavior, and
+      Apple's age rating. *Split from the Google items above on
+      2026-10-08*
 
-**Exit condition:** submitted to both stores.
+*(This phase's exit condition was "submitted to both stores" until
+2026-10-08.)*
 
 ---
 
