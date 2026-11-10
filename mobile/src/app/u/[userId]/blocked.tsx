@@ -6,12 +6,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchBlockedUsers, unblockUser, type BlockedUser } from '@/lib/blocks';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 
 /**
  * Settings → Blocked: everyone the viewer has blocked, with Unblock.
@@ -30,14 +32,18 @@ export default function Blocked() {
 
   const myId = session?.user.id;
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!myId) return;
-      fetchBlockedUsers(myId)
-        .then(setBlocked)
-        .catch((e) => setError(errorMessage(e, 'Failed to load blocked accounts.')));
-    }, [myId]),
-  );
+  const load = useCallback(() => {
+    if (!myId) return;
+    fetchBlockedUsers(myId)
+      .then((rows) => {
+        setBlocked(rows);
+        setError(null);
+      })
+      .catch((e) => setError(errorMessage(e, 'Failed to load blocked accounts.')));
+  }, [myId]);
+
+  useFocusEffect(load);
+  useOnReconnect(load);
 
   if (!session || !myId) return null;
 
@@ -74,9 +80,11 @@ export default function Blocked() {
         <View style={styles.headerSide} />
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && blocked !== null && <Text style={styles.error}>{error}</Text>}
 
-      {blocked === null ? (
+      {blocked === null && error ? (
+        <LoadError message={error} onRetry={load} />
+      ) : blocked === null ? (
         <View style={styles.list}>
           {[120, 90].map((width, i) => (
             <View key={i} style={styles.row}>

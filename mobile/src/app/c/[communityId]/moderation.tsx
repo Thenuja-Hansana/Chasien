@@ -5,10 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { fetchModerationLog, type ModerationActionType, type ModerationEntry } from '@/lib/moderation';
 import { relativeTime } from '@/lib/posts';
 import { fetchRoomBySlug } from '@/lib/rooms';
@@ -58,15 +60,17 @@ export default function ModerationLog() {
   const [entries, setEntries] = useState<ModerationEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      const loadLog = async () => {
-        const room = await fetchRoomBySlug(communityId);
-        setEntries(room ? await fetchModerationLog(room.id) : []);
-      };
-      loadLog().catch((e) => setError(errorMessage(e, 'Failed to load the moderation log.')));
-    }, [communityId]),
-  );
+  const load = useCallback(() => {
+    const loadLog = async () => {
+      const room = await fetchRoomBySlug(communityId);
+      setEntries(room ? await fetchModerationLog(room.id) : []);
+      setError(null);
+    };
+    loadLog().catch((e) => setError(errorMessage(e, 'Failed to load the moderation log.')));
+  }, [communityId]);
+
+  useFocusEffect(load);
+  useOnReconnect(load);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -86,9 +90,11 @@ export default function ModerationLog() {
         <View style={styles.headerSide} />
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && entries !== null && <Text style={styles.error}>{error}</Text>}
 
-      {entries === null ? (
+      {entries === null && error ? (
+        <LoadError message={error} onRetry={load} />
+      ) : entries === null ? (
         <View style={styles.list}>
           {[200, 160, 180].map((width, i) => (
             <View key={i} style={[styles.row, { gap: 6 }]}>

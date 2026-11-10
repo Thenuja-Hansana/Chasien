@@ -11,15 +11,16 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus (2026-11-10): Phase 10 — Hardening, slices 1-9 of 10
-done.** The security half (slices 1-7) is finished and re-checkable with
-`node supabase/tests/run.js --live`. Slice 8 added error screens and
-crash reporting that stays off until a Sentry key is set; slice 9 made
-the app honest offline (timeouts, Try again, a "No connection" strip,
-nothing typed lost, sign-out that unregisters the phone). Next: slice
-10, loading/empty/error states on Phase 9's screens and the
-`docs/phase/phase10.md` write-up; then Phase 11, the hosted backend.
-The dated entries below are the history, oldest first.
+**Current focus (2026-11-10): Phase 11 — Production backend & real
+email.** Phases 0-10 are done. Phase 10 (Hardening) closed on 2026-11-10
+after ten slices: the security half (slices 1-7) is re-checkable with
+`node supabase/tests/run.js --live`; slice 8 added error screens and
+crash reporting that stays off until a Sentry key is set; slices 9 and 10
+made every screen honest offline (timeouts, Try again, a "No connection"
+strip, nothing typed lost, sign-out that unregisters the phone). Full
+write-up: `docs/phase/phase10.md`. Phase 11 puts the backend on a hosted
+Supabase project and sends real email from `chasien.com`. The dated
+entries below are the history, oldest first.
 
 **2026-08-31: Phase 6 — Chat & realtime.** Chat is real end to end — a
 unified inbox mixing Room group channels and DMs, realtime message
@@ -950,7 +951,7 @@ UI.
 
 ---
 
-## Phase 10 — Hardening
+## Phase 10 — Hardening ✅ done (2026-11-10)
 
 Goal: doesn't crash, doesn't leak, doesn't feel broken.
 
@@ -1075,23 +1076,36 @@ block is the original list; each slice says which of its items it closes.
       push token first, is refused while offline, and signs out of this
       phone only (it used to end every session). All checked on the A14.
       Phase 9's screens are slice 10's. See decision-log, 2026-11-10
-- [ ] Slice 10 — loading, empty and error states on Phase 9's screens,
+- [x] Slice 10 — loading, empty and error states on Phase 9's screens,
       then `docs/phase/phase10.md`. Found in slice 7 and **fixed ahead
       of this slice** (2026-10-08): on the verify-email screen, "Resend
       email" did nothing after you left the screen and came back. Still
       open on that screen: **a mistyped address can't be corrected.**
       Once a link has been sent, the screen only ever shows "Check your
-      inbox" for that address, with Resend and nothing else
+      inbox" for that address, with Resend and nothing else.
+      **Done 2026-11-10**, app only. Blocked accounts, the moderation
+      log, Reports, the admin and your own Delete account, and Verify to
+      join all show "Couldn't load this" with Try again instead of
+      spinners and placeholders that never stopped, and reload on
+      reconnect. An offline admin is no longer told "App admins only".
+      "Delete my account" stays disabled until the Rooms preview has
+      loaded. "Use a different email" replaces a link sent to a mistyped
+      address; the old link stops working. Checked on the A14. See
+      decision-log, 2026-11-10, and `docs/phase/phase10.md`
 
 - [x] Crash reporting (free tier — e.g. Sentry free tier) *(Slice 8,
       2026-11-09. Sentry, switched off until a key is set)*
 - [x] Offline behavior: what happens with no connection, for feed and chat
       — at minimum, don't crash or silently drop user actions *(Slice 9,
       2026-11-10)*
-- [ ] Re-verify loading/empty/error states and list virtualization/image
+- [x] Re-verify loading/empty/error states and list virtualization/image
       caching still hold after Phase 9's new screens — the audit itself
       moved to Bones Phase, done ahead of Trust & Safety; this is a
-      re-check, not the first pass
+      re-check, not the first pass *(Slice 10, 2026-11-10. States fixed.
+      Lists: plain scroll lists; the moderation log is capped at 100 and
+      resolved reports at 50, open reports, suspensions and blocked
+      accounts are uncapped, fine at beta size. Images: report evidence
+      is deliberately not cached to disk)*
 - [x] Security pass: re-verify RLS + Edge Function checks from Phase 1
       still hold after all the features built on top; rate-limit auth
       endpoints. *(Slices 2 to 7, 2026-10-02. Auth's own endpoint limits
@@ -1165,6 +1179,8 @@ block is the original list; each slice says which of its items it closes.
         path. See decision-log, 2026-09-23
 
 **Exit condition:** you'd hand this to a stranger without wincing.
+*(Met 2026-11-10, as far as a local stack can show it; what it can't is
+Phase 11's. Full write-up: `docs/phase/phase10.md`.)*
 
 ---
 

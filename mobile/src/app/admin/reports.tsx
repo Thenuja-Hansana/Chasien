@@ -7,10 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ConfirmModal from '@/components/ConfirmModal';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { removeComment, removeMessage, removeStory } from '@/lib/moderation';
 import { deletePost, relativeTime } from '@/lib/posts';
 import {
@@ -84,11 +86,16 @@ export default function AdminReports() {
       setOpen(o);
       setResolved(r);
       setSuspensions(s);
+      setError(null);
     };
     loadAll().catch((e) => setError(errorMessage(e, 'Failed to load reports.')));
   }, []);
 
   useFocusEffect(load);
+  useOnReconnect(load);
+
+  // Nothing loaded yet and the load failed: Try again, not a placeholder.
+  const loadFailed = error !== null && (isAdmin === null || open === null);
 
   async function showMedia(report: AdminReport) {
     setError(null);
@@ -253,7 +260,9 @@ export default function AdminReports() {
         <View style={styles.headerSide} />
       </View>
 
-      {isAdmin === false ? (
+      {loadFailed ? (
+        <LoadError message={error} onRetry={load} />
+      ) : isAdmin === false ? (
         <EmptyState icon="shield" heading="App admins only" message="Reports are reviewed by the people who run Chasien." />
       ) : (
         <>

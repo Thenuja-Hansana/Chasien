@@ -6,11 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import ConfirmModal from '@/components/ConfirmModal';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import { SUPPORT_EMAIL } from '@/constants/contact';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { deleteAccountAsAdmin, lookupAccountByEmail, type DeletionResult, type FoundAccount } from '@/lib/account';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { fetchAmIAppAdmin } from '@/lib/reports';
 
 /**
@@ -31,14 +33,25 @@ export default function AdminDeleteAccount() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ handle: string; result: DeletionResult } | null>(null);
+  /** The admin check itself failed (offline), as opposed to "not an admin". */
+  const [checkError, setCheckError] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchAmIAppAdmin()
-        .then(setIsAdmin)
-        .catch(() => setIsAdmin(false));
-    }, []),
-  );
+  // A failed check used to count as "not an admin", so an admin offline
+  // was told the screen was for admins only. The server decides either
+  // way; this only picks what to show.
+  const checkAdmin = useCallback(() => {
+    fetchAmIAppAdmin()
+      .then((admin) => {
+        setIsAdmin(admin);
+        setCheckError(null);
+      })
+      .catch((e) => setCheckError(errorMessage(e, 'Could not check your access.')));
+  }, []);
+
+  useFocusEffect(checkAdmin);
+  useOnReconnect(() => {
+    if (isAdmin === null) checkAdmin();
+  });
 
   function handleLookup() {
     setBusy(true);
@@ -79,7 +92,9 @@ export default function AdminDeleteAccount() {
         <View style={styles.headerSide} />
       </View>
 
-      {isAdmin === false ? (
+      {isAdmin === null && checkError ? (
+        <LoadError message={checkError} onRetry={checkAdmin} />
+      ) : isAdmin === false ? (
         <EmptyState icon="shield" heading="App admins only" message="Accounts are deleted on request by the people who run Chasien." />
       ) : (
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>

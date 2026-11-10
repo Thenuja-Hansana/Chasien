@@ -5,12 +5,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchMyVerificationStatus, requestRoomVerification, type VerificationStatus } from '@/lib/domainVerification';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { fetchMyMembership, fetchRoomBySlug, type Room } from '@/lib/rooms';
 
 /**
@@ -36,13 +38,20 @@ export default function VerifyEmail() {
   const [sending, setSending] = useState(false);
   /** True once "Resend email" has gone through, until the next attempt. */
   const [resent, setResent] = useState(false);
+  /**
+   * True while someone replaces the address a link already went to. The
+   * server keeps one link per person per Room and replaces it on every
+   * send (request-room-verification), so the link sent to a mistyped
+   * address stops working once a new one goes out.
+   */
+  const [changing, setChanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const userId = session?.user.id;
 
-  useFocusEffect(
-    useCallback(() => {
+  const load = useCallback(() => {
       if (!userId) return;
+      setError(null);
       // .catch() rather than try/catch: the React Compiler can't compile the
       // conditionals below inside a `try`, and skips the whole screen.
       const loadRoom = async () => {
@@ -62,8 +71,12 @@ export default function VerifyEmail() {
       loadRoom().catch((e) => {
         setError(errorMessage(e, 'Failed to load this Room.'));
       });
-    }, [communityId, userId]),
-  );
+  }, [communityId, userId]);
+
+  useFocusEffect(load);
+  useOnReconnect(() => {
+    if (room === 'loading') load();
+  });
 
   if (!session) return null;
 
@@ -76,7 +89,7 @@ export default function VerifyEmail() {
     // left and reopened: the "check your inbox" state comes back from the
     // database, the input's state comes back empty, and this returned early.
     // Outside the try: the React Compiler can't compile a conditional in one.
-    const awaiting = status && !status.verifiedAt ? status : null;
+    const awaiting = status && !status.verifiedAt && !changing ? status : null;
     const address = (awaiting ? awaiting.email : email).trim();
     if (!address) return;
     setSending(true);
@@ -87,6 +100,7 @@ export default function VerifyEmail() {
     try {
       await requestRoomVerification(room.id, address);
       setStatus({ email: address.toLowerCase(), verifiedAt: null, expiresAt: new Date(Date.now() + 3600_000).toISOString() });
+      setChanging(false);
       // The first send changes the whole screen. A resend changes nothing
       // on it, so it has to say that it happened.
       setResent(awaiting !== null);
@@ -107,11 +121,13 @@ export default function VerifyEmail() {
       </View>
 
       <View style={styles.content}>
-        {room === 'loading' ? (
+        {room === 'loading' && error ? (
+          <LoadError message={error} onRetry={load} />
+        ) : room === 'loading' ? (
           <ActivityIndicator color={colors.accent.DEFAULT} style={styles.loading} />
         ) : !room ? (
           <EmptyState icon="alertCircle" message="Room not found." />
-        ) : status && !status.verifiedAt ? (
+        ) : status && !status.verifiedAt && !changing ? (
           <View style={styles.sentState}>
             <View style={styles.iconCircle}>
               <Icon name="mail" size={26} color={colors.accent.DEFAULT} />
@@ -126,14 +142,36 @@ export default function VerifyEmail() {
             <Pressable style={styles.secondaryButton} onPress={handleSend} disabled={sending}>
               {sending ? <ActivityIndicator color={colors.text} /> : <Text style={styles.secondaryButtonText}>Resend email</Text>}
             </Pressable>
+            <Pressable
+              onPress={() => {
+                setEmail(status.email);
+                setChanging(true);
+                setError(null);
+                setResent(false);
+              }}
+              disabled={sending}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <Text style={styles.linkText}>Use a different email</Text>
+            </Pressable>
           </View>
         ) : (
           <>
             <Text style={styles.title}>{room.name}</Text>
             <Text style={styles.body}>
-              This Room only admits people with an email on{' '}
-              <Text style={styles.accentText}>@{room.required_email_domain}</Text>. Enter yours and we&apos;ll send a link
-              to confirm it.
+              {changing ? (
+                <>
+                  Enter the right address on <Text style={styles.accentText}>@{room.required_email_domain}</Text> and
+                  we&apos;ll send a new link. The one already sent will stop working.
+                </>
+              ) : (
+                <>
+                  This Room only admits people with an email on{' '}
+                  <Text style={styles.accentText}>@{room.required_email_domain}</Text>. Enter yours and we&apos;ll send a
+                  link to confirm it.
+                </>
+              )}
             </Text>
 
             <TextInput
@@ -154,6 +192,19 @@ export default function VerifyEmail() {
             <Pressable style={styles.submitButton} onPress={handleSend} disabled={!email.trim() || sending}>
               {sending ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.submitButtonText}>Send verification email</Text>}
             </Pressable>
+            {changing && (
+              <Pressable
+                onPress={() => {
+                  setChanging(false);
+                  setError(null);
+                }}
+                disabled={sending}
+                hitSlop={8}
+                accessibilityRole="button"
+              >
+                <Text style={styles.linkText}>Cancel</Text>
+              </Pressable>
+            )}
           </>
         )}
       </View>
@@ -259,6 +310,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing[4],
+  },
+  linkText: {
+    marginTop: Spacing[3],
+    fontFamily: Fonts.bodySemibold,
+    fontSize: 14,
+    color: colors.text,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
   },
   secondaryButton: {
     height: 48,

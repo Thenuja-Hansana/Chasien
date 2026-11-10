@@ -10,6 +10,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { deleteMyAccount, fetchDeletionPreview, type OwnedRoomPreview } from '@/lib/account';
 import { useAuth } from '@/lib/auth-context';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 
 const DELETED = [
   'Your profile, and your name and handle',
@@ -34,14 +35,20 @@ export default function DeleteAccount() {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The Rooms preview failed to load. Kept apart from `error`, which is the deletion's. */
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchDeletionPreview()
-        .then(setRooms)
-        .catch((e) => setError(errorMessage(e, 'Could not load your Rooms.')));
-    }, []),
-  );
+  const loadPreview = useCallback(() => {
+    setPreviewError(null);
+    fetchDeletionPreview()
+      .then(setRooms)
+      .catch((e) => setPreviewError(errorMessage(e, 'Could not load your Rooms.')));
+  }, []);
+
+  useFocusEffect(loadPreview);
+  useOnReconnect(() => {
+    if (rooms === null) loadPreview();
+  });
 
   const email = session?.user.email;
   if (!session || !email) return null;
@@ -96,7 +103,14 @@ export default function DeleteAccount() {
           </Text>
 
           <Text style={styles.sectionTitle}>Rooms you own</Text>
-          {rooms === null ? (
+          {rooms === null && previewError ? (
+            <View style={styles.previewError}>
+              <Text style={styles.error}>{previewError}</Text>
+              <Pressable onPress={loadPreview} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.retryText}>Try again</Text>
+              </Pressable>
+            </View>
+          ) : rooms === null ? (
             <ActivityIndicator style={styles.loading} color={colors.neutral[500]} />
           ) : rooms.length === 0 ? (
             <Text style={styles.body}>You don&apos;t own any Rooms.</Text>
@@ -129,9 +143,9 @@ export default function DeleteAccount() {
           {error && <Text style={styles.error}>{error}</Text>}
 
           <Pressable
-            style={[styles.deleteButton, (!password || deleting) && styles.deleteButtonDisabled]}
+            style={[styles.deleteButton, (!password || deleting || rooms === null) && styles.deleteButtonDisabled]}
             onPress={() => setConfirming(true)}
-            disabled={!password || deleting}
+            disabled={!password || deleting || rooms === null}
             accessibilityRole="button"
           >
             {deleting ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.deleteButtonText}>Delete my account</Text>}
@@ -219,6 +233,15 @@ const makeStyles = (colors: ThemeColors) =>
     },
     loading: {
       alignSelf: 'flex-start',
+    },
+    previewError: {
+      gap: Spacing[1],
+    },
+    retryText: {
+      fontFamily: Fonts.bodySemibold,
+      fontSize: 14,
+      color: colors.text,
+      textDecorationLine: 'underline',
     },
     roomRow: {
       paddingVertical: Spacing[2],

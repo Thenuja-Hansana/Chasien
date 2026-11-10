@@ -7,6 +7,56 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-10 — Phase 10 slice 10: Phase 9's screens, and Phase 10 closed
+
+App only, six screens. Decided with Thenuja: keep "Delete my account"
+disabled until the Rooms preview loads; make mara an app admin for the
+test only; leave the uncapped lists and uncached evidence images as they
+are and say so.
+
+**Before** (control runs on the A14, gateway stopped):
+- **Blocked accounts, Moderation log:** loading placeholders that never
+  stopped, no retry.
+- **Reports:** "No connection…" over a placeholder that never stopped;
+  the error never cleared.
+- **Delete an account (admin):** "App admins only", shown to an admin,
+  because a failed admin check counted as "not an admin".
+- **Delete account (your own):** the "Rooms you own" spinner never
+  stopped, the error sat down by the Delete button, and typing a
+  password was enough to delete without having seen the preview.
+- **Verify to join:** a spinner that never stopped; its error was never
+  rendered.
+
+**What changed:** the slice 9 pattern on all six (`LoadError` with Try
+again, a stale error cleared after a successful load,
+`useOnReconnect()`); the admin check keeps its own error, so a network
+failure is never shown as "not an admin" (the server enforces admin-only
+either way); the Rooms preview fails in its own section and "Delete my
+account" waits for it; and "Use a different email" on "Check your inbox"
+reopens the form with the sent address filled in, plus Cancel. The
+server already replaces a person's link for a Room on every send, so no
+backend change: the link to the mistyped address stops working.
+
+**Verified on the A14:** each screen opened with the gateway stopped
+shows "Couldn't load this" with "No connection…" and Try again, and Try
+again loads it. In a throwaway domain-verified Room, a link sent to
+wrong@example.com, then corrected to mara@example.com: Mailpit had both,
+the first link answered "This verification link is invalid", the second
+joined the Room. The test Room, its emails, the counters and mara's admin
+row were removed; the data is at the baseline. Typecheck, lint and the
+compiler check (119 components) pass.
+
+**Found, and left:** verify-email took 27 seconds offline to show its
+error, because the database client retries a failed GET three times with
+back-off. Turning that off client-wide (`db: { retry: false }`) was
+considered and not done: the same retries rescue a single dropped
+request on a working connection.
+
+**Phase 10 is done.** Ten slices, 2026-09-23 to 2026-11-10; the write-up
+is `docs/phase/phase10.md`. Next is Phase 11.
+
+---
+
 ## 2026-11-10 — Phase 10 slice 9: online-only, but honest about it
 
 Decided with Thenuja: no offline queue; sign-out is refused while
