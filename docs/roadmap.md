@@ -1195,6 +1195,42 @@ usable by an actual other person yet, which the rest of this roadmap
 the one after that) quietly assumes has already changed by the time it
 starts.
 
+**The order it's being done in** (agreed 2026-11-10). Decided with
+Thenuja: auth emails carry a 6-digit code, not a link; one hosted project
+(production), in Mumbai (`ap-south-1`), because the testers are in Sri
+Lanka and India; minimum password length stays 6; no signup captcha for
+the private beta; Resend for email; R2 last. Each slice: plan agreed, a
+control run, verified, docs, one commit. Every hosted step is written
+down in `docs/hosting.md` as it's done.
+
+- [x] Slice 1 — **a portable backend**, no accounts needed. **Done
+      2026-11-10** (`20261110100000_jobs_find_their_functions_through_vault.sql`):
+      the two push webhooks and the two cleanup jobs had the local stack's
+      address (`http://edge_runtime:8081`) and demo key written into them,
+      so on a hosted project they'd have called nothing. They now go
+      through `call_edge_function()`, which reads the address and the
+      (public) anon key from Vault, set once per project; `seed.sql` sets
+      the local values. The domain-verification email can log in to a real
+      provider over TLS (`SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`), and
+      `verify-room-email` answers in plain text, which hosted Supabase
+      serves as written. Two new checks in the security re-check refuse an
+      address or key written into a trigger or a job (523 checks).
+      `docs/hosting.md` is the runbook. See decision-log, 2026-11-10
+- [ ] Slice 2 — auth by code: signup confirmation and password reset
+      with a 6-digit code typed into the app, the email templates in the
+      repo. Local, tested with Mailpit
+- [ ] Slice 3 — the hosted project (needs Thenuja: the account, the
+      project, `npx supabase login`): link, push the migrations, deploy
+      the functions, Vault, Auth settings, an app admin
+- [ ] Slice 4 — real email through Resend (needs Thenuja: the account,
+      DNS records at Namecheap)
+- [ ] Slice 5 — the app on the hosted backend, Phase 2's auth checks
+      against it, and the exit condition; then the keep-alive and backups
+- [ ] Slice 6 — R2, decided once hosting works
+
+The checklist below is the original list; each slice says which of its
+items it closes.
+
 - [ ] Create a hosted Supabase project (supabase.com, free tier —
       still $0, this isn't the money-spending phase)
 - [ ] Run every migration (and `grants.sql`, `seed.sql` if wanted for a
@@ -1233,11 +1269,15 @@ starts.
       only from a domain it has verified (confirm when setting up), and
       `chasien.com` is already owned (Namecheap), so that part is DNS
       records, not a purchase. Recommended: Resend. Not yet chosen.)*
+      *(2026-11-10: Resend chosen.)*
   - [ ] The same provider for `request-room-verification` (added
         2026-10-08). It sends its own email, outside Auth's settings,
         and reads only `SMTP_HOST` and `SMTP_PORT`: no username or
         password, and TLS switched off. That suits Mailpit and no real
-        provider. Both kinds of email draw on one daily allowance
+        provider. Both kinds of email draw on one daily allowance.
+        *(2026-11-10, slice 1: it can log in now, over TLS on port 465,
+        which hosted Edge Functions allow where 587 isn't. Configuring
+        it is slice 4.)*
   - [x] `chasien.app` is in two places and isn't ours (added
         2026-10-08). `request-room-verification` sends from
         `noreply@chasien.app`; it has to be an address at `chasien.com`.
@@ -1265,7 +1305,9 @@ starts.
         story cleanup call `http://edge_runtime:8081/...` with the local
         key. Both need the hosted project's function URL and a real
         credential. The two plain-SQL jobs (old notifications, old
-        counters) need nothing.
+        counters) need nothing. *(2026-11-10, slice 1: they, and the two
+        push webhooks, read the URL and key from Vault now; setting them
+        on the hosted project is step 3 of `docs/hosting.md`.)*
       - **The file-size limits** are rows in `storage.buckets`, set by
         migrations, and come across with them. Check them once in the
         dashboard: 25 MB for posts and stories.

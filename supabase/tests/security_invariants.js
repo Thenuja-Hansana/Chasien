@@ -202,4 +202,19 @@ invariant(
   `select w.n || ' (missing or inactive)' from (select unnest(array[${list(CRON_JOBS)}]) n) w where not exists (select 1 from cron.job j where j.jobname = w.n and j.active)`,
 );
 
+section('portability: nothing in the database knows which stack it runs on');
+// Phase 11 slice 1 (20261110100000). Every call from the database to an Edge
+// Function goes through call_edge_function(), which reads the address and key
+// from Vault, set per project. An address or key written into a trigger or a
+// job works on one stack and silently calls nothing on the other.
+invariant(
+  'no trigger calls a webhook with an address written into it',
+  `select tgrelid::regclass::text || ' ' || tgname from pg_trigger t join pg_proc p on p.oid = t.tgfoid
+   where not t.tgisinternal and p.pronamespace = 'supabase_functions'::regnamespace`,
+);
+invariant(
+  'no scheduled job carries an address or a key',
+  `select jobname::text from cron.job where command ~* '(https?://|edge_runtime|kong:|Bearer )'`,
+);
+
 print();

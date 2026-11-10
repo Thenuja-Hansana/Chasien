@@ -310,3 +310,14 @@ Signup confirmation emails don't go to a real inbox locally — check
     open. Until then the phone really has no internet, and the app's "No
     connection" strip says so, even though the local backend still works
     over USB.
+
+16. **Pushes and cleanups need two Vault secrets** (since 2026-11-10,
+    `20261110100000`). `supabase db reset` sets them from `seed.sql`. A
+    database that existed before that migration needs them once:
+    ```sql
+    select vault.create_secret('http://edge_runtime:8081', 'edge_functions_url');
+    select vault.create_secret('<local anon key, from mobile/.env.local>', 'edge_functions_key');
+    ```
+    Without them every push and cleanup is skipped with a warning in the
+    Postgres log (`call_edge_function(...): set the vault secrets ...`),
+    and nothing on screen says so.

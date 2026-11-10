@@ -12,10 +12,17 @@
 //
 // Local dev sends real SMTP to the same Mailpit/Inbucket container
 // Supabase Auth's own emails already land in (localhost:54324) — no
-// separate mail provider account needed to test this. `SMTP_HOST`/
-// `SMTP_PORT`/`SMTP_FROM` are overridable via env for the real-SMTP swap Phase 11
-// will eventually need, same one-file-seam pattern the Storage-to-R2
-// swap already uses elsewhere in this codebase.
+// separate mail provider account needed to test this: no login, no TLS.
+// A real provider is configured through the function's secrets (Phase 11,
+// docs/hosting.md):
+//   SMTP_HOST, SMTP_PORT   e.g. smtp.resend.com, 465
+//   SMTP_SECURE=true       TLS from the first byte (port 465). Hosted Edge
+//                          Functions can't open port 587 (or 25), so
+//                          STARTTLS on 587 isn't an option there.
+//   SMTP_USER, SMTP_PASS   the provider's login (for Resend: "resend" and
+//                          an API key)
+//   SMTP_FROM              defaults to Chasien <noreply@chasien.com>
+// With no SMTP_USER it behaves as it always has locally.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import nodemailer from 'npm:nodemailer@6';
@@ -33,11 +40,17 @@ function json(body: unknown, status = 200) {
 }
 
 async function sendVerificationEmail(to: string, roomName: string, verifyUrl: string) {
+  const user = Deno.env.get('SMTP_USER');
+  const secure = Deno.env.get('SMTP_SECURE') === 'true';
   const transport = nodemailer.createTransport({
     host: Deno.env.get('SMTP_HOST') ?? 'inbucket',
     port: Number(Deno.env.get('SMTP_PORT') ?? '1025'),
-    secure: false,
-    ignoreTLS: true,
+    secure,
+    auth: user ? { user, pass: Deno.env.get('SMTP_PASS') ?? '' } : undefined,
+    // Mailpit speaks neither TLS nor login. Anything with a login must not
+    // fall back to sending in the clear.
+    ignoreTLS: !secure && !user,
+    requireTLS: !secure && !!user,
   });
   await transport.sendMail({
     // chasien.com is the project's own domain. A real provider only sends

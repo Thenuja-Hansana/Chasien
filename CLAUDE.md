@@ -220,8 +220,12 @@ can be provisioned/verified — don't assume the storage backend is final
 when reading this code.
 
 **Notifications:** DB triggers (`security definer` functions) on the
-relevant tables write to `notifications` and fire a Database Webhook →
-Edge Function → Expo Push. `src/lib/push.ts` dynamically imports
+relevant tables write to `notifications`; an AFTER INSERT trigger
+(`push_row_to_edge_function`) then calls the Edge Function through pg_net
+→ Expo Push. Every call from the database to an Edge Function goes
+through `call_edge_function()`, which reads the address and key from
+Vault, per project (`20261110100000`, `docs/hosting.md`); never write an
+address or key into a trigger or a cron job. `src/lib/push.ts` dynamically imports
 `expo-notifications` and no-ops under Expo Go, since Expo Go cannot do
 push at all as of SDK 53+ — always test push via a dev-client build, not
 Expo Go.
@@ -241,6 +245,9 @@ Expo Go.
 - `docs/store-compliance.md` — App Store / Play Store UGC requirements
   (report/block, account deletion, permission prompt copy) that shape the
   data model, not just launch paperwork.
+- `docs/hosting.md` — the hosted project, step by step: link, migrations,
+  Vault, functions and their secrets, Auth, email. Secrets live in the
+  gitignored `supabase/.env.hosted`, never in the chat or git.
 - `docs/running-locally.md` — full local runbook plus a running list of
   every environment gotcha already hit and diagnosed (Docker health,
   network/adb quirks, JAVA_HOME, RAM pressure) — check here first before

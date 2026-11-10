@@ -9,6 +9,20 @@
 -- one account (`outsider`) that belongs to nothing, specifically for
 -- verifying Room isolation.
 
+-- ── where the database reaches the Edge Functions ─────────────────────
+-- 20261110100000: the push triggers and the cleanup jobs read these from
+-- Vault. Locally that's the edge runtime container on Docker's network,
+-- with the local stack's fixed demo anon key (public, the same value
+-- mobile/.env.local carries). A hosted project sets its own once, by
+-- hand: docs/hosting.md.
+select vault.create_secret('http://edge_runtime:8081', 'edge_functions_url', 'Base URL pg_net uses to call the Edge Functions');
+select vault.create_secret(
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0',
+  'edge_functions_key',
+  'Bearer token pg_net sends to the Edge Functions (the anon key)'
+);
+
+
 -- ── users ───────────────────────────────────────────────────────────────
 -- Inserting into auth.users fires handle_new_user() (identity_and_rooms
 -- migration), which creates the matching profiles row from

@@ -7,6 +7,85 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-10 — Phase 11 planned, and slice 1: a backend that doesn't know which stack it's on
+
+**Decided with Thenuja for Phase 11:**
+- **Auth emails carry a 6-digit code, not a link.** No redirect URL to
+  point anywhere, no confirmation page to host on `chasien.com`, and it
+  works when the email is opened on another device.
+- **One hosted project**, production, no staging. Two free projects would
+  each pause on their own and every migration would be pushed twice.
+- **Mumbai (`ap-south-1`).** The testers will be in Sri Lanka and India.
+- **Minimum password length stays 6.** (8 was recommended.)
+- **No signup captcha** for the private beta; revisit before the public
+  Play release. **Resend** for email. **R2 last**, once hosting works:
+  Supabase Storage's 5 GB of egress a month is enough for a dozen
+  testers, and the move is large.
+
+**Slice 1, the cause.** Four jobs call Edge Functions from inside the
+database: the push webhooks for messages and notifications, and the
+hourly story cleanup and daily unused-media cleanup. Each had the local
+stack's address written into its migration (`http://edge_runtime:8081`,
+the edge runtime container on Docker's network) with the demo anon key.
+Pushed to a hosted project as they were, they'd have called nothing:
+no pushes, no cleanup, and no error anywhere a person would see.
+
+**What changed** (`20261110100000_jobs_find_their_functions_through_vault.sql`):
+- `call_edge_function(name, body, timeout)` reads `edge_functions_url`
+  and `edge_functions_key` from **Vault** and calls the function with
+  pg_net. SECURITY DEFINER, since Vault is readable only by its owner and
+  the triggers run as whoever inserted the row; no grant, so not an
+  endpoint. With Vault unset it logs a warning and returns, so an insert
+  is never stopped by it.
+- `push_row_to_edge_function()` replaces Database Webhooks for the two
+  push triggers, and sends only the row's id: the functions read nothing
+  else since Phase 10's slice 1, so a message's text no longer sits in
+  pg_net's queue.
+- The two cleanup jobs are rescheduled to call it, with 30 seconds
+  instead of pg_net's default 5 (a hosted function can start cold).
+- The key is the **anon key**. It's public anyway, and enough: the push
+  functions claim the row before sending, and the cleanups take no input.
+  So nothing secret is involved, only per-project configuration.
+- `seed.sql` sets the local values. The hosted ones are set by hand
+  (`docs/hosting.md`, step 3).
+
+**Also for hosting:**
+- `request-room-verification` can log in to a real mail provider:
+  `SMTP_USER`, `SMTP_PASS`, and `SMTP_SECURE` for TLS from the first byte
+  on port 465. Hosted Edge Functions can't open port 587 (or 25), so
+  STARTTLS there isn't an option. A login never falls back to sending in
+  the clear (`requireTLS`). Mailpit still gets neither.
+- `verify-room-email` answers in **plain text**. Hosted Supabase serves an
+  Edge Function's HTML as plain text on its default domain, so the page
+  would have arrived as its own source. Text also can't be injected into;
+  the Room's name, which anyone chooses, went into the HTML unescaped.
+- Two checks in the security re-check: no trigger uses
+  `supabase_functions.http_request`, and no scheduled job's command holds
+  an address, a key or `edge_runtime` (523 checks now).
+- `docs/hosting.md`, the runbook every hosted step is written into.
+  Secrets go in a gitignored `supabase/.env.hosted`, never in the chat.
+
+**Verified** against the local stack:
+- Control: the two new checks failed against the database as it was,
+  naming exactly the four jobs.
+- After: a test notification for mara went trigger → pg_net →
+  `notify-activity` (200), which claimed the row and handed four pushes to
+  Expo. A test message reached `notify-new-message` (200, nobody else in
+  the Room to push to). Both cleanups, called the way their jobs call
+  them, answered 200 and removed nothing. With the Vault secrets deleted
+  inside a rolled-back transaction, an insert still succeeded with only
+  the warning. `verify-room-email` answers `text/plain`.
+- `node supabase/tests/run.js --live`: 523 of 523, including a real
+  domain-verification email through Mailpit whose link joined the Room.
+  The test rows were deleted; the data is at the baseline.
+
+**Not verified:** the SMTP login and TLS path, because Mailpit has
+neither. It's tested against Resend in slice 4. Whether the hosted
+project issues an anon key in the JWT form the gateway's check needs, or
+only the newer `sb_publishable_` keys, is checked when it exists.
+
+---
+
 ## 2026-11-10 — Phase 10 slice 10: Phase 9's screens, and Phase 10 closed
 
 App only, six screens. Decided with Thenuja: keep "Delete my account"

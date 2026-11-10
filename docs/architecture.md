@@ -262,6 +262,17 @@ database and about 1 GB of files. Nothing was limited before.
   at sensible values in `config.toml` for the local stack and to be set
   on the hosted one in Phase 11, with the decision on a signup captcha.
 
+## Where the database reaches its Edge Functions (current rule)
+
+Since 2026-11-10 (Phase 11 slice 1, `20261110100000`): every call from
+the database to an Edge Function, the two push triggers and the cleanup
+jobs, goes through `call_edge_function()`, which reads the address and
+the anon key from Vault (`edge_functions_url`, `edge_functions_key`). Set
+by `seed.sql` locally and by hand on the hosted project
+(`docs/hosting.md`). Never write an address or key into a trigger or a
+job; the security re-check refuses it. A push trigger sends only the
+row's id.
+
 ## Network failures (current rule)
 
 Online-only, with no offline queue, but never silent (Phase 10 slice
@@ -352,7 +363,6 @@ code is the "Database write access" section above, and the client keeps
 no state library (screens call `mobile/src/lib/` directly and hold their
 own state). What's still open, each tracked in `roadmap.md`:
 
-- Which SMTP provider sends real Auth emails (Phase 11).
 - Which release signing key to keep for good, and how it relates to Play
   App Signing (APK Beta Phase).
 

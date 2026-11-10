@@ -11,7 +11,7 @@ node supabase/tests/run.js           # every SQL suite; leaves nothing behind
 node supabase/tests/run.js --live    # those, then the scripts that use the real API, then cleans up
 ```
 
-That is the full security re-check: 521 checks, a few minutes with
+That is the full security re-check: 523 checks, a few minutes with
 `--live`. **Run it after any change to a
 migration, a policy, a grant or an Edge Function.** It prints one line per
 suite, the failures in full, and the row counts before and after, which

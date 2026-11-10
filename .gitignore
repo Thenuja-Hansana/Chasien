@@ -4,6 +4,8 @@
 .env
 .env.local
 .env.*.local
+# the hosted project's Edge Function secrets (docs/hosting.md)
+.env.hosted
 
 # OS / editor cruft
 .DS_Store

@@ -17,20 +17,22 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
+// Plain text, not a page (Phase 11). Hosted Supabase serves an Edge
+// Function's text/html as text/plain on its default domain, so the HTML
+// this used to return would have arrived as its own source code. Text also
+// can't be injected into: the Room's name, which anyone can choose, used
+// to go into the HTML unescaped.
 function page(body: string, status = 200) {
-  return new Response(
-    `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Chasien</title></head>
-     <body style="font-family: -apple-system, sans-serif; text-align: center; padding: 64px 24px; color: #171310;">
-       ${body}
-     </body></html>`,
-    { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-  );
+  return new Response(`Chasien\n\n${body}\n`, {
+    status,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }
 
 Deno.serve(async (req) => {
   const token = new URL(req.url).searchParams.get('token');
   if (!token) {
-    return page('<h2>Missing verification link.</h2>', 400);
+    return page('Missing verification link.', 400);
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -43,7 +45,7 @@ Deno.serve(async (req) => {
     .eq('token', token)
     .maybeSingle();
   if (!verification) {
-    return page('<h2>This verification link is invalid.</h2>', 404);
+    return page('This verification link is invalid.', 404);
   }
 
   const { data: room } = await admin.from('rooms').select('name, visibility, required_email_domain').eq('id', verification.room_id).maybeSingle();
@@ -60,14 +62,14 @@ Deno.serve(async (req) => {
   const emailDomain = String(verification.email ?? '').trim().toLowerCase().split('@')[1];
   const requiredDomain = room?.required_email_domain?.toLowerCase();
   if (room?.visibility !== 'domain_verified' || !requiredDomain || emailDomain !== requiredDomain) {
-    return page('<h2>This verification link is invalid.</h2><p>Go back to the app and request a new one.</p>', 403);
+    return page('This verification link is invalid.\n\nGo back to the app and request a new one.', 403);
   }
 
   if (verification.verified_at) {
-    return page(`<h2>Already verified</h2><p>You're a member of <strong>${roomName}</strong> — reopen the Chasien app to see it.</p>`);
+    return page(`Already verified.\n\nYou're a member of ${roomName}. Reopen the Chasien app to see it.`);
   }
   if (new Date(verification.expires_at) < new Date()) {
-    return page('<h2>This verification link has expired.</h2><p>Go back to the app and request a new one.</p>', 410);
+    return page('This verification link has expired.\n\nGo back to the app and request a new one.', 410);
   }
 
   await admin.from('room_email_verifications').update({ verified_at: new Date().toISOString() }).eq('id', verification.id);
@@ -82,5 +84,5 @@ Deno.serve(async (req) => {
     .from('room_memberships')
     .upsert({ room_id: verification.room_id, user_id: verification.user_id, role: 'member', join_state: 'approved' }, { onConflict: 'room_id,user_id' });
 
-  return page(`<h2>You're verified!</h2><p>You've joined <strong>${roomName}</strong>. Reopen the Chasien app to see it.</p>`);
+  return page(`You're verified!\n\nYou've joined ${roomName}. Reopen the Chasien app to see it.`);
 });
