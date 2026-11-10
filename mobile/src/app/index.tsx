@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
@@ -13,6 +14,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { fetchRoomUnreadCounts, fetchUnreadCount, subscribeToNotifications } from '@/lib/notifications';
 import { fetchLatestPostPreview, type RoomActivityPreview } from '@/lib/posts';
 import { cacheJoinedRoom } from '@/lib/room-cache';
@@ -65,12 +67,12 @@ export default function Index() {
 
   const userId = session?.user.id;
 
-  useFocusEffect(
-    useCallback(() => {
+  const load = useCallback(() => {
       if (!session) return;
       fetchMyRooms(session.user.id)
         .then((rooms) => {
           setRooms(rooms);
+          setError(null);
           // So tapping into one of these a moment from now doesn't have to
           // re-fetch what we just fetched — see lib/room-cache.ts.
           for (const room of rooms) cacheJoinedRoom(room, room.myRole);
@@ -89,8 +91,9 @@ export default function Index() {
             .catch(() => {});
         })
         .catch((e) => setError(errorMessage(e, 'Failed to load your Rooms.')));
-    }, [session]),
-  );
+  }, [session]);
+
+  useFocusEffect(load);
 
   const loadNotificationState = useCallback(() => {
     if (!userId) return;
@@ -99,6 +102,12 @@ export default function Index() {
   }, [userId]);
 
   useFocusEffect(useCallback(() => loadNotificationState(), [loadNotificationState]));
+
+  // Back online: what was missed while offline, Rooms and unread counts both.
+  useOnReconnect(() => {
+    load();
+    loadNotificationState();
+  });
 
   useEffect(() => {
     if (!userId) return;
@@ -153,9 +162,11 @@ export default function Index() {
           <Text style={styles.searchBarText}>Search</Text>
         </Pressable>
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && sortedRooms !== null && <Text style={styles.error}>{error}</Text>}
 
-        {sortedRooms === null ? (
+        {sortedRooms === null && error ? (
+          <LoadError message={error} onRetry={load} />
+        ) : sortedRooms === null ? (
           <View style={styles.listWrap}>
             <View style={styles.list}>
               {[128, 96, 150, 110, 134, 100].map((nameWidth, i) => (

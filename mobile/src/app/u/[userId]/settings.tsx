@@ -9,6 +9,7 @@ import { SUPPORT_EMAIL } from '@/constants/contact';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { errorMessage } from '@/lib/errors';
 import { fetchAmIAppAdmin } from '@/lib/reports';
 import { emailSupport } from '@/lib/support';
 
@@ -121,6 +122,20 @@ export default function SettingsAndActivity() {
   // Reports screen and everything behind it are enforced server-side, so
   // this only decides whether to show the way in.
   const [isAdmin, setIsAdmin] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      await signOut();
+    } catch (e) {
+      setSignOutError(errorMessage(e, 'Could not sign out. Try again.'));
+    }
+    setSigningOut(false);
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -272,9 +287,10 @@ export default function SettingsAndActivity() {
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Login</Text>
-          <Pressable style={styles.row} onPress={() => signOut()}>
-            <Text style={styles.logOutText}>Log out</Text>
+          <Pressable style={styles.row} onPress={handleSignOut} disabled={signingOut} accessibilityRole="button">
+            <Text style={styles.logOutText}>{signingOut ? 'Logging out…' : 'Log out'}</Text>
           </Pressable>
+          {signOutError && <Text style={styles.signOutError}>{signOutError}</Text>}
           {/* Outside the search filter, like Log out: Apple expects account
               deletion to be easy to find, not behind a search. */}
           <Pressable
@@ -430,5 +446,12 @@ const makeStyles = (colors: ThemeColors) =>
       fontFamily: Fonts.bodySemibold,
       fontSize: 15,
       color: colors.error,
+    },
+    signOutError: {
+      fontFamily: Fonts.body,
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.error,
+      paddingBottom: Spacing[2],
     },
   });

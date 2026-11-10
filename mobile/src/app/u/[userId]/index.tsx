@@ -8,6 +8,7 @@ import Avatar from '@/components/Avatar';
 import BlockConfirmModal from '@/components/BlockConfirmModal';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import OptionsSheet from '@/components/OptionsSheet';
 import ReportSheet from '@/components/ReportSheet';
 import Skeleton from '@/components/Skeleton';
@@ -19,6 +20,7 @@ import { startDm } from '@/lib/chat';
 import { useAuth } from '@/lib/auth-context';
 import { blockUser, fetchBlockStatus, unblockUser, type BlockStatus } from '@/lib/blocks';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { acceptFriendRequest, fetchFriendCount, fetchFriendshipStatus, removeFriendship, sendFriendRequest, type FriendshipStatus } from '@/lib/friends';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { signProfileMediaUrls } from '@/lib/profileMedia';
@@ -61,6 +63,7 @@ export default function ProfileScreen() {
   // come back on a refetch.
   const load = useCallback(() => {
     setProfile('loading');
+    setError(null);
     setAvatarUrl(null);
     setBannerUrl(null);
     setRooms(null);
@@ -96,6 +99,9 @@ export default function ProfileScreen() {
   }, [userId]);
 
   useFocusEffect(load);
+  useOnReconnect(() => {
+    if (error) load();
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -197,7 +203,9 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.flex}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: clearance }]}>
-        {profile === 'loading' ? (
+        {profile === 'loading' && error ? (
+          <LoadError message={error} onRetry={load} />
+        ) : profile === 'loading' ? (
           <View>
             <Skeleton width="100%" height={BANNER_HEIGHT} radius={0} />
             <View style={styles.avatarRing}>

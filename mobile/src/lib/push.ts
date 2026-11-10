@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { AppOwnership } from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
@@ -16,6 +17,9 @@ import { supabase } from '@/lib/supabase';
  * docs/decision-log.md, "Expo Go can't do push at all since SDK 53."
  */
 const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
+
+/** This phone's Expo push token, once registered, so sign-out can find its row. */
+const PUSH_TOKEN_KEY = 'chasien.pushToken';
 
 /**
  * Registers this device for push notifications and claims its Expo push
@@ -74,8 +78,27 @@ export async function registerForPushNotifications(): Promise<string | null> {
     p_platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
   });
   if (error) throw error;
+  await AsyncStorage.setItem(PUSH_TOKEN_KEY, token).catch(() => {});
 
   return token;
+}
+
+/**
+ * Removes this phone's row from `push_tokens`, while still signed in
+ * (Phase 10 slice 9). Before this, signing out left the row in place, so
+ * a signed-out phone kept getting the old account's notifications,
+ * message text included, until someone else signed in on it.
+ *
+ * A plain delete of your own row, which RLS and the DELETE grant allow
+ * (20260815002356). Does nothing if this phone never registered. Throws
+ * if the request fails, so sign-out can refuse rather than leave the row.
+ */
+export async function unregisterThisDevice() {
+  const token = await AsyncStorage.getItem(PUSH_TOKEN_KEY).catch(() => null);
+  if (!token) return;
+  const { error } = await supabase.from('push_tokens').delete().eq('token', token);
+  if (error) throw error;
+  await AsyncStorage.removeItem(PUSH_TOKEN_KEY).catch(() => {});
 }
 
 /**

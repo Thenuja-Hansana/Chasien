@@ -10,10 +10,12 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import ErrorScreen from '@/components/ErrorScreen';
+import OfflineBanner from '@/components/OfflineBanner';
 import { DarkColors, LightColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import { initCrashReporting, reportError } from '@/lib/crash-reporting';
+import { NetworkProvider } from '@/lib/network';
 import { configureForegroundNotificationHandler, registerForPushNotifications, subscribeToNotificationTaps } from '@/lib/push';
 import { ThemeProvider as ChasienThemeProvider, useThemeContext } from '@/lib/theme-context';
 import { UserPreviewProvider } from '@/lib/user-preview-context';
@@ -156,6 +158,8 @@ function AppShell() {
           while they're open. */}
       <StatusBar style={mode === 'light' ? 'dark' : 'light'} />
       <NavigationBar style={mode === 'light' ? 'dark' : 'light'} />
+      <NetworkProvider>
+      <OfflineBanner>
       <AuthProvider>
         <AuthGate>
           <UserPreviewProvider>
@@ -200,6 +204,8 @@ function AppShell() {
           </UserPreviewProvider>
         </AuthGate>
       </AuthProvider>
+      </OfflineBanner>
+      </NetworkProvider>
     </ThemeProvider>
   );
 }

@@ -18,6 +18,7 @@ import BlockConfirmModal from '@/components/BlockConfirmModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import PollCard from '@/components/PollCard';
 import PostCardSkeleton from '@/components/PostCardSkeleton';
 import PostMediaCarousel from '@/components/PostMediaCarousel';
@@ -31,6 +32,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { blockUser } from '@/lib/blocks';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { outranks, removeComment } from '@/lib/moderation';
 import { togglePostPin } from '@/lib/notifications';
 import { useUserPreview } from '@/lib/user-preview-context';
@@ -93,6 +95,7 @@ export default function PostDetail() {
       const [fresh, freshComments] = await Promise.all([fetchPost(postId, userId), fetchComments(postId)]);
       setPost(fresh);
       setComments(freshComments);
+      setError(null);
       if (fresh) {
         const [membership, authorMembership] = await Promise.all([
           fetchMyMembership(fresh.roomId, userId),
@@ -115,6 +118,9 @@ export default function PostDetail() {
       load();
     }, [load]),
   );
+  useOnReconnect(() => {
+    load();
+  });
 
   if (!session) return null;
 
@@ -251,6 +257,14 @@ export default function PostDetail() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <PostCardSkeleton bodyHeight={280} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!post && error) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
+        <LoadError message={error} onRetry={load} />
       </SafeAreaView>
     );
   }

@@ -291,3 +291,22 @@ Signup confirmation emails don't go to a real inbox locally — check
     a new function or a `config.toml` change (gotchas #9 and #11), which
     need the stack stopped and started. After editing a function, check
     the change actually took effect before believing a test result.
+
+14. **Changing `adb reverse` doesn't touch connections already open**
+    (hit 2026-11-09, testing slice 9). The app keeps connections to
+    Supabase open and reuses them, so removing the `54321` tunnel, or
+    pointing it somewhere else, only affects connections made afterwards:
+    a chat opened "offline" still loaded. To make the backend vanish for
+    a running app, stop the gateway (`docker stop
+    supabase_kong_chasien`, refused at once) or pause it (`docker pause
+    supabase_kong_chasien`, open connections hang). Start or unpause it
+    afterwards. For new connections only, a cold start after changing
+    the tunnel works.
+
+15. **After airplane mode the A14 may not rejoin Wi-Fi** (hit
+    2026-11-09). Its saved network is an iPhone's Personal Hotspot, which
+    iPhones only show while that settings screen is open. Open Settings
+    → Personal Hotspot on the iPhone, or toggle the A14's Wi-Fi with it
+    open. Until then the phone really has no internet, and the app's "No
+    connection" strip says so, even though the local backend still works
+    over USB.

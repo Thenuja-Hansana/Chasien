@@ -6,11 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { fetchMyRooms, type Room, type RoomRole } from '@/lib/rooms';
 import { signRoomMediaUrls } from '@/lib/roomMedia';
 
@@ -28,18 +30,20 @@ export default function AllRooms() {
   const [mediaUrls, setMediaUrls] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
+  const load = useCallback(() => {
       if (!userId) return;
       fetchMyRooms(userId)
         .then((roomList) => {
           setRooms(roomList);
+          setError(null);
           const paths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((p): p is string => !!p);
           if (paths.length > 0) signRoomMediaUrls(paths).then(setMediaUrls).catch(() => {});
         })
         .catch((e) => setError(errorMessage(e, 'Failed to load Rooms.')));
-    }, [userId]),
-  );
+  }, [userId]);
+
+  useFocusEffect(load);
+  useOnReconnect(load);
 
   if (!session) return null;
 
@@ -61,9 +65,11 @@ export default function AllRooms() {
         <View style={styles.headerSide} />
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && rooms !== null && <Text style={styles.error}>{error}</Text>}
 
-      {rooms === null ? (
+      {rooms === null && error ? (
+        <LoadError message={error} onRetry={load} />
+      ) : rooms === null ? (
         <View style={styles.list}>
           {[130, 100, 150].map((width, i) => (
             <View key={i} style={styles.row}>

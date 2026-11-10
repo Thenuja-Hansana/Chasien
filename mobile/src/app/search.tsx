@@ -1,11 +1,12 @@
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
+import LoadError from '@/components/LoadError';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
 import { Fonts, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
@@ -14,6 +15,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { searchProfiles, type ProfileSearchResult } from '@/lib/profiles';
 import { fetchDiscoverRooms, fetchMyMembershipMap, joinRoom, type Membership, type Room } from '@/lib/rooms';
 import { useUserPreview } from '@/lib/user-preview-context';
@@ -58,15 +60,19 @@ export default function Search() {
 
   const userId = session?.user.id;
 
-  useEffect(() => {
+  const loadRooms = useCallback(() => {
     if (!userId) return;
     Promise.all([fetchDiscoverRooms(), fetchMyMembershipMap(userId)])
       .then(([roomList, membershipMap]) => {
         setRooms(roomList);
         setMemberships(membershipMap);
+        setError(null);
       })
       .catch((e) => setError(errorMessage(e, 'Failed to load Rooms.')));
   }, [userId]);
+
+  useEffect(() => loadRooms(), [loadRooms]);
+  useOnReconnect(loadRooms);
 
   // Debounced, unlike Rooms above — that's one full fetch of a small,
   // stable list filtered client-side (fetchDiscoverRooms's own comment),
@@ -132,9 +138,11 @@ export default function Search() {
         </Pressable>
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && rooms !== null && <Text style={styles.error}>{error}</Text>}
 
-      {rooms === null ? (
+      {rooms === null && error ? (
+        <LoadError message={error} onRetry={loadRooms} />
+      ) : rooms === null ? (
         <View style={styles.list}>
           {[0, 1, 2].map((i) => (
             <View key={i} style={styles.row}>

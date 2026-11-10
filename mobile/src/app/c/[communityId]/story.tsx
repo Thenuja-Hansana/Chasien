@@ -91,6 +91,7 @@ export default function StoryViewer() {
   const load = useCallback(async () => {
     // .catch() rather than try/catch: the React Compiler can't compile the
     // conditionals below inside a `try`, and skips the whole screen.
+    setError(null);
     const loadStories = async () => {
       const room = await fetchRoomBySlug(communityId);
       if (!room) return;
@@ -222,7 +223,16 @@ export default function StoryViewer() {
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
         <StatusBar style="light" />
         <NavigationBar style="light" />
-        <ActivityIndicator color="rgba(242,230,212,.9)" />
+        {error ? (
+          <>
+            <Text style={styles.loadErrorText}>{error}</Text>
+            <Pressable onPress={load} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.retryText}>Try again</Text>
+            </Pressable>
+          </>
+        ) : (
+          <ActivityIndicator color="rgba(242,230,212,.9)" />
+        )}
       </SafeAreaView>
     );
   }
@@ -516,6 +526,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     // to — without this, the fill would appear to grow from the middle
     // outward instead of filling left-to-right like a loading bar.
     transformOrigin: 'left',
+  },
+  loadErrorText: {
+    marginHorizontal: Spacing[6],
+    fontFamily: Fonts.body,
+    fontSize: 15,
+    color: 'rgba(242,230,212,.9)',
+    textAlign: 'center',
+  },
+  retryText: {
+    marginTop: Spacing[3],
+    fontFamily: Fonts.bodyBold,
+    fontSize: 15,
+    color: 'rgba(242,230,212,.9)',
+    textDecorationLine: 'underline',
   },
   errorText: {
     marginHorizontal: Spacing[4],

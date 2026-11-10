@@ -8,6 +8,7 @@ import Avatar from '@/components/Avatar';
 import CommentsSheet, { type CommentsSheetHandle } from '@/components/CommentsSheet';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import LikesSheet, { type LikesSheetHandle } from '@/components/LikesSheet';
 import PostCard from '@/components/PostCard';
 import PostCardSkeleton from '@/components/PostCardSkeleton';
@@ -19,6 +20,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { blockUser } from '@/lib/blocks';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { fetchRoomUnreadCounts, markAllNotificationsRead, subscribeToNotifications, togglePostPin } from '@/lib/notifications';
 import { getCachedJoinedRoom } from '@/lib/room-cache';
 import { fetchMyMembership, fetchRoomBySlug, joinRoom, respondToInvite, type Membership, type Room } from '@/lib/rooms';
@@ -108,6 +110,7 @@ export default function RoomHome() {
       const room = await fetchRoomBySlug(communityId);
       const membership = room ? await fetchMyMembership(room.id, userId) : null;
       setState({ room, membership });
+      setError(null);
       if (room && membership?.join_state === 'approved') {
         // Independent of each other either way — run together rather than
         // one after the other.
@@ -134,6 +137,9 @@ export default function RoomHome() {
       load();
     }, [load]),
   );
+  useOnReconnect(() => {
+    load();
+  });
 
   // Room-scoped, not the app-wide total the bell shows everywhere else —
   // the badge on this Room's own header bell now has to agree with what
@@ -320,7 +326,7 @@ export default function RoomHome() {
   if (state === 'loading') {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
-        <ActivityIndicator color={colors.accent.DEFAULT} />
+        {error ? <LoadError message={error} onRetry={load} /> : <ActivityIndicator color={colors.accent.DEFAULT} />}
       </SafeAreaView>
     );
   }
@@ -497,9 +503,11 @@ export default function RoomHome() {
         />
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && posts !== null && <Text style={styles.error}>{error}</Text>}
 
-      {posts === null ? (
+      {posts === null && error ? (
+        <LoadError message={error} onRetry={load} />
+      ) : posts === null ? (
         <View>
           <PostCardSkeleton />
           <PostCardSkeleton bodyHeight={220} />

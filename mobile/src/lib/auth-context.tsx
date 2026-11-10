@@ -2,6 +2,8 @@ import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 
+import { isNetworkError } from '@/lib/errors';
+import { unregisterThisDevice } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
 
 /** How often to bump profiles.last_active_at while the app is open and in the foreground — a plain heartbeat, not real-time presence (see the migration's own comment for why). */
@@ -20,7 +22,8 @@ type AuthContextValue = {
   loading: boolean;
   signUp: (params: SignUpParams) => ReturnType<typeof supabase.auth.signUp>;
   signIn: (email: string, password: string) => ReturnType<typeof supabase.auth.signInWithPassword>;
-  signOut: () => ReturnType<typeof supabase.auth.signOut>;
+  /** Rejects with a message for people when it can't sign out (no connection). */
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -84,7 +87,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         options: { data: { handle, name } },
       }),
     signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
-    signOut: () => supabase.auth.signOut(),
+    signOut: async () => {
+      // This phone's push token goes first, while there's still a session
+      // to delete it with. Offline it can't, and signing out anyway would
+      // leave the phone getting this account's notifications, so it's
+      // refused. Any other failure doesn't trap anyone signed in.
+      try {
+        await unregisterThisDevice();
+      } catch (e) {
+        if (isNetworkError(e)) {
+          throw new Error("You're offline. Connect to sign out, so this phone stops getting this account's notifications.");
+        }
+      }
+      // This phone only. The default, 'global', signed the account out of
+      // every device, whose push tokens then stayed registered.
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

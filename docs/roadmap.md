@@ -11,7 +11,17 @@ file tracks *progress*, that one tracks *why*. Re-order tasks within a
 phase freely; don't reorder phases without a reason, they're dependency
 -ordered on purpose.
 
-**Current focus:** Phases 0-8 are done. Chat is real end to end — a
+**Current focus (2026-11-10): Phase 10 — Hardening, slices 1-9 of 10
+done.** The security half (slices 1-7) is finished and re-checkable with
+`node supabase/tests/run.js --live`. Slice 8 added error screens and
+crash reporting that stays off until a Sentry key is set; slice 9 made
+the app honest offline (timeouts, Try again, a "No connection" strip,
+nothing typed lost, sign-out that unregisters the phone). Next: slice
+10, loading/empty/error states on Phase 9's screens and the
+`docs/phase/phase10.md` write-up; then Phase 11, the hosted backend.
+The dated entries below are the history, oldest first.
+
+**2026-08-31: Phase 6 — Chat & realtime.** Chat is real end to end — a
 unified inbox mixing Room group channels and DMs, realtime message
 delivery, typing indicators, read receipts, reactions, and image/voice
 attachments, all verified with two (and, for the isolation guarantee,
@@ -1043,7 +1053,7 @@ block is the original list; each slice says which of its items it closes.
       line is in `store-compliance.md`, for when the policy is written
       (Phase 12). `expo-network` is installed for slice 9 in the same
       dev-client rebuild. See decision-log, 2026-11-09
-- [ ] Slice 9 — offline, "online-only but honest": a no-connection
+- [x] Slice 9 — offline, "online-only but honest": a no-connection
       banner, requests that time out, retry buttons, and nothing typed
       ever lost. (Corrected 2026-10-02: this said a chat message that
       fails to send loses its text. It doesn't; the screen puts the text
@@ -1051,7 +1061,20 @@ block is the original list; each slice says which of its items it closes.
       queue. Shares slice 8's dev-client rebuild. Also here:
       signing out leaves the device's push token registered, so a
       signed-out phone keeps getting the old account's pushes until
-      someone else signs in on it (noticed in slice 3)
+      someone else signs in on it (noticed in slice 3).
+      **Done 2026-11-10**, app only, no migration. Every request gives
+      up after 20 seconds (5 minutes for an upload), where before a send
+      on a dead connection spun forever. A failed load shows "Couldn't
+      load this" with Try again instead of loading placeholders that
+      never stopped, on 15 screens; open screens reload when the
+      connection comes back, so a chat fetches what it missed; network
+      failures read "No connection. Check your internet and try again.";
+      a "No connection" strip sits under the status bar while the phone
+      is offline. A failed send keeps its reply target, and a failed
+      photo or voice note gets Send again. Sign-out removes this phone's
+      push token first, is refused while offline, and signs out of this
+      phone only (it used to end every session). All checked on the A14.
+      Phase 9's screens are slice 10's. See decision-log, 2026-11-10
 - [ ] Slice 10 — loading, empty and error states on Phase 9's screens,
       then `docs/phase/phase10.md`. Found in slice 7 and **fixed ahead
       of this slice** (2026-10-08): on the verify-email screen, "Resend
@@ -1062,8 +1085,9 @@ block is the original list; each slice says which of its items it closes.
 
 - [x] Crash reporting (free tier — e.g. Sentry free tier) *(Slice 8,
       2026-11-09. Sentry, switched off until a key is set)*
-- [ ] Offline behavior: what happens with no connection, for feed and chat
-      — at minimum, don't crash or silently drop user actions
+- [x] Offline behavior: what happens with no connection, for feed and chat
+      — at minimum, don't crash or silently drop user actions *(Slice 9,
+      2026-11-10)*
 - [ ] Re-verify loading/empty/error states and list virtualization/image
       caching still hold after Phase 9's new screens — the audit itself
       moved to Bones Phase, done ahead of Trust & Safety; this is a
@@ -1164,8 +1188,8 @@ starts.
       locally. **Never run `seed.sql` on the project real users reach.**
       Every seeded account's password is `password123`, and the anon key
       that reaches those accounts ships inside the app
-- [ ] Deploy every Edge Function in `supabase/functions/` (seven since
-      Phase 9 added `moderate`) and set their secrets on the hosted
+- [ ] Deploy every Edge Function in `supabase/functions/` (nine since
+      Phase 10 slice 6 added `cleanup-unused-media`) and set their secrets on the hosted
       project. Confirm the Database Webhooks (chat and activity push) and
       the `pg_cron` story-cleanup job exist there too, and recreate any
       that were configured outside the migrations. Then add your own

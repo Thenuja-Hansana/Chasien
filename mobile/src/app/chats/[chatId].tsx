@@ -8,6 +8,7 @@ import Avatar from '@/components/Avatar';
 import BlockConfirmModal from '@/components/BlockConfirmModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import MessageBubble from '@/components/MessageBubble';
 import OptionsSheet from '@/components/OptionsSheet';
 import ReportSheet, { type ReportTarget } from '@/components/ReportSheet';
@@ -33,7 +34,8 @@ import {
   type Message,
 } from '@/lib/chat';
 import { errorMessage } from '@/lib/errors';
-import { pickImage } from '@/lib/media';
+import { pickImage, type PickedImage } from '@/lib/media';
+import { useOnReconnect } from '@/lib/network';
 import { fetchMutedInChat, removeMessage, setMutedInChat } from '@/lib/moderation';
 import { fetchMyMembership, type RoomRole } from '@/lib/rooms';
 import { signMessageMediaUrls, uploadMessageImage, uploadMessageVoice } from '@/lib/messageMedia';
@@ -83,6 +85,11 @@ export default function ChatView() {
   /** Blocked from the report sheet; refetched once it closes. */
   const [blockedViaReport, setBlockedViaReport] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A photo or voice note that failed to send, kept so "Send again" can
+  // resend it. Before this, a failed send lost a recording for good.
+  const [failedSend, setFailedSend] = useState<{ kind: 'image'; image: PickedImage } | { kind: 'voice'; uri: string } | null>(
+    null,
+  );
 
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingChannelRef = useRef<ReturnType<typeof subscribeToTyping> | null>(null);
@@ -91,6 +98,7 @@ export default function ChatView() {
   const load = useCallback(() => {
     if (!chatId || !userId) return;
     setSummary('loading');
+    setError(null);
     fetchBlockedIds(userId).then(setBlockedIds).catch(() => {});
     fetchConversationSummary(chatId, userId)
       .then(async (s) => {
@@ -113,6 +121,15 @@ export default function ChatView() {
   }, [chatId, userId]);
 
   useFocusEffect(useCallback(() => load(), [load]));
+
+  // Realtime reconnects by itself but doesn't replay what was sent while
+  // the phone was offline. An open thread fetches only its messages again,
+  // so it stays on screen instead of going back to a spinner; one whose
+  // first load failed runs the whole load.
+  useOnReconnect(() => {
+    if (summary === 'loading') load();
+    else if (chatId) fetchMessages(chatId).then(setMessages).catch(() => {});
+  });
 
   // Paths already handed to the signer. A ref rather than reading
   // `mediaUrls`, which this effect also writes: depending on `mediaUrls`
@@ -202,6 +219,23 @@ export default function ChatView() {
     } catch (e) {
       setError(errorMessage(e, 'Could not send that message.'));
       setDraft(text);
+      setReplyTo(pendingReply);
+    }
+    setSending(false);
+  }
+
+  async function sendImage(image: PickedImage) {
+    if (!chatId || !userId) return;
+    setSending(true);
+    setError(null);
+    setFailedSend(null);
+    try {
+      const path = await uploadMessageImage(image, chatId, userId);
+      const sent = await sendMessage({ conversationId: chatId, authorId: userId, imageUrl: path });
+      setMessages((prev) => [sent, ...(prev ?? [])]);
+    } catch (e) {
+      setError(errorMessage(e, 'Could not send that photo.'));
+      setFailedSend({ kind: 'image', image });
     }
     setSending(false);
   }
@@ -210,14 +244,21 @@ export default function ChatView() {
     if (!chatId || !userId || sending) return;
     const image = await pickImage();
     if (!image) return;
+    await sendImage(image);
+  }
+
+  async function sendVoice(uri: string) {
+    if (!chatId || !userId) return;
     setSending(true);
     setError(null);
+    setFailedSend(null);
     try {
-      const path = await uploadMessageImage(image, chatId, userId);
-      const sent = await sendMessage({ conversationId: chatId, authorId: userId, imageUrl: path });
+      const path = await uploadMessageVoice(uri, chatId, userId);
+      const sent = await sendMessage({ conversationId: chatId, authorId: userId, voiceUrl: path });
       setMessages((prev) => [sent, ...(prev ?? [])]);
     } catch (e) {
-      setError(errorMessage(e, 'Could not send that photo.'));
+      setError(errorMessage(e, 'Could not send that voice message.'));
+      setFailedSend({ kind: 'voice', uri });
     }
     setSending(false);
   }
@@ -239,17 +280,13 @@ export default function ChatView() {
     setRecording(false);
     const uri = recorder.uri;
     if (!uri) return;
+    await sendVoice(uri);
+  }
 
-    setSending(true);
-    setError(null);
-    try {
-      const path = await uploadMessageVoice(uri, chatId, userId);
-      const sent = await sendMessage({ conversationId: chatId, authorId: userId, voiceUrl: path });
-      setMessages((prev) => [sent, ...(prev ?? [])]);
-    } catch (e) {
-      setError(errorMessage(e, 'Could not send that voice message.'));
-    }
-    setSending(false);
+  function handleSendAgain() {
+    if (!failedSend || sending) return;
+    if (failedSend.kind === 'image') sendImage(failedSend.image);
+    else sendVoice(failedSend.uri);
   }
 
   async function handleReact(message: Message, emoji: string) {
@@ -267,7 +304,7 @@ export default function ChatView() {
   if (summary === 'loading') {
     return (
       <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
-        <ActivityIndicator color={colors.accent.DEFAULT} />
+        {error ? <LoadError message={error} onRetry={load} /> : <ActivityIndicator color={colors.accent.DEFAULT} />}
       </SafeAreaView>
     );
   }
@@ -430,7 +467,16 @@ export default function ChatView() {
         )}
 
         {typingUser && <Text style={styles.typingText}>Typing...</Text>}
-        {error && <Text style={styles.errorText}>{error}</Text>}
+        {error && (
+          <View style={styles.errorRow}>
+            <Text style={styles.errorText}>{error}</Text>
+            {failedSend && (
+              <Pressable onPress={handleSendAgain} disabled={sending} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.sendAgain}>Send again</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
 
         {(summary.kind === 'dm' && blockStatus !== 'none') || iAmMuted ? (
           <View style={styles.blockedBar}>
@@ -792,12 +838,24 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: Spacing[4],
     paddingBottom: 4,
   },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[3],
+    paddingHorizontal: Spacing[4],
+    paddingBottom: 4,
+  },
   errorText: {
+    flexShrink: 1,
     fontFamily: Fonts.body,
     fontSize: 12.5,
     color: colors.accent.DEFAULT,
-    paddingHorizontal: Spacing[4],
-    paddingBottom: 4,
+  },
+  sendAgain: {
+    fontFamily: Fonts.bodyBold,
+    fontSize: 12.5,
+    color: colors.text,
+    textDecorationLine: 'underline',
   },
   replyBanner: {
     flexDirection: 'row',

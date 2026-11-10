@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Radius, Spacing, Typography, type ThemeColors } from '@/constants/theme';
 import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
@@ -13,6 +14,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchInbox, type InboxItem } from '@/lib/chat';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { fetchMyMembership, fetchRoomBySlug, type Room } from '@/lib/rooms';
 import {
   fetchMySubgroupParticipations,
@@ -82,6 +84,7 @@ export default function RoomChat() {
 
       setSubgroups(allSubgroups);
       setParticipations(await fetchMySubgroupParticipations(allSubgroups.map((s) => s.id), userId));
+      setError(null);
     };
     await loadChat().catch((e) => {
       setError(errorMessage(e, "Failed to load this Room's chat."));
@@ -89,6 +92,9 @@ export default function RoomChat() {
   }, [communityId, userId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  useOnReconnect(() => {
+    load();
+  });
 
   if (!session) return null;
 
@@ -112,6 +118,14 @@ export default function RoomChat() {
         setError(errorMessage(e, 'Could not join that sub-group.'));
       })
       .finally(() => setJoiningId(null));
+  }
+
+  if ((room === 'loading' || subgroups === null) && error) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top']}>
+        <LoadError message={error} onRetry={load} />
+      </SafeAreaView>
+    );
   }
 
   if (room === 'loading' || subgroups === null) {

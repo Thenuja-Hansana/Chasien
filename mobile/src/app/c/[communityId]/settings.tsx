@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import ReportSheet from '@/components/ReportSheet';
 import Skeleton from '@/components/Skeleton';
 import { Limits } from '@/constants/limits';
@@ -120,6 +121,7 @@ export default function CommunitySettings() {
         if (moderator) {
           setMembers(await fetchRoomMembers(r.id));
         }
+        setError(null);
       })
       .catch((e) => setError(errorMessage(e, 'Failed to load Room settings.')));
   }, [communityId, userId]);
@@ -127,6 +129,14 @@ export default function CommunitySettings() {
   useFocusEffect(useCallback(() => load(), [load]));
 
   if (!session) return null;
+
+  if ((room === 'loading' || (room && isModerator === null)) && error) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
+        <LoadError message={error} onRetry={load} />
+      </SafeAreaView>
+    );
+  }
 
   if (room === 'loading' || (room && isModerator === null)) {
     return (

@@ -105,6 +105,53 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+/**
+ * Every request this client makes gives up after a while (Phase 10 slice
+ * 9). React Native's network client has no timeout of its own, and
+ * neither does supabase-js, so on a connection that has died without
+ * saying so a request waited forever: a Send button spun with the text
+ * gone from the box and nothing said. Measured on the A14 against a
+ * server that accepts connections and never answers.
+ *
+ * 20 seconds for everything except a file upload, which gets 5 minutes:
+ * a 25 MB clip on a slow connection legitimately takes a while.
+ *
+ * A timeout rejects as an abort (`name: 'AbortError'`) whose message is
+ * "Network request timed out". The name matters: the database client
+ * retries a failed GET three times, with back-off, unless it was
+ * aborted, so a timeout reported as an ordinary network error would have
+ * kept a screen waiting about 87 seconds instead of 20. Auth treats it as
+ * worth retrying, not as a reason to sign anyone out. `errorMessage()`
+ * (lib/errors.ts) recognises it by the message.
+ */
+const REQUEST_TIMEOUT_MS = 20_000;
+const UPLOAD_TIMEOUT_MS = 5 * 60_000;
+
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const method = (init?.method ?? 'GET').toUpperCase();
+  // An upload is a POST or PUT of an object; signing URLs (also POST, under
+  // /object/sign/) is an ordinary request.
+  const isUpload = (method === 'POST' || method === 'PUT') && /\/storage\/v1\/object\/(?!sign\/)/.test(url);
+
+  const controller = new AbortController();
+  const caller = init?.signal;
+  if (caller?.aborted) controller.abort();
+  else caller?.addEventListener('abort', () => controller.abort());
+  const timer = setTimeout(() => controller.abort(), isUpload ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
+
+  return fetch(input, { ...init, signal: controller.signal })
+    .catch((e: unknown) => {
+      if (controller.signal.aborted && !caller?.aborted) {
+        const timedOut = new Error('Network request timed out');
+        timedOut.name = 'AbortError';
+        throw timedOut;
+      }
+      throw e;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: new LargeSecureStore(),
@@ -112,4 +159,5 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
+  global: { fetch: fetchWithTimeout },
 });

@@ -49,6 +49,7 @@ All app commands run from `mobile/`:
 npm install
 npm run lint        # expo lint (ESLint)
 npm run typecheck   # tsc --noEmit
+npm run check:compiler  # fails if the React Compiler skips a component
 npm start           # expo start
 npm run android     # expo run:android (native rebuild)
 npm run ios         # expo run:ios
@@ -74,7 +75,10 @@ Supabase stack (see `docs/running-locally.md`); phase write-ups in
 to compile.
 
 CI (`.github/workflows/mobile-ci.yml`) runs `npm ci && npm run lint && npm
-run typecheck` inside `mobile/` on any push/PR touching `mobile/**`.
+run typecheck && npm run check:compiler` inside `mobile/` on any push/PR
+touching `mobile/**`. `npm ci` refuses a lock file missing entries a
+current npm expects, so regenerate `package-lock.json` with a current npm
+after adding a dependency (decision-log, 2026-09-22 and 2026-11-09).
 
 Backend, from the repo root (needs Docker Desktop):
 
@@ -134,6 +138,12 @@ GitHub Actions → EAS builds.
   through `src/lib/crash-reporting.ts`, which does nothing until
   `EXPO_PUBLIC_SENTRY_DSN` is set. Read its file comment before letting a
   report carry anything new: a report leaves the Room-isolation guarantee.
+- Network failures: requests through `src/lib/supabase.ts` time out (20 s,
+  5 min for uploads), `errorMessage()` words them as "No connection", and
+  a screen that loads on open shows `LoadError` with Try again when its
+  first load fails and reloads on `useOnReconnect()` (`src/lib/network.tsx`).
+  New screens follow that pattern — see "Network failures" in
+  `docs/architecture.md`. No offline queue.
 - Multi-tab creation flows (Post/Clip/Poll/Event) lift shared state into one
   parent shell rather than owning it per-tab, so switching tabs mid-draft
   never loses input — see `create-post.tsx` and `src/components/create/`.

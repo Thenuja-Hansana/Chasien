@@ -7,6 +7,129 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-10 — Phase 10 slice 9: online-only, but honest about it
+
+Decided with Thenuja: no offline queue; sign-out is refused while
+offline; sign-out ends this phone's session only; requests time out at
+20 seconds, uploads at 5 minutes. App only, no migration.
+
+**Before** (control runs on the A14 against the local stack):
+- **No connection, cold start** (airplane mode, Supabase tunnel
+  removed): "Failed to load your Rooms." in red over loading
+  placeholders that never stopped. No retry, nothing saying the phone
+  was offline. When the connection came back the rooms reloaded, but
+  the red line stayed.
+- **A send on a connection that accepts and never answers** (the
+  tunnel pointed at a local server that does exactly that): the send
+  button spun for over a minute with the text gone from the box, and
+  nothing was said. There was no timeout anywhere.
+- **A send on a refused connection** failed at once with "Could not
+  send that message." The text came back; the reply target didn't.
+- From reading the code: a failed voice note or photo was lost, the
+  chat thread spun forever on a failed load without showing its error,
+  a reconnected chat never fetched what arrived while offline, and
+  sign-out left the phone's push token registered and ended the
+  account's sessions on every device.
+
+**What changed:**
+- **Timeouts** (`lib/supabase.ts`, the one client): 20 seconds, 5
+  minutes for an upload. A timeout rejects as an abort named
+  `AbortError` with the message "Network request timed out".
+- **Wording** (`isNetworkError()` in `lib/errors.ts`): `errorMessage()`
+  says "No connection. Check your internet and try again." for a
+  dropped, refused or timed-out request, on every screen.
+- **"Couldn't load this" + Try again** (`components/LoadError.tsx`) where
+  a first load failed, on Home, Explore, Search, Notifications, Chats,
+  a chat thread, a Room's feed and its chats, a post, a profile, its
+  friends and Rooms, and Room settings; the story and clips viewers get
+  the same in their own dark style. A stale error line clears after a
+  successful load.
+- **Reload on reconnect** (`useOnReconnect()` in `lib/network.tsx`, from
+  `expo-network`): open screens reload when the phone gets its
+  connection back, because Realtime reconnects by itself but replays
+  nothing. A chat thread fetches only its messages, so it stays on
+  screen. Not on Room settings (it would overwrite unsaved edits), the
+  story and clips viewers (they'd jump back to the start), or a
+  profile that had loaded fine.
+- **The "No connection" strip** (`components/OfflineBanner.tsx`), under
+  the status bar while the phone has no internet.
+- **Nothing made is lost**: a failed text send restores the reply
+  target too; a failed photo or voice note is kept and the error line
+  offers Send again.
+- **Sign-out** (`unregisterThisDevice()` in `lib/push.ts`, then
+  `signOut({ scope: 'local' })` in `lib/auth-context.tsx`): the token
+  registration now remembers this phone's token; sign-out deletes that
+  row while there's still a session to do it with, using the DELETE
+  RLS already allows on your own rows, and refuses with "You're
+  offline. Connect to sign out, so this phone stops getting this
+  account's notifications." when it can't. Any other failure doesn't
+  keep anyone signed in.
+
+**Found while checking, and fixed before it shipped:**
+- **The global `fetch` is Expo's own** (SDK 57), not React Native's. A
+  refused connection says "fetch failed: java.net.ConnectException:
+  …", not "Network request failed", so the first version of
+  `isNetworkError()` missed every real failure. Seen by logging the
+  error Home actually got.
+- **The database client retries a failed GET three times** with
+  back-off, unless it was aborted. A timeout reported as an ordinary
+  network error would have kept a screen waiting about 87 seconds;
+  named `AbortError`, it's one try.
+- **A floating "No connection" pill covered headers** (the chat
+  thread's title on the A14). It became a strip the app makes room for.
+  The first strip left an empty band, because a screen's
+  `SafeAreaView` keeps its full status-bar padding wherever it sits; so
+  the app moves down by the strip's height only and the strip is drawn
+  in the gap that opens under the status bar.
+- **A chat whose first load had failed didn't recover on reconnect**,
+  because reconnecting only refetched messages. Now it runs the whole
+  load.
+- **The React Compiler skipped the chat thread** after the send
+  helpers were split out, because two handlers called functions
+  defined below them. Reordered; 119 components compile, none skipped.
+
+**Verified on the A14**, against the local stack:
+- Offline cold start: the strip, and Home's "Couldn't load this" with
+  "No connection…" and Try again.
+- A message inserted while the phone was offline (Wi-Fi off, tunnel
+  removed) appeared in the open chat within seconds of reconnecting,
+  without reopening it, while the thread stayed on screen.
+- A send while the gateway container was paused (open connections
+  hang, the way a dead network does): still spinning at 6 seconds, and
+  by 26 "No connection…" with the text and "Replying to Robin" both
+  back. The request never reached the database.
+- A voice note sent while the gateway was stopped: the error with Send
+  again; once it was back, Send again delivered the same recording.
+- Cold start with every new connection hanging: "No connection…" after
+  62 seconds, still signed in, and Try again loaded Home once the
+  connection was back. The 62 is the access token having expired:
+  Supabase's auth retries the refresh for about 30 seconds before the
+  20-second data request starts. Not worked around.
+- Sign-out with the gateway stopped: refused with the offline sentence;
+  the token row and both sessions untouched. Online: the login screen,
+  this phone's token row gone, and one of the account's two sessions
+  ended, the other kept.
+- Signing in again (as a seed account, since the test account's
+  password isn't known) registered this phone's token at once, to the
+  new account.
+- Typecheck, lint and the compiler check pass. The test messages and
+  the voice note's file were deleted; the data is at the baseline.
+
+**Known and left:**
+- A request can time out after the server has already acted on it, so
+  sending again could make a duplicate. Inherent to a timeout.
+- The strip reports the phone's internet, not the backend. Locally the
+  dev client reaches Supabase over USB, so with the phone's Wi-Fi off
+  the strip shows while everything works.
+- Phase 9's screens (blocked, moderation, admin, account deletion) are
+  slice 10's.
+
+**What would make us revisit it:** an offline queue, if testers lose
+work to it in practice; an Expo SDK that changes `fetch` again (check
+`isNetworkError()` against what a refused request really says).
+
+---
+
 ## 2026-11-09 — Phase 10 slice 8: error screens, and Sentry switched off until there's a key
 
 Decided with Thenuja: build crash reporting now with no Sentry account,

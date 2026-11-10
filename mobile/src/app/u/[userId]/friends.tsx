@@ -6,11 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
 import Icon from '@/components/Icon';
+import LoadError from '@/components/LoadError';
 import Skeleton from '@/components/Skeleton';
 import { Fonts, MaxContentWidth, Spacing, type ThemeColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { fetchFriends, type Friend } from '@/lib/friends';
 
 export default function Friends() {
@@ -21,14 +23,18 @@ export default function Friends() {
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!userId) return;
-      fetchFriends(userId)
-        .then(setFriends)
-        .catch((e) => setError(errorMessage(e, 'Failed to load friends.')));
-    }, [userId]),
-  );
+  const load = useCallback(() => {
+    if (!userId) return;
+    fetchFriends(userId)
+      .then((rows) => {
+        setFriends(rows);
+        setError(null);
+      })
+      .catch((e) => setError(errorMessage(e, 'Failed to load friends.')));
+  }, [userId]);
+
+  useFocusEffect(load);
+  useOnReconnect(load);
 
   if (!session) return null;
 
@@ -50,9 +56,11 @@ export default function Friends() {
         <View style={styles.headerSide} />
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && friends !== null && <Text style={styles.error}>{error}</Text>}
 
-      {friends === null ? (
+      {friends === null && error ? (
+        <LoadError message={error} onRetry={load} />
+      ) : friends === null ? (
         <View style={styles.list}>
           {[120, 90, 140].map((width, i) => (
             <View key={i} style={styles.row}>

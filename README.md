@@ -8,7 +8,7 @@ algorithmic feed anywhere in the app; everything is reverse-chronological.
 backend are real and verified against a local Supabase stack and a
 physical Android phone; nothing is hosted yet, so nobody outside this
 machine can use it. `docs/roadmap.md` has the current phase and what's
-left before a public build.
+left before the first build testers can install.
 
 ## Repo layout
 

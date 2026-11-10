@@ -54,6 +54,8 @@ export default function Clips() {
   const [error, setError] = useState<string | null>(null);
   // Owner/admin/mod of the clips' Room: offered "Remove" on other people's comments.
   const [canModerate, setCanModerate] = useState(false);
+  // Bumped by Try again to run the load below once more.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!userId || !postId) return;
@@ -86,7 +88,7 @@ export default function Clips() {
     return () => {
       cancelled = true;
     };
-  }, [postId, userId]);
+  }, [postId, userId, attempt]);
 
   // setActiveIndex is stable, so this callback is too — FlatList requires
   // onViewableItemsChanged not to change identity between renders.
@@ -135,7 +137,23 @@ export default function Clips() {
       <NavigationBar style="light" />
       {clips === null ? (
         <View style={styles.centered}>
-          {error ? <Text style={styles.message}>{error}</Text> : <ActivityIndicator color="#ffffff" />}
+          {error ? (
+            <>
+              <Text style={styles.message}>{error}</Text>
+              <Pressable
+                onPress={() => {
+                  setError(null);
+                  setAttempt((n) => n + 1);
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+              >
+                <Text style={styles.retry}>Try again</Text>
+              </Pressable>
+            </>
+          ) : (
+            <ActivityIndicator color="#ffffff" />
+          )}
         </View>
       ) : (
         <FlatList
@@ -320,6 +338,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#ffffff',
     textAlign: 'center',
+  },
+  retry: {
+    marginTop: Spacing[3],
+    fontFamily: Fonts.bodyBold,
+    fontSize: 15,
+    color: '#ffffff',
+    textDecorationLine: 'underline',
   },
   slide: {
     width: '100%',

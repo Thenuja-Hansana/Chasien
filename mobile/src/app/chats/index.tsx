@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
+import LoadError from '@/components/LoadError';
 import Icon from '@/components/Icon';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
@@ -15,6 +16,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { fetchInbox, subscribeToInbox, type InboxItem } from '@/lib/chat';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { signMessageMediaUrls } from '@/lib/messageMedia';
 import { signRoomMediaUrls } from '@/lib/roomMedia';
@@ -193,11 +195,17 @@ export default function Chats() {
   const load = useCallback(() => {
     if (!userId) return;
     fetchInbox(userId)
-      .then(setItems)
+      .then((rows) => {
+        setItems(rows);
+        setError(null);
+      })
       .catch((e) => setError(errorMessage(e, 'Failed to load chats.')));
   }, [userId]);
 
   useFocusEffect(useCallback(() => load(), [load]));
+  // Realtime reconnects by itself but doesn't replay what arrived while
+  // the phone was offline.
+  useOnReconnect(load);
 
   useEffect(() => {
     if (!userId) return;
@@ -247,9 +255,11 @@ export default function Chats() {
         </View>
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && items !== null && <Text style={styles.error}>{error}</Text>}
 
-      {items === null ? (
+      {items === null && error ? (
+        <LoadError message={error} onRetry={load} />
+      ) : items === null ? (
         <View style={styles.list}>
           {[128, 96, 150, 110, 134, 100].map((nameWidth, i) => (
             <View key={i} style={styles.row}>

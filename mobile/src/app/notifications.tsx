@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Avatar from '@/components/Avatar';
 import EmptyState from '@/components/EmptyState';
+import LoadError from '@/components/LoadError';
 import Icon from '@/components/Icon';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
@@ -14,6 +15,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import {
   deleteNotification,
   fetchNotifications,
@@ -102,9 +104,14 @@ export default function Notifications() {
   const load = useCallback(() => {
     if (!userId) return;
     fetchNotifications(userId, roomId)
-      .then(setItems)
+      .then((rows) => {
+        setItems(rows);
+        setError(null);
+      })
       .catch((e) => setError(errorMessage(e, 'Failed to load activity.')));
   }, [userId, roomId]);
+
+  useOnReconnect(load);
 
   useFocusEffect(
     useCallback(() => {
@@ -189,9 +196,11 @@ export default function Notifications() {
         <Text style={styles.heading}>{roomId ? `${roomName ?? 'Room'} Activity` : 'Activity'}</Text>
       </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && items !== null && <Text style={styles.error}>{error}</Text>}
 
-      {items === null ? (
+      {items === null && error ? (
+        <LoadError message={error} onRetry={load} />
+      ) : items === null ? (
         <View style={styles.list}>
           {[0, 1, 2, 3, 4].map((i) => (
             <View key={i} style={styles.row}>

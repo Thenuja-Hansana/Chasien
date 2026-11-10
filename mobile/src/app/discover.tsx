@@ -7,6 +7,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import EmptyState from '@/components/EmptyState';
+import LoadError from '@/components/LoadError';
 import Icon from '@/components/Icon';
 import Skeleton from '@/components/Skeleton';
 import TabBar from '@/components/TabBar';
@@ -15,6 +16,7 @@ import { useTabBarClearance } from '@/hooks/use-tab-bar-clearance';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { errorMessage } from '@/lib/errors';
+import { useOnReconnect } from '@/lib/network';
 import { cachedImageSource } from '@/lib/mediaUtils';
 import { cacheJoinedRoom } from '@/lib/room-cache';
 import {
@@ -60,6 +62,7 @@ export default function Discover() {
       .then(([roomList, membershipMap]) => {
         setRooms(roomList);
         setMemberships(membershipMap);
+        setError(null);
         const paths = roomList.flatMap((r) => [r.avatar_url, r.banner_url]).filter((p): p is string => !!p);
         if (paths.length > 0) signRoomMediaUrls(paths).then(setMediaUrls).catch(() => {});
         // Same reasoning as index.tsx's Home list — a row here for a Room
@@ -74,6 +77,7 @@ export default function Discover() {
   }, [session]);
 
   useFocusEffect(useCallback(() => load(), [load]));
+  useOnReconnect(load);
 
   if (!session) return null;
 
@@ -163,9 +167,11 @@ export default function Discover() {
             </Pressable>
           </View>
 
-          {error && <Text style={styles.error}>{error}</Text>}
+          {error && rooms !== null && <Text style={styles.error}>{error}</Text>}
 
-          {rooms === null ? (
+          {rooms === null && error ? (
+            <LoadError message={error} onRetry={load} />
+          ) : rooms === null ? (
             <View style={styles.listWrap}>
               <Skeleton width={120} height={17} radius={6} />
               <View style={[styles.list, { marginTop: Spacing[4] }]}>

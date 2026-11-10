@@ -262,6 +262,25 @@ database and about 1 GB of files. Nothing was limited before.
   at sensible values in `config.toml` for the local stack and to be set
   on the hosted one in Phase 11, with the decision on a signup captcha.
 
+## Network failures (current rule)
+
+Online-only, with no offline queue, but never silent (Phase 10 slice
+9, decision-log 2026-11-10):
+- Every request through `lib/supabase.ts` times out: 20 seconds, 5
+  minutes for an upload.
+- `errorMessage()` (`lib/errors.ts`) words a dropped, refused or
+  timed-out request as "No connection. Check your internet and try
+  again."
+- A screen that loads on open shows `LoadError` (Try again) when its
+  first load failed, clears its error after a successful load, and
+  reloads on `useOnReconnect()` (`lib/network.tsx`) unless reloading
+  would cost someone their place or unsaved edits. A new screen follows
+  the same pattern.
+- The "No connection" strip (`components/OfflineBanner.tsx`) follows
+  the phone's own internet state, from `expo-network`.
+- Sign-out removes this phone's push token first and ends this phone's
+  session only.
+
 ## System bars (current rule)
 
 - **The status bar and Android's navigation bar follow the app's own
@@ -333,7 +352,6 @@ code is the "Database write access" section above, and the client keeps
 no state library (screens call `mobile/src/lib/` directly and hold their
 own state). What's still open, each tracked in `roadmap.md`:
 
-- Offline behaviour for the feed and chat (Phase 10).
 - Which SMTP provider sends real Auth emails (Phase 11).
 - Which release signing key to keep for good, and how it relates to Play
   App Signing (APK Beta Phase).
