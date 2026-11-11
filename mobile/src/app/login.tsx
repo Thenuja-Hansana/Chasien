@@ -20,11 +20,13 @@ import { useFocusHighlight } from '@/hooks/use-focus-highlight';
 import { useTheme } from '@/hooks/use-theme';
 import { clearAccountDeletedNotice, wasAccountJustDeleted } from '@/lib/account';
 import { useAuth } from '@/lib/auth-context';
+import { codeErrorMessage, isTooSoon, resendSignupCode } from '@/lib/auth-codes';
 
-// Apple/Google buttons and "Forgot password?" from the mock are left out
-// here deliberately — neither has a backend yet (no OAuth app registered,
-// no reset-password screen/deep link wired), and a button that does
-// nothing on tap is worse than not showing it. See docs/phase/phase02.md.
+// Apple/Google buttons from the mock are left out here deliberately — no
+// OAuth app is registered, and a button that does nothing on tap is worse
+// than not showing it. See docs/phase/phase02.md. "Forgot password?" came
+// in Phase 11 slice 2, with a reset code rather than a link
+// (app/forgot-password.tsx).
 export default function Login() {
   const { signIn } = useAuth();
   const colors = useTheme();
@@ -34,6 +36,8 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  /** Signing in failed because the account isn't confirmed yet: offer the code screen. */
+  const [unconfirmed, setUnconfirmed] = useState(false);
   // Set by lib/account.ts's deleteMyAccount() just before it signs out.
   const [accountDeleted] = useState(wasAccountJustDeleted);
   const emailFocus = useFocusHighlight();
@@ -42,13 +46,15 @@ export default function Login() {
   async function handleSubmit() {
     if (submitting) return;
     setError(null);
+    setUnconfirmed(false);
     setSubmitting(true);
     const { error: signInError } = await signIn(email.trim(), password);
     setSubmitting(false);
     if (signInError) {
+      setUnconfirmed(signInError.message === 'Email not confirmed');
       setError(
         signInError.message === 'Email not confirmed'
-          ? 'Check your email for a confirmation link before logging in.'
+          ? "This account isn't confirmed yet. We'll send a code to your email."
           : // An app admin's suspension is a Supabase Auth ban (the moderate
             // Edge Function); without this, a suspended person would only
             // ever see "Wrong email or password" and never know to appeal.
@@ -60,6 +66,27 @@ export default function Login() {
     }
     clearAccountDeletedNotice();
     router.replace('/');
+  }
+
+  // The code sent at signup may be long expired, so a fresh one goes out
+  // before the code screen opens, and a failure to send it is shown here
+  // rather than on a screen that says a code was sent. "Too soon" means one
+  // is already on its way, which is fine.
+  async function handleEnterCode() {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await resendSignupCode(email.trim());
+    } catch (e) {
+      if (!isTooSoon(e)) {
+        setError(codeErrorMessage(e, 'Could not send a code. Try again.'));
+        setSubmitting(false);
+        return;
+      }
+    }
+    setSubmitting(false);
+    router.push({ pathname: '/confirm-email', params: { email: email.trim() } });
   }
 
   return (
@@ -114,16 +141,40 @@ export default function Login() {
 
             {error && <Text style={styles.error}>{error}</Text>}
 
+            {unconfirmed ? (
+              <Pressable
+                style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                onPress={handleEnterCode}
+                disabled={submitting}
+                accessibilityRole="button"
+              >
+                {submitting ? (
+                  <ActivityIndicator color={colors.bg} />
+                ) : (
+                  <Text style={styles.submitButtonText}>Enter your code</Text>
+                )}
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                onPress={handleSubmit}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={colors.bg} />
+                ) : (
+                  <Text style={styles.submitButtonText}>Log in</Text>
+                )}
+              </Pressable>
+            )}
+
             <Pressable
-              style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
+              style={styles.forgot}
+              onPress={() => router.push({ pathname: '/forgot-password', params: { email: email.trim() } })}
+              hitSlop={8}
+              accessibilityRole="button"
             >
-              {submitting ? (
-                <ActivityIndicator color={colors.bg} />
-              ) : (
-                <Text style={styles.submitButtonText}>Log in</Text>
-              )}
+              <Text style={styles.forgotText}>Forgot password?</Text>
             </Pressable>
           </View>
 
@@ -242,6 +293,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontFamily: Fonts?.heading,
     fontSize: 16,
     color: colors.bg,
+  },
+  forgot: {
+    alignSelf: 'center',
+    marginTop: Spacing[4],
+  },
+  forgotText: {
+    fontFamily: Fonts?.bodySemibold,
+    fontSize: 14,
+    color: colors.text,
   },
   footer: {
     flexDirection: 'row',

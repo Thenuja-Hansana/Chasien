@@ -7,6 +7,72 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-10 — Phase 11 slice 2: signing up and resetting a password by code
+
+App and Auth config, no migration. Thenuja chose codes over links when
+Phase 11 was planned (entry below).
+
+**Before** (control run): the confirmation email held one link, to
+`http://127.0.0.1:54321/auth/v1/verify?…&redirect_to=http://127.0.0.1:3000`.
+On a tester's phone that goes nowhere, and hosted it would have needed a
+redirect URL pointing at a web page or a deep link. There was no password
+reset at all: someone who forgot their password was locked out for good.
+
+**What changed:**
+- **The emails** (`supabase/templates/confirmation.html`, `recovery.html`,
+  wired in `config.toml`) carry the 6-digit code (`{{ .Token }}`) and no
+  link. `otp_length` and `otp_expiry` were already 6 and an hour.
+- **`app/confirm-email.tsx`**, "Check your email": the code, Confirm, a
+  "Send a new code" countdown, "Wrong address? Sign up again". Signup goes
+  straight there. A correct code signs the person in, and it's an auth
+  route in AuthGate, so being signed in on it is what takes them to Home.
+- **Login:** an account never confirmed gets "This account isn't
+  confirmed yet" and an "Enter your code" button, which sends a fresh code
+  first (the one from signup may be long expired) and shows a failure to
+  send right there, rather than on a screen that says a code went out.
+  "Too soon" means one is already on its way and is let through.
+- **`app/forgot-password.tsx`**, "Forgot password?" on login: the email,
+  then the code with the new password. A correct code signs the person
+  in, so the screen is a *public* route in AuthGate, or the new session
+  would bounce it to Home before the password was set. If setting the
+  password fails after the code was accepted, the code isn't asked for
+  again. The screen says "if there's an account for …", because Auth
+  answers the same either way and the screen shouldn't tell anyone more.
+- **`lib/auth-codes.ts`**: the four Auth calls, and sentences for the
+  error codes they fail with (Auth's own "Token has expired or is invalid"
+  isn't written for people).
+- **`supabase/tests/phase11_slice2_live.js`**, 14 checks over the real
+  API, now part of `run.js --live` (537 checks).
+
+**Along the way:** the first version of the code screen sent the fresh
+code from an effect on arrival. Lint refuses setting state in an effect,
+and the obvious workaround, an `eslint-disable`, makes the React Compiler
+skip the whole screen. So the countdown simply starts running on arrival,
+and the resend moved to login, which knows whether it worked.
+
+**Verified:**
+- Over the API (and saved as the suite above): both emails hold a code and
+  no link; logging in unconfirmed is refused; a wrong code gets
+  `otp_expired`; the right one signs in; no code works twice; a reset
+  request for an unknown address answers like a real one; after a reset
+  the old password is refused and the new one works.
+- On the A14: signing up a new account landed on the code screen; a wrong
+  code gave "That code is wrong or has expired"; the real code from
+  Mailpit opened Home. "Forgot password?" sent a code; code and new
+  password opened Home, and afterwards the old password was refused and
+  the new one accepted. Logging in to an account never confirmed showed
+  "Enter your code", which sent a fresh code that confirmed it. A cut-off
+  placeholder on the reset screen was shortened.
+- The test accounts and emails were deleted, the phone signed back in as
+  mara; the data is at the baseline. Typecheck, lint and the compiler
+  check (122 components) pass.
+
+**Left:** the email-address-change email is still a link; the app has no
+screen for changing an address. Hosted, these templates and Auth settings
+go up with `supabase config push` (slice 3).
+
+---
+
 ## 2026-11-10 — Phase 11 planned, and slice 1: a backend that doesn't know which stack it's on
 
 **Decided with Thenuja for Phase 11:**

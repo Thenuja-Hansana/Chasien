@@ -34,6 +34,7 @@ const LIVE_SCRIPTS = [
   ['phase10_slice2_live.js', 'signup, Edge Functions, storage'],
   ['phase10_slice3_live.js', 'DMs and sub-groups'],
   ['phase10_slice6_live.js', 'email, upload and rate limits'],
+  ['phase11_slice2_live.js', 'signup and reset by code'],
 ];
 
 const node = (file) => spawnSync(process.execPath, [path.join(HERE, file)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });

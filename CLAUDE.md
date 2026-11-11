@@ -138,6 +138,9 @@ GitHub Actions → EAS builds.
   through `src/lib/crash-reporting.ts`, which does nothing until
   `EXPO_PUBLIC_SENTRY_DSN` is set. Read its file comment before letting a
   report carry anything new: a report leaves the Room-isolation guarantee.
+- Auth emails carry a 6-digit code, never a link (`src/lib/auth-codes.ts`,
+  `app/confirm-email.tsx`, `app/forgot-password.tsx`, templates in
+  `supabase/templates/`), so nothing depends on a redirect URL.
 - Network failures: requests through `src/lib/supabase.ts` time out (20 s,
   5 min for uploads), `errorMessage()` words them as "No connection", and
   a screen that loads on open shows `LoadError` with Try again when its

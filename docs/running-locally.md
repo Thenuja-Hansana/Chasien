@@ -140,7 +140,9 @@ npx expo start --web
 ```
 
 Signup confirmation emails don't go to a real inbox locally — check
-**http://localhost:54324** (Mailpit) for the confirmation link instead.
+**http://localhost:54324** (Mailpit) for the 6-digit code instead (since
+2026-11-10 the confirmation and password-reset emails carry a code, not a
+link).
 
 ## Known gotchas (all hit and diagnosed on 2026-09-01)
 

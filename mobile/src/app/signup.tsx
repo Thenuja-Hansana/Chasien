@@ -1,4 +1,4 @@
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -38,7 +38,6 @@ export default function SignUp() {
   const [agree, setAgree] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [checkEmail, setCheckEmail] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const emailFocus = useFocusHighlight();
   const handleFocus = useFocusHighlight();
@@ -86,29 +85,16 @@ export default function SignUp() {
       return;
     }
 
-    // enable_confirmations = true locally (supabase/config.toml) means
-    // signUp() succeeds without a session until the email is confirmed —
-    // this is the expected path, not an error.
+    // enable_confirmations = true (supabase/config.toml) means signUp()
+    // succeeds without a session until the email is confirmed — the
+    // expected path, not an error. The email carries a 6-digit code, typed
+    // into the next screen (Phase 11 slice 2).
     if (!data.session) {
-      setCheckEmail(true);
+      router.replace({ pathname: '/confirm-email', params: { email: email.trim() } });
       return;
     }
 
     router.replace('/');
-  }
-
-  if (checkEmail) {
-    return (
-      <SafeAreaView style={[styles.container, styles.centered]} edges={['top', 'bottom']}>
-        <Text style={styles.heading}>Check your email</Text>
-        <Text style={styles.tagline}>
-          We sent a confirmation link to {email}. Open it to activate your account, then log in.
-        </Text>
-        <Link href="/login" style={styles.footerLink}>
-          Back to login
-        </Link>
-      </SafeAreaView>
-    );
   }
 
   return (
@@ -258,15 +244,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-  },
-  centered: {
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing[6],
-    gap: Spacing[3],
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
   },
   content: {
     flex: 1,

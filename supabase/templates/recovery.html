@@ -1,0 +1,9 @@
+<!-- Password reset (Phase 11 slice 2): a 6-digit code typed into the app's
+     "Forgot password?" screen, not a link. config.toml points
+     [auth.email.template.recovery] here. -->
+<div style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 420px; margin: 0 auto; padding: 32px 24px; color: #171310;">
+  <p style="font-size: 20px; font-weight: 700; margin: 0 0 16px;">chasien</p>
+  <p style="font-size: 15px; line-height: 22px; margin: 0 0 20px;">Here's your code to choose a new password. Type it into the app.</p>
+  <p style="font-size: 32px; font-weight: 700; letter-spacing: 8px; margin: 0 0 20px;">{{ .Token }}</p>
+  <p style="font-size: 13px; line-height: 19px; color: #6b6560; margin: 0;">It works for an hour. If you didn't ask to reset your password, you can ignore this email; your password hasn't changed.</p>
+</div>

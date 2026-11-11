@@ -1216,9 +1216,18 @@ down in `docs/hosting.md` as it's done.
       serves as written. Two new checks in the security re-check refuse an
       address or key written into a trigger or a job (523 checks).
       `docs/hosting.md` is the runbook. See decision-log, 2026-11-10
-- [ ] Slice 2 — auth by code: signup confirmation and password reset
+- [x] Slice 2 — auth by code: signup confirmation and password reset
       with a 6-digit code typed into the app, the email templates in the
-      repo. Local, tested with Mailpit
+      repo. Local, tested with Mailpit. **Done 2026-11-10**, app and
+      `config.toml`, no migration. The emails (`supabase/templates/`)
+      carry a 6-digit code and no link; signup goes straight to a "Check
+      your email" code screen (`app/confirm-email.tsx`), login offers
+      "Enter your code" for an account never confirmed and "Forgot
+      password?" (`app/forgot-password.tsx`: email, then code plus new
+      password). Before, the confirmation email linked to `127.0.0.1`,
+      and there was no way back from a forgotten password. Checked over
+      the API (`phase11_slice2_live.js`, 14 checks; 537 in all) and on the
+      A14. See decision-log, 2026-11-10
 - [ ] Slice 3 — the hosted project (needs Thenuja: the account, the
       project, `npx supabase login`): link, push the migrations, deploy
       the functions, Vault, Auth settings, an app admin
@@ -1253,10 +1262,13 @@ items it closes.
         attached: `verify-room-email` is public through `config.toml`
         (2026-10-02), and the hosted gateway has to agree. Check the page
         it returns renders as a page, not as HTML source
-- [ ] Point Auth's site URL and redirect URLs at something real.
+- [x] Point Auth's site URL and redirect URLs at something real.
       Confirmation and password-reset links default to `localhost`,
       which on a stranger's phone goes nowhere. Use a deep link back into
-      the app, or a small web page
+      the app, or a small web page *(2026-11-10, slice 2: neither email
+      has a link any more, so there's nothing for them to point at. The
+      one Auth email still sent as a link is an email-address change,
+      which the app has no screen for)*
 - [ ] Wire up a real SMTP provider for Auth emails via
       `supabase/config.toml`'s `[auth.email.smtp]` block (already sketched
       in a comment there since Phase 2, unused until now). Supabase's
@@ -1286,8 +1298,9 @@ items it closes.
         links exist. **Done 2026-11-09:** the email comes from
         `noreply@chasien.com` (`SMTP_FROM` overrides it), and the preview
         reads `chasien.com/c/<slug>`. See decision-log, 2026-11-09
-- [ ] Password-reset flow: a "Forgot password?" link, the email, and a
-      screen that the reset link deep-links into. *Moved here from Phase
+- [x] Password-reset flow: a "Forgot password?" link, the email, and a
+      screen that the reset link deep-links into. *(2026-11-10, slice 2,
+      with a code instead of a deep link)* *Moved here from Phase
       12 on 2026-09-21.* It was cut from Phase 2 because it needs a
       deep-link screen (decision-log 2026-08-13), not because it depends
       on Apple. Real users without it who forget their password are

@@ -273,6 +273,15 @@ by `seed.sql` locally and by hand on the hosted project
 job; the security re-check refuses it. A push trigger sends only the
 row's id.
 
+## Auth emails (current rule)
+
+Since 2026-11-10 (Phase 11 slice 2): signup confirmation and password
+reset send a 6-digit code, typed into the app (`app/confirm-email.tsx`,
+`app/forgot-password.tsx`, `lib/auth-codes.ts`), never a link, so nothing
+depends on a redirect URL or a web page. The templates are
+`supabase/templates/`, wired in `config.toml`; the hosted project gets
+them with `supabase config push`.
+
 ## Network failures (current rule)
 
 Online-only, with no offline queue, but never silent (Phase 10 slice

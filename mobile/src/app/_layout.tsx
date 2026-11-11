@@ -32,10 +32,13 @@ SplashScreen.preventAutoHideAsync();
 // module has loaded" — call once, not per render.
 configureForegroundNotificationHandler();
 
-const AUTH_ROUTES = ['/login', '/signup'];
+// Signed out only. A correct code on /confirm-email signs the person in,
+// and being on an auth route with a session is what sends them on to Home.
+const AUTH_ROUTES = ['/login', '/signup', '/confirm-email'];
 // Readable signed in or out: signup links to the guidelines people accept
-// before an account exists.
-const PUBLIC_ROUTES = ['/guidelines'];
+// before an account exists, and /forgot-password's code signs the person in
+// before the new password is set, so it mustn't be bounced to Home midway.
+const PUBLIC_ROUTES = ['/guidelines', '/forgot-password'];
 
 // The only route guard the app needs at this phase: no session -> only
 // the auth screens are reachable; a session -> the auth screens bounce

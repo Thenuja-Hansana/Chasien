@@ -11,7 +11,7 @@ node supabase/tests/run.js           # every SQL suite; leaves nothing behind
 node supabase/tests/run.js --live    # those, then the scripts that use the real API, then cleans up
 ```
 
-That is the full security re-check: 523 checks, a few minutes with
+That is the full security re-check: 537 checks, a few minutes with
 `--live`. **Run it after any change to a
 migration, a policy, a grant or an Edge Function.** It prints one line per
 suite, the failures in full, and the row counts before and after, which
@@ -52,6 +52,7 @@ were run once and never kept.
 | `security_invariants.js` | Prints SQL. 23 rules read from the catalogs (above). | Nothing: it only reads. |
 | `security_isolation_suite.js` | Prints SQL. 156 checks: the isolation matrix (above). | Nothing: it rolls back. |
 | `security_edge_live.js` | 54 checks over the real API: no key, the anon key with no session, and 34 actions by someone who may not. | A Room `zz-edge`. |
+| `phase11_slice2_live.js` | 14 checks over the real Auth API: the confirmation and reset emails carry a 6-digit code and no link, logging in unconfirmed is refused, a wrong code is refused and a right one signs in, no code works twice, a reset request answers the same for an unknown address, and after a reset only the new password works. | Nothing: it deletes its account; run.js clears the emails. |
 | `phase10_slice6_live.js` | 16 checks over the real API: the verification email's limit and that it leaves the earlier link working, a 26 MB video refused, 50 real uploads and the 51st refused in any bucket, the allowance back after deleting, the 11th comment in a minute as the app sees it. | A Room `zz-live6`, one Mailpit email, rate-limit counters. Clean up afterwards. |
 
 `sqlsuite.js` is the shared builder for the SQL suites: `as('tobi')` to
