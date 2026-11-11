@@ -5,84 +5,118 @@ Supabase project, step by step, so it can be done again from nothing.
 Written in Phase 11 (roadmap) and filled in as each step is done for real;
 a step marked *(not yet done)* hasn't been run against the hosted project.
 
-**One project, production** (decided 2026-11-10): no separate staging
-project. Testers are in Sri Lanka and India, so the region is **Mumbai
-(`ap-south-1`)**. Free plan.
+**The project:** `Chasien`, ref **`bihcnyzempsvwhklegkl`**
+(`https://bihcnyzempsvwhklegkl.supabase.co`), **Singapore
+(`ap-southeast-1`)**, free plan, created 2026-11-11. One project,
+production, no staging (decided 2026-11-10). Mumbai was the plan for
+testers in Sri Lanka and India; Singapore is the next closest and is what
+was created. A first attempt landed in Sydney by mistake and was deleted
+while still empty: a project's region can't be changed afterwards.
 
-**Never run `seed.sql` on it.** Every seeded account's password is
-`password123`, and the anon key that reaches them ships inside the app.
-`supabase db push` doesn't run seeds unless told to (`--include-seed`);
-don't tell it to.
+**Never run `seed.sql` on it,** or the security re-check (`run.js`, which
+creates and deletes test accounts). Every seeded account's password is
+`password123`. `db push` lists the seeds it would run (`"seeds": []`);
+it runs none unless told to (`--include-seed`).
 
 ---
 
 ## What only Thenuja can do
 
-These need an account or a password, so they're done by hand:
-1. Create the supabase.com account and the project (name `chasien`,
-   region Mumbai, free plan). Keep the **database password** somewhere
-   safe; it's asked for when linking and can't be shown again.
-2. Run `npx supabase login` once on this laptop. It opens a browser and
-   stores an access token locally.
-3. Later: the Resend account, and the DNS records at Namecheap (step 7).
+1. Create the supabase.com account and the project. Keep the **database
+   password** in a password manager; it can't be shown again.
+2. Log the CLI in, from a real terminal (see "The CLI" below).
+3. Put the database password in `supabase/.env.hosted` (gitignored) as
+   `SUPABASE_DB_PASSWORD=…`.
+4. Anything in the dashboard the CLI can't do (step 2's Database Webhooks,
+   step 5's rate limits).
+5. The Resend account, and the DNS records at Namecheap (step 7).
 
-Secrets never go in the chat or in git. They go in
-`supabase/.env.hosted` (gitignored), and the CLI reads them from there.
+Secrets never go in the chat or in git. They go in `supabase/.env.hosted`
+and are read from there into the CLI's environment without being printed.
 
----
+## The CLI (3.1.0), and what's different about it
 
-## 1. Link this repo to the project *(not yet done)*
+- **Agent detection.** When it sees an AI agent's environment (`AI_AGENT`,
+  `CLAUDECODE`), it answers in JSON and never prompts. `supabase login`
+  then refuses to run at all. Logging in worked from a terminal window with
+  those variables cleared and `--agent no`. Its login is stored for this
+  Windows account, so later commands from anywhere use it.
+- **`--remote`.** Commands that can target either stack (`db push`,
+  `db query`, `functions deploy`, …) default to the **local** one. Hosted
+  needs `--remote`.
+- **Writes to production need consent.** In agent mode a hosted write is
+  refused unless run with `--yes`, and the CLI asks the agent to ask the
+  person first. Read-only SQL runs with `db query --remote --read-only`,
+  which needs no consent (and isn't allowed to decrypt Vault).
+- **`link` overwrites the local version pins** in `supabase/.temp/` with
+  the hosted project's (running-locally.md, gotcha 9): back them up
+  before linking and put them back after, or the next local
+  `supabase start` downloads new images.
+
+## 1. Link this repo to the project — done 2026-11-11
 
 ```bash
-npx supabase link --project-ref <project-ref>
+export SUPABASE_DB_PASSWORD="$(grep '^SUPABASE_DB_PASSWORD=' supabase/.env.hosted | cut -d= -f2-)"
+npx supabase link --project-ref bihcnyzempsvwhklegkl --yes
 ```
-The project ref is the `xxxx` in `https://xxxx.supabase.co`. It asks for
-the database password. Linking writes only to `supabase/.temp/`, which is
-gitignored.
+Writes only to `supabase/.temp/` (gitignored). The hosted stack isn't the
+local one: Postgres 17.11.0.018 (local 17.6.1.165), PostgREST **v14.18**
+(local v16.1, so older), Storage v1.89.13 (local v1.70.3), Auth v2.197.0
+(local v2.196.0). Everything was tested against the local versions.
 
-## 2. Push the migrations *(not yet done)*
+## 2. Push the migrations — done 2026-11-11
 
 ```bash
-npx supabase db push
+npx supabase db push --remote --dry-run   # lists the 90, and "seeds": []
+npx supabase db push --remote --yes
 ```
-All 90 migrations, in order, exactly as they ran locally. If one fails,
-stop and read why before changing anything: a hosted project isn't
-guaranteed to behave like `supabase start`. Two to watch:
-- `20260815002723` and `20260902100200` created their triggers with
-  `supabase_functions.http_request` (Database Webhooks). If that schema
-  doesn't exist on the hosted project, enable Database Webhooks in the
-  dashboard (Integrations) and push again. `20261110100000` replaces both
-  triggers, so nothing depends on it afterwards.
-- `pg_cron` and `pg_net` are created by the migrations themselves.
+It stopped at `20260815002723`: `schema "supabase_functions" does not
+exist`. That schema comes with **Database Webhooks**, which a new project
+doesn't have: dashboard → Integrations → Database Webhooks → **Install
+integration**. The push then resumed from that migration; all 90 applied.
+(`20261110100000` replaces the two triggers that needed it.)
 
-## 3. Tell the database where its Edge Functions are *(not yet done)*
+Checked read-only afterwards: 90 migrations recorded; both push triggers
+call `push_row_to_edge_function`; the four `cron` jobs active; the five
+buckets private with their limits (25 MB posts and stories, 10 MB chat,
+5 MB pictures); no users.
+
+`npx supabase db advisors --remote`: no errors. Warnings: the 24 + 1
+SECURITY DEFINER functions granted on purpose (Phase 10 slice 2); 51
+`auth_rls_initplan` and 4 `multiple_permissive_policies` performance
+hints; and 4 SECURITY INVOKER functions without a fixed `search_path`
+(`set_updated_at`, `validate_polymorphic_content_target`,
+`enforce_single_level_comment_replies`, `vote_poll`), a small follow-up.
+
+## 3. Tell the database where its Edge Functions are — done 2026-11-11
 
 The push triggers and the cleanup jobs read two Vault secrets
-(`20261110100000`). In the dashboard's SQL editor:
-
+(`20261110100000`): the functions' URL and the anon key.
 ```sql
-select vault.create_secret('https://<project-ref>.supabase.co/functions/v1', 'edge_functions_url');
-select vault.create_secret('<the anon key>', 'edge_functions_key');
+select vault.create_secret('https://bihcnyzempsvwhklegkl.supabase.co/functions/v1', 'edge_functions_url');
+select vault.create_secret('<the legacy anon key>', 'edge_functions_key');
 ```
-Use the project's **anon key in its JWT form** (`eyJ…`, under API keys →
-legacy keys). The newer `sb_publishable_…` keys aren't JWTs, and the
-gateway's JWT check in front of the functions would refuse them; confirm
-this when the project exists. Until both are set, pushes and cleanups
-only log a warning (`call_edge_function`).
+Run with `db query --remote --yes`, the key fetched with
+`npx supabase projects api-keys` straight into the statement. Use the
+**legacy anon key** (a JWT, `eyJ…`): the project also has
+`sb_publishable_…`/`sb_secret_…` keys, which aren't JWTs, and the
+functions' gateway check wants one.
 
-## 4. Deploy the Edge Functions and their secrets *(not yet done)*
+## 4. Deploy the Edge Functions and their secrets — done 2026-11-11 (mail secrets: step 7)
 
 ```bash
-npx supabase functions deploy
-npx supabase secrets set --env-file supabase/.env.hosted
+npx supabase functions deploy --use-api --remote --yes
+npx supabase secrets set PUBLIC_FUNCTIONS_URL=https://bihcnyzempsvwhklegkl.supabase.co/functions/v1 --remote --yes
 ```
-`deploy` reads `config.toml`, so `verify-room-email` goes up without a
-JWT check, like locally, and the other eight keep it. The project supplies
-`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` itself.
-`supabase/.env.hosted` holds the rest:
+`--use-api` bundles on Supabase's side, so Docker isn't needed. All nine
+are active; only `verify-room-email` skips the JWT check, from
+`config.toml`. Checked over HTTPS: a call to `room-membership` with no key
+gets 401, and a bad verification link gets `text/plain` "This
+verification link is invalid." The project supplies `SUPABASE_URL` and
+its keys itself.
 
+The mail secrets come with Resend (step 7):
 ```
-PUBLIC_FUNCTIONS_URL=https://<project-ref>.supabase.co/functions/v1
 SMTP_HOST=smtp.resend.com
 SMTP_PORT=465
 SMTP_SECURE=true
@@ -91,30 +125,41 @@ SMTP_PASS=<Resend API key>
 SMTP_FROM=Chasien <noreply@chasien.com>
 ```
 Port **465** with `SMTP_SECURE=true`: hosted Edge Functions can't open
-port 587 (or 25). `PUBLIC_FUNCTIONS_URL` is what domain-verification
-emails link to; without it they'd link to `127.0.0.1`.
+587 (or 25). Set them by name, not with `--env-file supabase/.env.hosted`,
+which also holds `SUPABASE_DB_PASSWORD` (names starting `SUPABASE_` are
+the platform's own).
 
-Then open one real emailed verification link from a mail app with no key
-attached. `verify-room-email` answers in plain text, because the hosted
-default domain serves an Edge Function's HTML as text.
+## 5. Auth settings *(not yet done: needs step 7 first)*
 
-## 5. Auth settings *(not yet done)*
+```bash
+npx supabase config diff            # preview
+npx supabase config push --yes
+```
+`config.toml` holds the local settings; its `[remotes.production]` block
+(`project_id = "bihcnyzempsvwhklegkl"`) replaces the ones that must
+differ on production. Without it, a push would have set a 1-second gap
+between emails, a `127.0.0.1` site URL, the local pooler's sizes, and
+vector storage. With it, the diff is: the 6-digit code (the project
+started at **8**, which the app's code screen doesn't take), the email
+subjects and templates, the site URL `https://chasien.com`, and MFA and
+SMS confirmations off (the app uses neither).
 
-Auth is configured from `config.toml` (`npx supabase config push`), with
-the hosted project's differences in its `[remotes]` block once it exists:
-- **Codes, not links** (decided 2026-11-10): signup confirmation and
-  password reset send a 6-digit code typed into the app, so there's no
-  redirect URL to host and no web page to keep up.
-- **Rate limits:** start from the local values. 30 sign-ins or sign-ups
-  per 5 minutes per IP, 30 code verifications, 150 refreshes. The emails
-  per hour follow the SMTP provider's allowance.
-- **Minimum password length** stays 6 (decided 2026-11-10).
-- **No signup captcha** for the private beta; revisit before the public
-  Play release.
+**Refused on 2026-11-11:** "Email template modification is not available
+for free tier projects using the default email provider." Custom
+templates need a custom SMTP provider on the free plan, and the push is
+all-or-nothing, so nothing in it applied. It goes after step 7. Until
+then, a signup would get Supabase's default email (a link, and an
+8-digit code), so nobody signs up yet.
 
-## 6. Make yourself an app admin *(not yet done)*
+Not managed by `config push`, set in the dashboard (Authentication → Rate
+Limits) once SMTP is in place: 30 sign-ins or sign-ups per 5 minutes per
+IP, 30 code verifications, 150 refreshes, and emails per hour within
+Resend's allowance. Minimum password length stays 6; no signup captcha
+for the private beta.
 
-Sign up in the app against the hosted project, then in the SQL editor:
+## 6. Make yourself an app admin *(not yet done: after step 5)*
+
+Sign up in the app against the hosted project, then:
 ```sql
 insert into app_admins (user_id) select id from auth.users where email = '<your email>';
 ```
@@ -123,14 +168,14 @@ Without this, reports reach nobody.
 ## 7. Real email: Resend *(not yet done)*
 
 Resend's free plan: 3,000 emails a month, 100 a day (checked
-2026-10-08; check again at sign-up). Both kinds of email (Auth's codes and
-the domain verification) draw on the same allowance.
+2026-10-08; check again at sign-up). Auth's codes and the domain
+verification draw on the same allowance.
 1. Create the account, add the domain `chasien.com`.
 2. Resend shows DNS records (a DKIM `TXT`, an SPF `TXT` and an `MX` on a
    sending subdomain). Add each in Namecheap → Domain List → `chasien.com`
    → Advanced DNS, exactly as shown, then verify in Resend.
-3. Create an API key; put it in `supabase/.env.hosted` as `SMTP_PASS`,
-   and in the Auth SMTP settings.
+3. Create an API key. It goes in `supabase/.env.hosted`, then into the
+   Auth SMTP settings and the function secrets (step 4).
 
 ## 8. Point the app at it *(not yet done)*
 
@@ -153,8 +198,9 @@ internet, with no `adb reverse` for `54321`.
 
 - The security re-check, `node supabase/tests/run.js --live`, runs against
   the local stack only; it seeds and deletes test accounts. Don't point it
-  at production.
-- Against the hosted project: Phase 2's auth checks by hand (sign up →
+  at production. On production, use read-only queries and
+  `supabase db advisors --remote`.
+- Against the hosted project, by hand: Phase 2's auth checks (sign up →
   code → log in → refresh → log out → a tampered token refused), a push
-  arriving on the phone, a domain-verification email arriving and its
-  link joining, and the cleanup jobs' runs in `cron.job_run_details`.
+  arriving on the phone, a domain-verification email arriving and its link
+  joining, and the cleanup jobs' runs in `cron.job_run_details`.

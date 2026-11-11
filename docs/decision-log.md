@@ -7,6 +7,72 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-11 — Phase 11 slice 3: the hosted project, most of the way
+
+No code apart from `config.toml`. Every step, as run, is in
+`docs/hosting.md`; this records the decisions and surprises.
+
+**The project:** `bihcnyzempsvwhklegkl`, **Singapore**
+(`ap-southeast-1`), free plan. Mumbai was the plan; Singapore is what was
+created, and it's the next closest for Sri Lanka and India. A first
+project landed in Sydney by mistake and was deleted while empty, since a
+region can't be changed later.
+
+**Done, and checked:**
+- Linked. The hosted stack isn't the local one: Postgres 17.11 (local
+  17.6), PostgREST **v14.18** (local v16.1, older), Storage v1.89 (local
+  v1.70), Auth v2.197. Worth remembering when slice 5 runs the app
+  against it.
+- **All 90 migrations pushed, no seed.** The push stopped at
+  `20260815002723`: the two old push-webhook migrations use
+  `supabase_functions`, which only exists once the **Database Webhooks**
+  integration is installed. Installed from the dashboard, then the push
+  resumed. Afterwards, read-only: 90 recorded, both push triggers on
+  `push_row_to_edge_function`, four cron jobs active, five private buckets
+  with their limits, no users.
+- `supabase db advisors --remote`: no errors. Four SECURITY INVOKER
+  functions have no fixed `search_path` (the definer-only rule in the
+  security re-check doesn't cover them); a small follow-up migration.
+- **Vault** holds the functions' URL and the **legacy anon key** (a JWT):
+  the project also has `sb_publishable_` keys, which the functions'
+  gateway JWT check wouldn't take.
+- **The nine Edge Functions deployed** (`--use-api`, no Docker), only
+  `verify-room-email` without the JWT check. Over HTTPS: no key gets 401;
+  a bad verification link gets the plain-text answer.
+- `PUBLIC_FUNCTIONS_URL` set.
+
+**Refused: the Auth settings.** `config push` was rejected: "Email
+template modification is not available for free tier projects using the
+default email provider." On the free plan, custom templates need a custom
+SMTP provider, and the push is all-or-nothing, so even the code length
+stayed at the project's default of **8** (the app's code screen takes 6).
+So slice 4 (Resend) comes before the Auth push, and nobody signs up on
+the hosted project until then: they'd get Supabase's default link email.
+
+**Found on the way, about the CLI (3.1.0):**
+- It detects an AI agent from the environment (`AI_AGENT`, `CLAUDECODE`)
+  and then never prompts; `supabase login` refuses outright. It worked
+  from a terminal window opened with those cleared and `--agent no`.
+- Hosted commands need `--remote` (the default is the local stack), and a
+  hosted write from an agent needs `--yes`, which the CLI says to ask the
+  person for first. Thenuja approved the writes in this slice. Read-only
+  SQL uses `--read-only` and needs no consent.
+- `link` rewrote the local image pins in `supabase/.temp/` to the hosted
+  versions; they were backed up and restored, or the next local start
+  would have downloaded new images.
+- A `config push` of the file as it stood would have copied local-only
+  values to production (a 1-second gap between emails, a `127.0.0.1` site
+  URL, the local pooler's sizes, vector storage on). `config.toml` now
+  has a `[remotes.production]` block that keeps production's values; the
+  diff before the (refused) push showed only the intended changes.
+- One check printed four characters of the new-style secret key after its
+  `sb_secret_` prefix. Not enough to use; noted in case of rotation.
+
+**Next:** slice 4, Resend (Thenuja: the account, the DNS records at
+Namecheap), then the Auth push and the app admin.
+
+---
+
 ## 2026-11-10 — Phase 11 slice 2: signing up and resetting a password by code
 
 App and Auth config, no migration. Thenuja chose codes over links when

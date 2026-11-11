@@ -1230,7 +1230,16 @@ down in `docs/hosting.md` as it's done.
       A14. See decision-log, 2026-11-10
 - [ ] Slice 3 — the hosted project (needs Thenuja: the account, the
       project, `npx supabase login`): link, push the migrations, deploy
-      the functions, Vault, Auth settings, an app admin
+      the functions, Vault, Auth settings, an app admin. **Mostly done
+      2026-11-11:** project `bihcnyzempsvwhklegkl` in **Singapore**
+      (`ap-southeast-1`), linked; all 90 migrations pushed (after
+      installing the Database Webhooks integration, which the two old
+      push migrations need); Vault set; the nine functions deployed with
+      `PUBLIC_FUNCTIONS_URL`. Checked read-only and over HTTPS. **Left:**
+      the Auth settings push was refused, because the free plan allows
+      custom email templates only with a custom SMTP provider, so it
+      follows slice 4; then the app admin. See `docs/hosting.md` and
+      decision-log, 2026-11-11
 - [ ] Slice 4 — real email through Resend (needs Thenuja: the account,
       DNS records at Namecheap)
 - [ ] Slice 5 — the app on the hosted backend, Phase 2's auth checks
@@ -1240,22 +1249,24 @@ down in `docs/hosting.md` as it's done.
 The checklist below is the original list; each slice says which of its
 items it closes.
 
-- [ ] Create a hosted Supabase project (supabase.com, free tier —
-      still $0, this isn't the money-spending phase)
-- [ ] Run every migration (and `grants.sql`, `seed.sql` if wanted for a
+- [x] Create a hosted Supabase project (supabase.com, free tier —
+      still $0, this isn't the money-spending phase) *(2026-11-11,
+      `bihcnyzempsvwhklegkl`, Singapore)*
+- [x] Run every migration (and `grants.sql`, `seed.sql` if wanted for a
       staging project) against the hosted project, exactly as they ran
       locally — a hosted Postgres/Auth instance isn't guaranteed to
       behave identically to `supabase start` just because it passed
       locally. **Never run `seed.sql` on the project real users reach.**
       Every seeded account's password is `password123`, and the anon key
-      that reaches those accounts ships inside the app
+      that reaches those accounts ships inside the app *(2026-11-11: all
+      90, no seed)*
 - [ ] Deploy every Edge Function in `supabase/functions/` (nine since
       Phase 10 slice 6 added `cleanup-unused-media`) and set their secrets on the hosted
       project. Confirm the Database Webhooks (chat and activity push) and
       the `pg_cron` story-cleanup job exist there too, and recreate any
       that were configured outside the migrations. Then add your own
       account to `app_admins` there, or reports reach nobody
-  - [ ] Set `PUBLIC_FUNCTIONS_URL` for `request-room-verification`. It
+  - [x] Set `PUBLIC_FUNCTIONS_URL` for `request-room-verification`. It
         defaults to `http://127.0.0.1:54321/functions/v1`, so without it
         every domain-verification email links to the reader's own phone.
         Then open a real emailed link from a mail app with no key

@@ -440,3 +440,32 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# ---------------------------------------------------------------------------
+# The hosted project (Phase 11, docs/hosting.md). `supabase config push` sends
+# this file's settings to the linked project, with this block's values in
+# place of the ones above, which are for the local stack. Without it, a push
+# would have copied local-only values to production: a 1-second gap between
+# emails, a 127.0.0.1 site URL, the local pooler's sizes, and vector storage
+# switched on. Auth's rate limits aren't managed by `config push`; they're set
+# in the dashboard (hosting.md, step 5).
+[remotes.production]
+project_id = "bihcnyzempsvwhklegkl"
+
+[remotes.production.auth]
+# Codes, not links, so nothing redirects here; it's only the default Auth
+# falls back to.
+site_url = "https://chasien.com"
+additional_redirect_urls = []
+
+[remotes.production.auth.email]
+# Supabase's own default: at most one email a minute to the same address.
+max_frequency = "1m0s"
+
+[remotes.production.db.pooler]
+# Supabase's tuning for the project's size, not the local pooler's.
+default_pool_size = 15
+max_client_conn = 200
+
+[remotes.production.storage.vector]
+enabled = false
