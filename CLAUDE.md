@@ -235,6 +235,9 @@ Expo Go.
 
 ## Docs — read before non-trivial changes
 
+- `SETUP.md` (repo root) — from a fresh clone to a running app, plus every
+  file kept out of git and where it comes from. Update it when a setup
+  step, a required tool, or a gitignored file changes.
 - `docs/roadmap.md` — ordered, checkable phase-by-phase task list; **check
   the current phase here before starting new feature work**, and update it
   when a checklist item is completed.

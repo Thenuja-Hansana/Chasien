@@ -4,11 +4,14 @@ A hybrid of Telegram and Instagram: users join **Rooms** — self-contained
 social spaces, each with its own posts, stories, and group chat. No
 algorithmic feed anywhere in the app; everything is reverse-chronological.
 
-**Status:** built and running locally, not yet released. The app and
-backend are real and verified against a local Supabase stack and a
-physical Android phone; nothing is hosted yet, so nobody outside this
-machine can use it. `docs/roadmap.md` has the current phase and what's
-left before the first build testers can install.
+**Status:** not yet released. The app and backend are verified against a
+local Supabase stack and a physical Android phone. Since November 2026
+the backend also runs on a hosted Supabase project, sending real email
+from `chasien.com` (Phase 11). No build for testers exists yet.
+`docs/roadmap.md` has the current phase and what's left before the first
+build testers can install.
+
+**Setting it up from a fresh clone:** start with [`SETUP.md`](SETUP.md).
 
 ## Repo layout
 
@@ -65,6 +68,8 @@ a cross-Room data leak.
 
 ## Where to start reading
 
+0. `SETUP.md` — from `git clone` to the app running on a phone, and
+   what isn't in git.
 1. `docs/roadmap.md` — the task list, in order, with the current phase
    marked.
 2. `docs/architecture.md` — what the system is made of right now.
