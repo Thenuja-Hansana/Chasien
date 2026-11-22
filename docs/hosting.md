@@ -27,8 +27,8 @@ it runs none unless told to (`--include-seed`).
 2. Log the CLI in, from a real terminal (see "The CLI" below).
 3. Put the database password in `supabase/.env.hosted` (gitignored) as
    `SUPABASE_DB_PASSWORD=…`.
-4. Anything in the dashboard the CLI can't do (step 2's Database Webhooks,
-   step 5's rate limits).
+4. Anything in the dashboard the CLI can't do (step 2's Database
+   Webhooks).
 5. The Resend account, and the DNS records at Namecheap (step 7).
 
 Secrets never go in the chat or in git. They go in `supabase/.env.hosted`
@@ -102,7 +102,7 @@ Run with `db query --remote --yes`, the key fetched with
 `sb_publishable_…`/`sb_secret_…` keys, which aren't JWTs, and the
 functions' gateway check wants one.
 
-## 4. Deploy the Edge Functions and their secrets — done 2026-11-11 (mail secrets: step 7)
+## 4. Deploy the Edge Functions and their secrets — done 2026-11-11
 
 ```bash
 npx supabase functions deploy --use-api --remote --yes
@@ -115,7 +115,8 @@ gets 401, and a bad verification link gets `text/plain` "This
 verification link is invalid." The project supplies `SUPABASE_URL` and
 its keys itself.
 
-The mail secrets come with Resend (step 7):
+The mail secrets, set 2026-11-11 once Resend had verified the domain
+(step 7):
 ```
 SMTP_HOST=smtp.resend.com
 SMTP_PORT=465
@@ -125,13 +126,16 @@ SMTP_PASS=<Resend API key>
 SMTP_FROM=Chasien <noreply@chasien.com>
 ```
 Port **465** with `SMTP_SECURE=true`: hosted Edge Functions can't open
-587 (or 25). Set them by name, not with `--env-file supabase/.env.hosted`,
-which also holds `SUPABASE_DB_PASSWORD` (names starting `SUPABASE_` are
-the platform's own).
+587 (or 25). Not with `--env-file supabase/.env.hosted`, which also holds
+`SUPABASE_DB_PASSWORD` (names starting `SUPABASE_` are the platform's
+own): they went in through a temporary file outside the repo holding only
+these six, deleted straight after (`secrets set --env-file <it> --remote
+--yes`). Not yet checked with a real domain-verification email.
 
-## 5. Auth settings *(not yet done: needs step 7 first)*
+## 5. Auth settings — done 2026-11-11
 
 ```bash
+export RESEND_API_KEY="$(grep '^RESEND_API_KEY=' supabase/.env.hosted | cut -d= -f2-)"
 npx supabase config diff            # preview
 npx supabase config push --yes
 ```
@@ -139,51 +143,95 @@ npx supabase config push --yes
 (`project_id = "bihcnyzempsvwhklegkl"`) replaces the ones that must
 differ on production. Without it, a push would have set a 1-second gap
 between emails, a `127.0.0.1` site URL, the local pooler's sizes, and
-vector storage. With it, the diff is: the 6-digit code (the project
-started at **8**, which the app's code screen doesn't take), the email
-subjects and templates, the site URL `https://chasien.com`, and MFA and
-SMS confirmations off (the app uses neither).
+vector storage. It also holds production's SMTP (Resend:
+`smtp.resend.com`, port 465, user `resend`, password
+`env(RESEND_API_KEY)`, from "Chasien \<noreply@chasien.com\>") and its
+emails-per-hour limit. The local stack keeps Mailpit.
 
-**Refused on 2026-11-11:** "Email template modification is not available
-for free tier projects using the default email provider." Custom
-templates need a custom SMTP provider on the free plan, and the push is
-all-or-nothing, so nothing in it applied. It goes after step 7. Until
-then, a signup would get Supabase's default email (a link, and an
-8-digit code), so nobody signs up yet.
+The first push, before step 7, was refused: "Email template modification
+is not available for free tier projects using the default email
+provider." On the free plan custom templates need custom SMTP, and the
+push is all-or-nothing.
 
-Not managed by `config push`, set in the dashboard (Authentication → Rate
-Limits) once SMTP is in place: 30 sign-ins or sign-ups per 5 minutes per
-IP, 30 code verifications, 150 refreshes, and emails per hour within
-Resend's allowance. Minimum password length stays 6; no signup captcha
-for the private beta.
+With SMTP in, the diff was 15 changes: SMTP on; the 6-digit code (the
+project started at 8, which the app's code screen doesn't take); the
+subjects and the code templates; the site URL `https://chasien.com`;
+MFA and SMS confirmations off (the app uses neither); no password rules
+beyond the length; 30 emails an hour. After the push, `config diff`
+showed no differences. (The SMTP password is masked by the API, so the
+diff can't compare it.)
 
-## 6. Make yourself an app admin *(not yet done: after step 5)*
+**Rate limits go up with `config push` too** (this runbook used to say
+they were dashboard-only). Production already had the local values: 30
+sign-ins or sign-ups per 5 minutes per IP, 30 code checks, 150 refreshes.
+The emails-per-hour limit only counts once custom SMTP is on, and would
+have gone up as the local file's **2**, so
+`[remotes.production.auth.rate_limit]` sets 30. Resend caps a day at 100
+by itself.
 
-Sign up in the app against the hosted project, then:
+Minimum password length stays 6; no signup captcha for the private beta.
+
+## 6. Make yourself an app admin *(not yet done)*
+
+Sign up in the app against the hosted project (done 2026-11-11: handle
+`thenu`, the only account), then:
 ```sql
 insert into app_admins (user_id) select id from auth.users where email = '<your email>';
 ```
 Without this, reports reach nobody.
 
-## 7. Real email: Resend *(not yet done)*
+## 7. Real email: Resend — done 2026-11-11
 
 Resend's free plan: 3,000 emails a month, 100 a day (checked
-2026-10-08; check again at sign-up). Auth's codes and the domain
-verification draw on the same allowance.
-1. Create the account, add the domain `chasien.com`.
-2. Resend shows DNS records (a DKIM `TXT`, an SPF `TXT` and an `MX` on a
-   sending subdomain). Add each in Namecheap → Domain List → `chasien.com`
-   → Advanced DNS, exactly as shown, then verify in Resend.
-3. Create an API key. It goes in `supabase/.env.hosted`, then into the
-   Auth SMTP settings and the function secrets (step 4).
+2026-10-08). Auth's codes and the domain verification draw on the same
+allowance.
+1. The account, and the domain `chasien.com`, region Tokyo
+   (`ap-northeast-1`).
+2. The DNS records, in Namecheap → Domain List → `chasien.com` → Advanced
+   DNS. Resend's page showed these, not the TXT SPF and MX this runbook
+   expected from older docs; copy whatever its page shows:
 
-## 8. Point the app at it *(not yet done)*
+   | Type | Host | Value |
+   |---|---|---|
+   | TXT | `resend._domainkey` | the DKIM key (`p=MIGf…`) |
+   | CNAME | `send` | `send.forge.rmta.net` |
+   | CNAME | `rsend` | `rsend-apne1.forge.rmta.net` |
+   | TXT | `_dmarc` | `v=DMARC1; p=none;` |
+
+   Keep the records already there: Namecheap's mail-forwarding MX at the
+   root, the GitHub Pages `A` records and the `www` CNAME. **Turn "Enable
+   receiving" off** in Resend. It wants an MX at the root, which would
+   take mail for chasien.com away from Namecheap's forwarding, and
+   nothing in Chasien receives email.
+
+   Check each row against Resend's before saving: on the first try the
+   DMARC value went into the DKIM row, and `rsend` was typed `resend`.
+   Namecheap's own nameserver (`dns1.registrar-servers.com`) has them at
+   once; public resolvers kept a cached "not found" for a while (Google's
+   cleared first), and Resend verified within about half an hour.
+3. An API key, into `supabase/.env.hosted` as `RESEND_API_KEY=…`. It's
+   the SMTP password for Auth (step 5) and for the function (step 4).
+
+Checked: Thenuja signed up on the hosted project with a real Gmail
+address; "Your Chasien code" arrived from `noreply@chasien.com`, and the
+code confirmed the account.
+
+`noreply@chasien.com` has no inbox. A reply goes to Namecheap's
+forwarding, and arrives only if a forwarding rule (`noreply`, or a
+catch-all) sends it on, for example to `info.chasien@gmail.com`.
+
+## 8. Point the app at it — a dev session, 2026-11-11 (builds: APK Beta Phase)
 
 The app reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
-For builds they're EAS environment variables (APK Beta Phase); for a dev
-session against the hosted project, a gitignored `mobile/.env` with the
-hosted values. Then the phone talks to the hosted project over the real
-internet, with no `adb reverse` for `54321`.
+For builds they're EAS environment variables (APK Beta Phase). For a dev
+session against the hosted project: `mobile/.env.development.local`
+(gitignored by `.env*.local`) with the hosted URL and the **legacy anon
+key**. Expo loads it ahead of `.env.local` (Metro prints `env: load
+.env.development.local .env.local`), so deleting it goes back to the
+local stack. Start Metro with `--clear` after switching: the values are
+baked into the bundle. The phone then reaches the project over its own
+internet, so it needs Wi-Fi or data; `adb reverse` is only for Metro's
+8081.
 
 ## 9. Keeping it alive, and backed up *(not yet done)*
 

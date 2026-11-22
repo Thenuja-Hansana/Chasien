@@ -116,7 +116,7 @@ export default function Discover() {
   return (
     <View style={styles.container}>
       <View style={styles.flex}>
-      <ScrollView>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* No top-edge SafeAreaView on the screen itself — that padded
             the status-bar area with the screen's own (white, in Light
             mode) background before this banner ever got a chance to
@@ -376,7 +376,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   flex: {
     flex: 1,
   },
+  // `body` grows to the bottom of the screen even when there's little in
+  // it. Otherwise a short page (no Rooms yet, an empty category, a failed
+  // load) ends partway down and `container`'s banner color shows below it,
+  // behind the FAB and the tab bar: a light band in Dark mode, a dark one
+  // in Light. A long list always ran past the bottom, so it hid this until
+  // the hosted project started out with no Rooms (2026-11-11).
+  scrollContent: {
+    flexGrow: 1,
+  },
   body: {
+    flexGrow: 1,
     backgroundColor: colors.bg,
   },
   filterRow: {

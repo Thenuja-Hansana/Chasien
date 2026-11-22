@@ -280,7 +280,10 @@ reset send a 6-digit code, typed into the app (`app/confirm-email.tsx`,
 `app/forgot-password.tsx`, `lib/auth-codes.ts`), never a link, so nothing
 depends on a redirect URL or a web page. The templates are
 `supabase/templates/`, wired in `config.toml`; the hosted project gets
-them with `supabase config push`.
+them with `supabase config push`. Hosted, they go out through Resend
+(custom SMTP, port 465, from `noreply@chasien.com`, set in
+`[remotes.production]`), as does the domain-verification email; locally,
+both land in Mailpit (since 2026-11-11, Phase 11 slice 4).
 
 ## Network failures (current rule)
 

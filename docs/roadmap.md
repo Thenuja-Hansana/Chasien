@@ -1235,13 +1235,22 @@ down in `docs/hosting.md` as it's done.
       (`ap-southeast-1`), linked; all 90 migrations pushed (after
       installing the Database Webhooks integration, which the two old
       push migrations need); Vault set; the nine functions deployed with
-      `PUBLIC_FUNCTIONS_URL`. Checked read-only and over HTTPS. **Left:**
-      the Auth settings push was refused, because the free plan allows
-      custom email templates only with a custom SMTP provider, so it
-      follows slice 4; then the app admin. See `docs/hosting.md` and
+      `PUBLIC_FUNCTIONS_URL`. Checked read-only and over HTTPS. The Auth
+      settings push was refused at first (the free plan allows custom
+      email templates only with a custom SMTP provider) and went through
+      in slice 4. **Left:** the app admin. See `docs/hosting.md` and
       decision-log, 2026-11-11
-- [ ] Slice 4 — real email through Resend (needs Thenuja: the account,
-      DNS records at Namecheap)
+- [x] Slice 4 — real email through Resend (needs Thenuja: the account,
+      DNS records at Namecheap). **Done 2026-11-11**, `config.toml` only:
+      `chasien.com` verified in Resend (DKIM, two sending CNAMEs, DMARC;
+      receiving off, so Namecheap's mail forwarding stays); Auth sends
+      through Resend from `noreply@chasien.com` with the code templates
+      and 6-digit codes; `request-room-verification` has the same SMTP
+      settings. The diff caught production about to get the local limit
+      of 2 emails an hour; it has 30. Thenuja signed up from the A14
+      against the hosted project with a real address, and the code
+      arrived and worked. Not yet sent for real: a domain-verification
+      email (slice 5). See decision-log, 2026-11-11
 - [ ] Slice 5 — the app on the hosted backend, Phase 2's auth checks
       against it, and the exit condition; then the keep-alive and backups
 - [ ] Slice 6 — R2, decided once hosting works
@@ -1266,6 +1275,8 @@ items it closes.
       the `pg_cron` story-cleanup job exist there too, and recreate any
       that were configured outside the migrations. Then add your own
       account to `app_admins` there, or reports reach nobody
+      *(2026-11-11: all nine deployed, the push triggers and the jobs
+      confirmed, the secrets set; the app admin is left)*
   - [x] Set `PUBLIC_FUNCTIONS_URL` for `request-room-verification`. It
         defaults to `http://127.0.0.1:54321/functions/v1`, so without it
         every domain-verification email links to the reader's own phone.
@@ -1280,7 +1291,7 @@ items it closes.
       has a link any more, so there's nothing for them to point at. The
       one Auth email still sent as a link is an email-address change,
       which the app has no screen for)*
-- [ ] Wire up a real SMTP provider for Auth emails via
+- [x] Wire up a real SMTP provider for Auth emails via
       `supabase/config.toml`'s `[auth.email.smtp]` block (already sketched
       in a comment there since Phase 2, unused until now). Supabase's
       built-in sender is rate-limited too hard for real signups.
@@ -1292,7 +1303,9 @@ items it closes.
       only from a domain it has verified (confirm when setting up), and
       `chasien.com` is already owned (Namecheap), so that part is DNS
       records, not a purchase. Recommended: Resend. Not yet chosen.)*
-      *(2026-11-10: Resend chosen.)*
+      *(2026-11-10: Resend chosen.)* *(2026-11-11, slice 4: set up, in
+      `[remotes.production]` rather than `[auth.email.smtp]`, so the local
+      stack keeps Mailpit. A real signup's code arrived.)*
   - [ ] The same provider for `request-room-verification` (added
         2026-10-08). It sends its own email, outside Auth's settings,
         and reads only `SMTP_HOST` and `SMTP_PORT`: no username or
@@ -1300,7 +1313,9 @@ items it closes.
         provider. Both kinds of email draw on one daily allowance.
         *(2026-11-10, slice 1: it can log in now, over TLS on port 465,
         which hosted Edge Functions allow where 587 isn't. Configuring
-        it is slice 4.)*
+        it is slice 4.)* *(2026-11-11: its six `SMTP_*` secrets are set
+        on the hosted project. A real domain-verification email hasn't
+        been sent yet: a slice 5 check.)*
   - [x] `chasien.app` is in two places and isn't ours (added
         2026-10-08). `request-room-verification` sends from
         `noreply@chasien.app`; it has to be an address at `chasien.com`.
@@ -1316,15 +1331,20 @@ items it closes.
       deep-link screen (decision-log 2026-08-13), not because it depends
       on Apple. Real users without it who forget their password are
       locked out for good
-- [ ] Carry Phase 10's limits over to the hosted project (added
+- [x] Carry Phase 10's limits over to the hosted project (added
       2026-10-02):
       - **Auth rate limits** live in the project's settings, not in a
         migration. Start from the local values in `config.toml`: 30
         sign-ins or sign-ups per 5 minutes per IP, 30 token
         verifications, 150 refreshes. The emails-per-hour limit depends
-        on the SMTP provider chosen below.
+        on the SMTP provider chosen below. *(2026-11-11: they aren't
+        dashboard-only after all: `config push` carries them. Production
+        already had 30/30/150; its emails-per-hour is 30, set in
+        `[remotes.production]`, where the local file's 2 would have gone
+        up otherwise.)*
       - **A signup captcha** (hCaptcha or Turnstile, both free): decide
-        whether the beta needs one. It adds a step to signup.
+        whether the beta needs one. It adds a step to signup. *(Decided
+        2026-11-10: not for the private beta.)*
       - **The cleanup jobs' URLs.** `cleanup-unused-media-daily` and the
         story cleanup call `http://edge_runtime:8081/...` with the local
         key. Both need the hosted project's function URL and a real
@@ -1334,7 +1354,8 @@ items it closes.
         on the hosted project is step 3 of `docs/hosting.md`.)*
       - **The file-size limits** are rows in `storage.buckets`, set by
         migrations, and come across with them. Check them once in the
-        dashboard: 25 MB for posts and stories.
+        dashboard: 25 MB for posts and stories. *(2026-11-11: checked
+        read-only after the push.)*
 - [ ] Plan for the free tier's realities:
       - A free project **pauses after about a week without activity**,
         and the app stops working until it's unpaused.

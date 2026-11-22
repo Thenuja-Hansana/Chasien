@@ -447,8 +447,8 @@ enabled = true
 # place of the ones above, which are for the local stack. Without it, a push
 # would have copied local-only values to production: a 1-second gap between
 # emails, a 127.0.0.1 site URL, the local pooler's sizes, and vector storage
-# switched on. Auth's rate limits aren't managed by `config push`; they're set
-# in the dashboard (hosting.md, step 5).
+# switched on. Auth's rate limits are pushed too (the emails-per-hour one
+# only once custom SMTP is on).
 [remotes.production]
 project_id = "bihcnyzempsvwhklegkl"
 
@@ -461,6 +461,28 @@ additional_redirect_urls = []
 [remotes.production.auth.email]
 # Supabase's own default: at most one email a minute to the same address.
 max_frequency = "1m0s"
+
+# Phase 11 slice 4: Auth's emails go out through Resend, from the verified
+# domain chasien.com. Port 465 (TLS from the start). The password is the
+# Resend API key, read from the environment at push time: hosting.md, step 5,
+# exports it from the gitignored supabase/.env.hosted. On the free plan, a
+# custom SMTP provider is also what allows the code templates above.
+[remotes.production.auth.email.smtp]
+enabled = true
+host = "smtp.resend.com"
+port = 465
+user = "resend"
+pass = "env(RESEND_API_KEY)"
+admin_email = "noreply@chasien.com"
+sender_name = "Chasien"
+
+[remotes.production.auth.rate_limit]
+# Emails per hour, for the whole project; it only applies once the SMTP above
+# is on. The local value (2) would starve real sign-ups. Resend's free plan
+# also caps a day at 100 (3,000 a month), which Resend enforces itself. The
+# other limits (30 sign-ins and 30 code checks per 5 minutes per IP, 150
+# refreshes) are the same locally and hosted, so they need no override.
+email_sent = 30
 
 [remotes.production.db.pooler]
 # Supabase's tuning for the project's size, not the local pooler's.

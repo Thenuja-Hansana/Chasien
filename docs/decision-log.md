@@ -7,6 +7,73 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-11 — Phase 11 slice 4: real email through Resend
+
+Config (`config.toml`), plus a layout fix on Explore that the empty
+hosted project showed up. Every step, as run, is in `docs/hosting.md`
+(steps 4, 5, 7, 8).
+
+**Done:**
+- **Resend** verified `chasien.com` (region Tokyo). Four records at
+  Namecheap: the DKIM `TXT`, two `CNAME`s for Resend's sending setup
+  (`send`, `rsend`) and DMARC `p=none`. Resend's page asked for those
+  `CNAME`s, not the `TXT` SPF and `MX` the runbook expected; the runbook
+  now lists what was added.
+- **Receiving off.** Resend offered to receive mail too, with an `MX` at
+  the root. That would have taken chasien.com's mail away from
+  Namecheap's forwarding, and Chasien receives no email.
+- **Auth sends through Resend** (custom SMTP, port 465) from
+  `Chasien <noreply@chasien.com>`. The SMTP block is in
+  `[remotes.production]`, not `[auth.email.smtp]`, so the local stack
+  keeps Mailpit; its password is `env(RESEND_API_KEY)`, read from the
+  gitignored `supabase/.env.hosted` at push time. With custom SMTP, the
+  push refused in slice 3 went through: the code templates, the 6-digit
+  code (production had 8), the site URL, MFA and SMS off.
+- **`request-room-verification`** has the same six `SMTP_*` secrets.
+- **The app's dev session points at the hosted project** through
+  `mobile/.env.development.local` (gitignored), which Expo loads ahead of
+  `.env.local`; deleting it goes back to the local stack.
+
+**Caught by the diff:** rate limits *are* pushed by `config push`, which
+slice 3 had written down as dashboard-only. Once custom SMTP is on, the
+emails-per-hour limit counts, and the local file's value is **2**:
+production would have refused real sign-ups after the second email in an
+hour. `[remotes.production.auth.rate_limit]` sets 30 (Resend caps a day
+at 100 itself). The other limits already matched production.
+
+**Verified:** Thenuja signed up from the A14 against the hosted project
+with a real Gmail address. "Your Chasien code" arrived from
+`noreply@chasien.com`; the code confirmed the account and opened the app
+(Explore, empty, as a new backend should be). Read-only afterwards: one
+user, confirmed, handle `thenu`. `config diff` after the push: no
+differences. **Not yet:** a domain-verification email sent for real
+through the function (slice 5).
+
+**Along the way:**
+- Public resolvers kept a cached "not found" for the new names for a
+  while after Namecheap's nameserver had them (Google's cleared first).
+  Two typing slips (the DMARC value in the DKIM row, `resend` for
+  `rsend`) were caught by comparing row by row with Resend's page.
+- The phone's Wi-Fi was off, so the app showed "No connection" on the
+  login screen until it was online: the slice 9 strip doing its job.
+- **Explore was broken on an empty backend.** The screen's base color is
+  the banner's (so it reaches behind the status bar), and the page below
+  was only as tall as its content. With no Rooms, the page ended halfway
+  down and the banner color showed behind the FAB and tab bar: a light
+  band in Dark mode, a dark one in Light. The local seed always had a
+  long list, which hid it. `discover.tsx` now lets the scroll content and
+  the page grow to the bottom (`flexGrow: 1`). Checked on the A14 against
+  the hosted project in both modes; not yet with a long list (the local
+  stack was down).
+- `noreply@chasien.com` has no inbox. A reply reaches someone only if a
+  Namecheap forwarding rule covers that address.
+
+**Left:** the app admin (hosting.md, step 6), then slice 5: Phase 2's
+auth checks against the hosted project, a domain-verification email, a
+push, the keep-alive and backups.
+
+---
+
 ## 2026-11-11 — Phase 11 slice 3: the hosted project, most of the way
 
 No code apart from `config.toml`. Every step, as run, is in
