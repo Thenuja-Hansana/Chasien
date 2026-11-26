@@ -7,6 +7,59 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-26 — A business & legal track, alongside Phases 11 and 12
+
+No code. Added to the roadmap at Thenuja's request, after a session on
+topic 4 (legal and business setup).
+
+**Decision.** There's a new roadmap section, the "Business & legal
+track". It sits between Phase 11 and the APK Beta Phase, and runs
+alongside the technical phases. It has five parts, each with a gate:
+- **A.** Account type, payments country, bank account and public
+  address: before Phase 12's $25.
+- **B.** Terms, privacy policy, guidelines, the copyright page and
+  signup's checkbox: before the closed test.
+- **C.** The minimum age and the data laws: before the closed test.
+- **D.** Business registration, tax and a trademark: before the first
+  payout.
+- **E.** The university's permission: before the campaign.
+
+**Why a separate track, not more Phase 12 items:**
+- **Part A can't wait for Phase 12.** Phase 12 starts with the $25. The
+  account type and the payments country are hard or impossible to
+  change after that.
+  - An organisation account needs a D-U-N-S number, which can take up
+    to 30 days.
+  - It's not confirmed that a personal account can be converted later.
+- **The roadmap assumed documents that don't exist.** Phase 12 said
+  "re-check the privacy policy and terms", but there are no terms of
+  service, and signup only asks people to accept the guidelines.
+- **Phase 12 fixed the age at "16 or older".** India's DPDP Act treats
+  anyone under 18 as a child, who needs a parent's verifiable consent.
+  So the age is now a decision in part C, and Phase 12's content rating
+  points to it.
+- **None of it is code,** so it can move while the technical work
+  continues.
+
+**Checked 2026-11-26, from Play Console Help:**
+- Sri Lanka supports developer and merchant registration, with USD as
+  the default currency.
+- A payments profile's country can't be changed, and the bank account
+  must be in the same country.
+- Google deducts up to 10% withholding tax on Sri Lankan purchases
+  charged to a phone bill.
+- Personal accounts created after 2023-11-13 need a closed test with 12
+  testers who stay opted in for 14 days.
+
+**Reported, not confirmed:** organisation accounts are exempt from that
+test. This comes from third-party sources only.
+
+**What would make us revisit it:**
+- Google changes the closed-test rule or the account types.
+- A lawyer's review changes parts B or C.
+
+---
+
 ## 2026-11-26 — Subscriptions settled: prices, RevenueCat, and frozen Rooms get deleted
 
 No code. These close the open points of the two 2026-11-25 entries

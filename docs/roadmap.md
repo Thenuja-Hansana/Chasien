@@ -19,8 +19,15 @@ crash reporting that stays off until a Sentry key is set; slices 9 and 10
 made every screen honest offline (timeouts, Try again, a "No connection"
 strip, nothing typed lost, sign-out that unregisters the phone). Full
 write-up: `docs/phase/phase10.md`. Phase 11 puts the backend on a hosted
-Supabase project and sends real email from `chasien.com`. The dated
-entries below are the history, oldest first.
+Supabase project and sends real email from `chasien.com`.
+**Alongside it, the Business & legal track** (no code, added
+2026-11-26):
+- Its part A has to be finished before Phase 12's $25 Play Console
+  payment.
+- An organisation account's D-U-N-S number can take 30 days, so start it
+  early.
+
+The dated entries below are the history, oldest first.
 
 **2026-08-31: Phase 6 — Chat & realtime.** Chat is real end to end — a
 unified inbox mixing Room group channels and DMs, realtime message
@@ -1383,6 +1390,98 @@ can sign up, receive an actual confirmation email, and log in.
 
 ---
 
+## Business & legal track — alongside Phases 11 and 12, no code (added 2026-11-26)
+
+Goal: Chasien can legally sell subscriptions and run its marketing
+campaign.
+- It runs at the same time as the technical phases. It's accounts,
+  documents and waiting, not code.
+- **Each part has a gate:** the step it must be finished before.
+- See decision-log, 2026-11-26 ("A business & legal track").
+- **Not legal advice.** Have a local lawyer review the terms and the
+  privacy policy once, before the campaign.
+
+**Part A — before paying for the Play Console ($25, Phase 12).** These
+are hard to undo after paying.
+- [ ] **A personal or an organisation developer account.**
+  - **Personal:** quick to set up. It needs the 12-tester, 14-day closed
+    test (for accounts created after 2023-11-13), and Google shows your
+    own name and address.
+  - **Organisation:** reportedly exempt from that test. It needs a
+    registered business (part D) and a D-U-N-S number. That number is
+    free, but it can take up to 30 days, so start early.
+  - **Not confirmed:** whether a personal account can become an
+    organisation account later. So decide before paying.
+- [ ] **The payments profile's country.**
+  - Sri Lanka supports developer and merchant registration, with USD as
+    the default currency (Play Console Help, checked 2026-11-26).
+  - The country can't be changed later.
+- [ ] **A bank account** in that same country, for Google's payouts.
+- [ ] **Whose address Google shows** on the listing of an app that sells
+      things: your home, or a business address.
+- [ ] **Know about withholding tax:** Google deducts up to 10% on
+      purchases in Sri Lanka that are charged to a phone bill (Play
+      Console Help, checked 2026-11-26).
+
+**Part B — documents, before the closed test (Phase 12).** Phase 12
+hosts them at `chasien.com` and re-checks them. This part writes them.
+- [ ] **Terms of service.** They don't exist yet. They need to cover:
+  - subscriptions and renewal (cancelled through Play);
+  - the 14-day handover, freezing and deletion of Rooms (decision-log
+    2026-11-25 and 2026-11-26);
+  - who owns what people post, and the licence to show it;
+  - copyright takedowns;
+  - bans;
+  - the minimum age (part C).
+- [ ] **Privacy policy.**
+  - **What's collected:** emails, profiles, photos, clips, voice notes,
+    messages, push tokens and purchase history.
+  - **Every service that handles it:** Supabase (Singapore), Cloudflare
+    R2, Resend, Sentry, Expo and FCM push, Google Play, RevenueCat.
+  - **How long things are kept:** stories for 24 hours, frozen Rooms,
+    and what happens on account deletion.
+- [ ] **Community guidelines** (`app/guidelines.tsx`):
+  - clips, edits and fan art are fine;
+  - full episodes and links to pirate sites are not;
+  - sponsored posts must be labelled, if they're ever allowed.
+- [ ] **A copyright page** with a contact email for takedown requests.
+  - The process: remove the content quickly, tell the uploader, and ban
+    people who keep doing it.
+  - Consider adding a "copyright" report reason. The current list is in
+    `20260921120100_reports.sql`.
+- [ ] **Signup's checkbox** (`app/signup.tsx`) accepts the terms as well
+      as the guidelines.
+
+**Part C — age and data laws, before the closed test.**
+- [ ] **The minimum age.**
+  - Signup asks for "16 or older".
+  - India's DPDP Act treats anyone under 18 as a child, who needs a
+    parent's verifiable consent.
+  - Choose: 18 and older (the simplest), or a parental-consent flow.
+  - Then make signup, the guidelines, the terms and Phase 12's content
+    rating all say the same thing.
+- [ ] **Check the rules** in Sri Lanka's PDPA (2022) and India's DPDP for
+      an app this size, such as a contact for privacy requests.
+
+**Part D — business and money, before the first subscription money.**
+- [ ] **A sole proprietor or a company.** A company is needed for an
+      organisation account (part A).
+- [ ] **A tax number,** and an accountant once income starts.
+- [ ] **Optional:** register "Chasien" as a trademark before the
+      campaign makes the name known.
+
+**Part E — before the marketing campaign (Phase 13).**
+- [ ] **Written permission** before using a university's name or logo
+      in ads, or making a Room look official.
+
+**Exit condition:** the gates.
+- Part A, before Phase 12's $25.
+- Parts B and C, before the closed test.
+- Part D, before the first payout.
+- Part E, before the campaign.
+
+---
+
 ## APK Beta Phase — a private Android build for a few testers (inserted 2026-09-21, narrowed 2026-10-08)
 
 Goal: a real Android app on a few testers' phones, **at $0**. It comes
@@ -1538,17 +1637,20 @@ See decision-log, 2026-10-08.
       data so it can be reused). Play asks for the policy's URL when
       the app is set up, ahead of the closed test (confirm in the
       Console). *Moved here from the APK Beta Phase on 2026-10-08*
-- [ ] Re-check the privacy policy and terms against Play's requirements
+- [ ] Re-check the privacy policy and terms against Play's requirements.
+      They're written in the Business & legal track, part B
 - [ ] Google's "Data safety" form — filled to match actual behavior,
       not boilerplate. It also needs the web account-deletion URL above
 - [ ] Content rating: Google's IARC questionnaire.
       A social app with user content and chat rates higher than a plain
-      app. Keep it consistent with the "16 or older" that signup already
-      asks people to confirm
+      app. Keep it consistent with the minimum age chosen in the Business
+      & legal track, part C. Signup asks for "16 or older" today
 - [ ] App icon, screenshots, store listing copy. Use
       `info.chasien@gmail.com` as the listing's contact email, the same
       address the app publishes (`constants/contact.ts`)
-- [ ] Google Play Console ($25 one-time)
+- [ ] Google Play Console ($25 one-time). Only once the Business & legal
+      track's part A is done: the account type and the payments country
+      can't easily be changed afterwards
 - [ ] **Google Play closed test.** New personal developer accounts have
       had to run a closed test before getting production access: at
       least 12 testers opted in for 14 days in a row, as of the time of
@@ -1711,6 +1813,8 @@ unknown work when this is picked up.
         limits are hit, not after.
       - **A moderation plan:** who answers reports, and how fast, for
         the number of new people expected.
+      - **The Business & legal track's part E:** written permission
+        before using a university's name or logo.
 - [ ] Recruit a small real beta group (a couple of actual Rooms, not just
       test accounts)
 - [ ] Watch free-tier usage against the ceilings in `architecture.md`
