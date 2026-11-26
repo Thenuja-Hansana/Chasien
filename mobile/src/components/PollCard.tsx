@@ -13,11 +13,12 @@ import type { Poll } from '@/lib/posts';
  * 1. Votes are optimistic — the bar moves on tap, then reverts if the
  *    write fails. A real network round trip between tap and feedback is
  *    the one thing the mock never had to account for.
- * 2. A vote can be changed. The mock hard-locks after the first tap
- *    (`if (voted !== null) return`), which is fine for a static demo but
- *    would permanently strand a real mis-tap; the schema explicitly
- *    permits retracting ("users can retract their own vote",
- *    row_level_security.sql), so the UI honours that.
+ * 2. A vote can be changed, and taken back. The mock hard-locks after the
+ *    first tap (`if (voted !== null) return`), which is fine for a static
+ *    demo but would permanently strand a real mis-tap. Tapping another
+ *    option moves the vote; tapping your own option again clears it
+ *    (since 2026-11-26; before, a single-choice poll ignored that tap).
+ *    vote_poll() already did both: the same option twice deletes the vote.
  * 3. When `poll.allowMultiple` is set (supabase/migrations/
  *    20260916120000_poll_allow_multiple.sql), every option behaves as an
  *    independent checkbox — tapping any option toggles just that one,
@@ -37,19 +38,17 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
 
   async function handleVote(optionId: string) {
     if (busy) return;
+    // Tapping an option you picked clears it, in single- and multiple-choice
+    // polls alike: vote_poll() deletes a vote for the same option.
     const wasMine = poll.myOptionIds.includes(optionId);
-    // Single-choice: tapping the option you already picked is a no-op —
-    // retracting entirely is done by tapping elsewhere isn't offered here,
-    // matching the radio-button convention voters already expect.
-    if (!poll.allowMultiple && wasMine) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
     const previous = poll.allowMultiple ? null : (poll.myOptionIds[0] ?? null);
-    const nextOptionIds = poll.allowMultiple
-      ? wasMine
-        ? poll.myOptionIds.filter((id) => id !== optionId)
-        : [...poll.myOptionIds, optionId]
-      : [optionId];
+    const nextOptionIds = wasMine
+      ? poll.myOptionIds.filter((id) => id !== optionId)
+      : poll.allowMultiple
+        ? [...poll.myOptionIds, optionId]
+        : [optionId];
     setOptimistic({
       ...poll,
       myOptionIds: nextOptionIds,
@@ -98,7 +97,7 @@ export default function PollCard({ poll, onVote }: { poll: Poll; onVote: (option
         {current.allowMultiple
           ? ' · tap any option to select or unselect it'
           : current.myOptionIds.length > 0
-            ? ' · tap another option to change your vote'
+            ? ' · tap another option to change your vote, or yours to clear it'
             : ''}
       </Text>
     </View>

@@ -1,5 +1,5 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -68,6 +68,8 @@ export default function PostDetail() {
   const commentFocus = useFocusHighlight();
   /** Non-null when the composer is replying to a specific top-level comment. */
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  /** The composer. Reply focuses it, so the keyboard opens on the reply (it used to only set who you were replying to). */
+  const composerRef = useRef<TextInput>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isModerator, setIsModerator] = useState(false);
@@ -420,7 +422,10 @@ export default function PostDetail() {
                   <View key={comment.id} style={styles.commentGroup}>
                     <CommentRow
                       comment={comment}
-                      onReply={() => setReplyTo(comment)}
+                      onReply={() => {
+                        setReplyTo(comment);
+                        composerRef.current?.focus();
+                      }}
                       removeLabel={comment.authorId === userId ? 'Delete' : isModerator ? 'Remove' : undefined}
                       onRemove={() => setRemovingComment(comment)}
                       onReport={comment.authorId === userId ? undefined : () => setReportTarget(commentReportTarget(comment))}
@@ -458,6 +463,7 @@ export default function PostDetail() {
           )}
           <View style={styles.composer}>
             <TextInput
+              ref={composerRef}
               style={[styles.composerInput, commentFocus.focused && styles.composerInputFocused]}
               value={draft}
               maxLength={Limits.comment}

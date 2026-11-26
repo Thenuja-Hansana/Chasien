@@ -1258,8 +1258,17 @@ down in `docs/hosting.md` as it's done.
       against the hosted project with a real address, and the code
       arrived and worked. Not yet sent for real: a domain-verification
       email (slice 5). See decision-log, 2026-11-11
+- [ ] Slice 3 follow-up — the four SECURITY INVOKER functions the
+      advisor flagged get a pinned `search_path`. **Done locally
+      2026-11-26** (`20261126090000`); the security re-check now checks
+      every function, not only SECURITY DEFINER ones. **Left:** push it to
+      the hosted project, then `supabase db advisors --remote`. See
+      decision-log, 2026-11-26
 - [ ] Slice 5 — the app on the hosted backend, Phase 2's auth checks
       against it, and the exit condition; then the keep-alive and backups
+      *(2026-11-26: the keep-alive is written,
+      `.github/workflows/keep-alive.yml`. Left for it: the two repository
+      secrets and a first manual run, hosting.md step 9.)*
 - [ ] Slice 6 — R2, decided once hosting works
       *(2026-11-24: stays before the APK. Testers who share clips would
       go past the free 1 GB of files and 5 GB of downloads during

@@ -1,0 +1,62 @@
+name: keep-alive
+
+# A free Supabase project pauses after about a week without requests, and
+# the app stops working until someone restores it from the dashboard
+# (docs/hosting.md, step 9). This makes one small request a day, so the
+# hosted project never goes a week without one.
+#
+# It calls text_is_allowed, the one database function open without a
+# session (signup uses it), so the request reaches Postgres itself, not
+# just the gateway. It writes nothing.
+#
+# If the project has paused anyway, or is down, the request fails, the run
+# fails, and GitHub emails the repository's owner: a free alarm.
+#
+# Needs two repository secrets (Settings -> Secrets and variables ->
+# Actions):
+#   HOSTED_SUPABASE_URL        https://<project-ref>.supabase.co
+#   HOSTED_SUPABASE_ANON_KEY   the project's legacy anon key: the same
+#                              public key every app build carries
+#
+# GitHub turns off scheduled workflows in a public repository after 60
+# days without a commit, and emails before it does. Turn it back on from
+# the Actions tab.
+
+on:
+  schedule:
+    # 03:17 UTC every day (08:47 in Sri Lanka). Off the hour, when
+    # GitHub's scheduler is least busy.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+# The job needs nothing from GitHub's token.
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask the database one question
+        env:
+          SUPABASE_URL: ${{ secrets.HOSTED_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.HOSTED_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Set the HOSTED_SUPABASE_URL and HOSTED_SUPABASE_ANON_KEY repository secrets (docs/hosting.md, step 9)."
+            exit 1
+          fi
+          # --retry covers timeouts, 429 and 5xx (and, with
+          # --retry-connrefused, a refused connection), not a 401: a wrong
+          # key fails at once.
+          answer=$(curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-connrefused --retry-delay 20 --max-time 30 \
+            -X POST "$SUPABASE_URL/rest/v1/rpc/text_is_allowed" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"p_text":"keep-alive"}')
+          echo "text_is_allowed answered: $answer"
+          if [ "$answer" != "true" ]; then
+            echo "::error::Expected true from text_is_allowed."
+            exit 1
+          fi

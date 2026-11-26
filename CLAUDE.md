@@ -197,7 +197,9 @@ GitHub Actions → EAS builds.
   callable by nobody but the service role until its migration says
   `grant execute ... to authenticated` on purpose; a function the app
   doesn't call (anything written for a trigger, any internal helper) gets
-  no grant. The membership helpers (`is_room_member` and its siblings)
+  no grant. Every function, SECURITY INVOKER ones included, is created
+  with `set search_path = public`; the security re-check fails on one
+  without (`20261126090000`). The membership helpers (`is_room_member` and its siblings)
   answer only about `auth.uid()`: always pass `auth.uid()` to them in a
   policy, and use `room_rank()` from SECURITY DEFINER code that has to ask
   about someone else.

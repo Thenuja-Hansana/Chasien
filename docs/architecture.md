@@ -204,6 +204,14 @@ user load, real revenue) to spend money.
   to notify, a removal checking rank) is SECURITY DEFINER and uses
   `room_rank()`, which is not an endpoint: -1 not a member, 0 member,
   1 mod, 2 admin, 3 owner.
+- **Every function pins its `search_path`** (since 2026-11-26,
+  `20261126090000`). SECURITY INVOKER ones too, not only SECURITY DEFINER.
+  Otherwise a function finds the tables it names through its caller's
+  `search_path`. A new function gets `set search_path = public` in its
+  `create function`. The security re-check fails on any function in
+  `public` without one. Supabase's advisor
+  (`function_search_path_mutable`) flags the same thing on the hosted
+  project.
 - **One Edge Function is public, on purpose** (since 2026-10-02):
   `verify-room-email`, the link inside a domain-verification email. It's
   opened from a mail app, which sends no key, so `supabase/config.toml`

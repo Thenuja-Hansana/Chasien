@@ -8,6 +8,7 @@
 //
 //   node supabase/tests/phase10_slice2_suite.js | docker exec -i supabase_db_chasien psql -U postgres -d postgres -X -q -t -A
 const U = {
+  mara: '11111111-1111-1111-1111-111111111111',
   tobi: '22222222-2222-2222-2222-222222222222',
   nadia: '33333333-3333-3333-3333-333333333333',
   kwame: '44444444-4444-4444-4444-444444444444',
@@ -169,16 +170,27 @@ as('eve');
 check('eve still finds kwame in search', `exists (select 1 from search_profiles('kwame') where handle = 'kwame')`);
 
 section('reports, app admin, the rest of what the app calls');
+// The app admin the report reaches. seed.sql makes nobody one, so this
+// suite makes mara one itself, inside the transaction, and it rolls back
+// with the rest. On the first laptop mara had been made one by hand
+// (decision-log 2026-11-10), which hid that a fresh clone failed here
+// (decision-log 2026-11-26).
+asOwner();
+sql(`insert into app_admins (user_id) values ('${U.mara}') on conflict do nothing;`);
 as('tobi');
 sql(`insert into reports (reporter_id, target_type, target_id, reason) values ('${U.tobi}', 'post', ${g('post1')}, 'spam');`);
 check('tobi is not an app admin', `not current_user_is_app_admin()`);
 refused('tobi resolving a report', `perform resolve_report((select id from reports where reporter_id = '${U.tobi}' limit 1), 'dismissed')`);
 sql(`select register_push_token('ExponentPushToken[zz-slice2]', 'android') \\gset zz_`);
 sql(`select set_room_notifications_muted(${R}, true) \\gset zz_`);
-check('account_deletion_preview answers', `(select account_deletion_preview()) is not null`);
 check('text_is_allowed answers', `text_is_allowed('hello there')`);
+// Asked as eve, who owns this suite's Room. Asked as tobi, who owns none in
+// the seed, it returned no rows, so the check depended on what else that
+// laptop's database held.
+as('eve');
+check('account_deletion_preview answers: eve\'s Room would go to kwame, its admin', `exists (select 1 from account_deletion_preview() where room_id = ${R} and successor_handle = 'kwame')`);
 asOwner();
-check('the report captured its snapshot and reached the app admin', `(select content_snapshot is not null from reports where reporter_id = '${U.tobi}' and target_id = ${g('post1')}) and exists (select 1 from notifications n join app_admins a on a.user_id = n.user_id where n.type = 'report_filed')`);
+check('the report captured its snapshot and reached the app admin', `(select content_snapshot is not null from reports where reporter_id = '${U.tobi}' and target_id = ${g('post1')}) and exists (select 1 from notifications where type = 'report_filed' and user_id = '${U.mara}')`);
 check('the push token was registered to tobi', `exists (select 1 from push_tokens where token = 'ExponentPushToken[zz-slice2]' and user_id = '${U.tobi}')`);
 check('tobi muted the Room', `(select notifications_muted from room_memberships where room_id = ${R} and user_id = '${U.tobi}')`);
 

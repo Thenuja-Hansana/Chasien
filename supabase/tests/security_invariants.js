@@ -143,9 +143,14 @@ invariant(
    from (select distinct proname from pg_proc where pronamespace = 'public'::regnamespace and has_function_privilege('authenticated', oid, 'execute')) p
    full join (select unnest(array[${list(AUTHENTICATED_FUNCTIONS)}]) n) w on w.n = p.proname where p.proname is null or w.n is null`,
 );
+// Every function, not only SECURITY DEFINER ones: without a pinned
+// search_path a function finds the tables it names through the caller's
+// search_path. Four SECURITY INVOKER functions slipped past the old,
+// definer-only version of this rule until Supabase's advisor flagged them
+// on the hosted project (2026-11-11; pinned in 20261126090000).
 invariant(
-  'every SECURITY DEFINER function pins its search_path',
-  `select p.proname::text from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')`,
+  'every function pins its search_path',
+  `select p.proname::text from pg_proc p where p.pronamespace = 'public'::regnamespace and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')`,
 );
 invariant(
   'no function has more than one signature (an overload is a second endpoint nobody listed)',

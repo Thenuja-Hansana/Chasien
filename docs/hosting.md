@@ -233,10 +233,25 @@ baked into the bundle. The phone then reaches the project over its own
 internet, so it needs Wi-Fi or data; `adb reverse` is only for Metro's
 8081.
 
-## 9. Keeping it alive, and backed up *(not yet done)*
+## 9. Keeping it alive, and backed up *(keep-alive written 2026-11-26; secrets and backups not yet done)*
 
-- A free project pauses after about a week without activity. A scheduled
-  GitHub Action that makes one request a day keeps it awake.
+- A free project pauses after about a week without activity.
+  `.github/workflows/keep-alive.yml` makes one request a day (03:17 UTC):
+  it calls `rpc/text_is_allowed`, the one function open without a
+  session, so the request reaches the database. If the project doesn't
+  answer, the run fails and GitHub emails the repository's owner. To set
+  it up:
+  1. In GitHub, go to Settings → Secrets and variables → Actions and add
+     two repository secrets:
+     - `HOSTED_SUPABASE_URL`: `https://bihcnyzempsvwhklegkl.supabase.co`
+     - `HOSTED_SUPABASE_ANON_KEY`: the **legacy anon key** (Project
+       Settings → API keys), the same one the app uses
+  2. Actions → keep-alive → **Run workflow** once. It should log
+     `text_is_allowed answered: true`.
+
+  The repository is public, so GitHub turns off scheduled workflows
+  after 60 days without a commit. It emails first; turn the workflow
+  back on from the Actions tab.
 - Free-tier backups are limited: take a `supabase db dump` regularly once
   real data exists, and keep it off this laptop.
 

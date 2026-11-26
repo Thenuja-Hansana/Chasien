@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Avatar from '@/components/Avatar';
@@ -52,6 +52,8 @@ const CommentsSheet = forwardRef<
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [draft, setDraft] = useState('');
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  /** The comment box. Reply focuses it, so the keyboard opens on the reply (it used to only set who you were replying to). */
+  const inputRef = useRef<TextInput>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Comment | null>(null);
@@ -159,7 +161,10 @@ const CommentsSheet = forwardRef<
                 <View style={styles.actions}>
                   {!item.isReply && (
                     <Pressable
-                      onPress={() => setReplyTo(item.comment)}
+                      onPress={() => {
+                        setReplyTo(item.comment);
+                        inputRef.current?.focus();
+                      }}
                       hitSlop={8}
                       accessibilityRole="button"
                       accessibilityLabel={`Reply to ${item.comment.authorHandle}`}
@@ -258,6 +263,7 @@ const CommentsSheet = forwardRef<
           </View>
           <View style={styles.inputWrap}>
             <TextInput
+              ref={inputRef}
               style={styles.input}
               value={draft}
               maxLength={Limits.comment}

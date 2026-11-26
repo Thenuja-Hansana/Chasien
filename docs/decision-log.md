@@ -7,6 +7,145 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-26 — Every function pins its search_path, a keep-alive, and two fixes from the phone
+
+Two Phase 11 loose ends built on the new laptop, plus what testing them
+on the A14 turned up.
+
+**1. `search_path` on the last four functions** (`20261126090000`).
+- Supabase's advisor flagged four SECURITY INVOKER functions on the
+  hosted project on 2026-11-11 (slice 3, entry below; lint
+  `function_search_path_mutable`):
+  - `set_updated_at()`, a trigger on 9 tables;
+  - `enforce_single_level_comment_replies()`;
+  - `validate_polymorphic_content_target()`;
+  - `vote_poll(uuid, uuid)`.
+- Without a pinned `search_path`, a function finds the tables it names
+  through its caller's `search_path`.
+- The security re-check covered SECURITY DEFINER functions only, so
+  nothing caught them.
+- **What changed:**
+  - The migration has four `alter function … set search_path = public`.
+    Body, owner, grants and SECURITY INVOKER stay as they were.
+    `vote_poll` stays SECURITY INVOKER on purpose.
+  - Every name in the four bodies resolves in `public`, in `pg_catalog`
+    (`now()`) or is qualified (`auth.uid()`).
+  - All four are PL/pgSQL, which the planner never inlines, so the SET
+    costs nothing.
+  - `security_invariants.js`: "every SECURITY DEFINER function pins its
+    search_path" became "every function". `architecture.md` and
+    `CLAUDE.md` state the rule.
+- **Verified:**
+  - **Control run:** the widened rule failed first, naming exactly the
+    four.
+  - After `supabase migration up`, 0 functions are unpinned and the
+    grants are unchanged.
+  - `run.js --live`: 535 of 537, with the data counts before and after
+    equal. The 2 failures were already there and aren't this change;
+    with the migration undone, the same 2 fail (see "Found" below).
+  - **On the A14, as mara**, each changed function ran and the database
+    shows the result:
+    - switching a poll answer (`vote_poll`);
+    - a comment reply (the reply trigger);
+    - saving the profile (`set_updated_at` stamped `updated_at`).
+  - Retracting a vote, checked in SQL as mara (rolled back): a second
+    tap on the same answer removes it.
+- **Not yet:** pushing to the hosted project, then
+  `supabase db advisors --remote`. That needs Thenuja's login.
+
+**2. Keep-alive** (`.github/workflows/keep-alive.yml`).
+- A free project pauses after about a week without requests (hosting.md,
+  step 9).
+- **What it does:**
+  - A daily GitHub Action (03:17 UTC, and by hand) calls
+    `rpc/text_is_allowed`, the one function open without a session, so
+    the request reaches Postgres itself.
+  - The URL and anon key come from two repository secrets,
+    `HOSTED_SUPABASE_URL` and `HOSTED_SUPABASE_ANON_KEY`.
+  - `permissions: {}`.
+  - It fails, and GitHub emails the owner, if the secrets are missing,
+    the project doesn't answer, or the answer isn't `true`. So it also
+    alarms if the project ever pauses.
+  - curl retries timeouts, 429, 5xx and refused connections, but not a
+    401.
+- **Verified** by running the step's exact script:
+  - against the local stack: passes;
+  - with no secrets: fails, naming them;
+  - against the hosted project with a wrong key: 401, fails in under a
+    second.
+
+  The first version retried that 401 four times (`--retry-all-errors`);
+  changed.
+- **Considered instead:**
+  - a `pg_cron` job: activity inside the database doesn't stop the
+    pause, and the project already runs hourly jobs;
+  - a paid uptime service.
+- **Known limit:** the repository is public. GitHub turns off scheduled
+  workflows in a public repo after 60 days without a commit, and emails
+  first.
+- **Not yet:** the two secrets and a first manual run, which Thenuja does
+  after the push.
+
+**3. The security re-check passes on a fresh clone**
+(`phase10_slice2_suite.js`). Two checks failed on the new laptop, with
+or without the migration above:
+- **`account_deletion_preview answers`** asked as tobi, who owns no Room
+  in the seed, so it returned no rows.
+  - Now it asks as eve, who owns the suite's Room, and checks that it
+    names that Room with kwame, its admin, as successor.
+- **`the report … reached the app admin`** needed an app admin, and
+  `seed.sql` makes nobody one. On the old laptop mara had been made one by
+  hand "for the test only" (2026-11-10 entry), which hid this.
+  - Now the suite makes mara an app admin inside its rolled-back
+    transaction, before tobi's report, and checks that the report reached
+    **mara**.
+- Still 52 checks, and nothing is left behind (`app_admins` is empty after
+  the rollback).
+- `run.js --live`: **537 of 537**, with the data counts before and after
+  equal.
+
+**4. Two things found testing on the A14, both fixed in the app.**
+- **Reply didn't open the keyboard.**
+  - Reply only set who you were replying to. Nothing focused the box;
+    the app has no `.focus()` anywhere.
+  - Fixed in both places with Reply:
+    - `components/CommentsSheet.tsx` (the Room feed and the Clips
+      viewer);
+    - `app/c/[communityId]/post/[postId].tsx`.
+
+    Each box has a `ref`, and Reply focuses it.
+- **A second tap on your poll answer now clears your vote** (decided with
+  Thenuja).
+  - Single-choice polls used to ignore that tap (radio-button style; the
+    card said "tap another option to change your vote").
+  - `vote_poll()` always supported clearing: the same option twice
+    deletes the vote. Checked in SQL as mara.
+  - `PollCard.tsx` no longer returns early, and its on-screen update
+    removes the answer. The hint now reads "…, or yours to clear it".
+- **Verified on the A14:**
+  - clear, re-pick and switch a vote;
+  - Reply opens the keyboard in the feed's comments sheet and on the post
+    page;
+  - a reply sent from there is saved as a reply.
+
+  Typecheck, lint and the compiler check (122, 0 skipped) pass. The
+  Clips viewer shares `CommentsSheet` and wasn't tried: the seed has no
+  clip.
+
+**Found on the way:**
+- **The local gateway accepts a wrong API key** (HTTP 200). The hosted
+  one answers 401. A local-stack quirk.
+- The CLI warns that `auth.sms.enable_signup` in `config.toml` is
+  deprecated and goes in v4.
+- **`npx supabase` installs the newest CLI.** On the new laptop it started
+  replacing 3.3.0 with 3.4.0 in the same npx cache folder and left a
+  broken binary when stopped. A new CLI also pulls new images on the next
+  `start` (running-locally.md, gotcha 9). On a slow connection, install
+  the CLI binary at a fixed version instead. To go into SETUP.md with the
+  other lessons from the new laptop.
+
+---
+
 ## 2026-11-26 — A business & legal track, alongside Phases 11 and 12
 
 No code. Added to the roadmap at Thenuja's request, after a session on
