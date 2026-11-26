@@ -343,6 +343,19 @@ Not infra, but flagging now so nothing is a surprise later:
   isn't scheduled. Android development needs none of this: a dev-client
   build installs over USB.
 
+- **Selling subscriptions** (Phase 12; decision-log, 2026-11-25 and
+  2026-11-26). Only subscribers can create and own Rooms. The plans are
+  Plus $2.99, Pro $6.99 and Ultimate $14.99 a month. On each sale:
+  - Google keeps 15% of every subscription.
+  - **Google Play takes the payment.** Its billing is required for
+    subscriptions sold in a Play app. Prices are set in the Play
+    Console, and Google pays out minus its cut.
+  - **RevenueCat never touches the money.** It tracks who has which plan
+    and tells our server through a webhook. It's free while revenue is
+    at or under $2,500 a month, then 1%, billed separately (checked
+    2026-11-25 from third-party summaries).
+  - Both come out of income, not out of pocket.
+
 Nothing is due before the private APK beta. The first payment is
 Google's $25.
 
@@ -357,6 +370,16 @@ Google's $25.
   clip, or about 3,500 downloads at the 1.4 MB average measured in
   Phase 10. R2's egress is free, so the R2 move (Phase 11) has to come
   before strangers can watch clips, not after.
+- **Clips, not photos, fill both file limits** (2026-11-24).
+  - Photos are shrunk before upload and cached on the phone by file path.
+  - Clips are uploaded as recorded, up to 25 MB (Phase 10's test clip
+    was about 12 MB).
+  - Clips are played with no disk cache, so every view and every loop
+    downloads them again.
+  - So 1 GB of files holds about 2,500 photos but only about 80 clips,
+    and 5 GB of downloads is about 400 clip views.
+  - Compressing clips before upload and caching them when played are
+    APK Beta Phase items (roadmap; decision-log, 2026-11-24).
 - **Realtime concurrent connections** (~200 on Supabase free tier) — fine
   for dev + friends/beta, will need attention before any real growth.
 - Supabase free project **pauses after 7 days fully idle** — a non-issue

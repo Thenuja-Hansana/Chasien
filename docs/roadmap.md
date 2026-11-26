@@ -1254,6 +1254,11 @@ down in `docs/hosting.md` as it's done.
 - [ ] Slice 5 — the app on the hosted backend, Phase 2's auth checks
       against it, and the exit condition; then the keep-alive and backups
 - [ ] Slice 6 — R2, decided once hosting works
+      *(2026-11-24: stays before the APK. Testers who share clips would
+      go past the free 1 GB of files and 5 GB of downloads during
+      testing, because clips are uploaded uncompressed and downloaded
+      again on every view. See decision-log, 2026-11-24, and the clip
+      item at the top of the APK Beta Phase.)*
 
 The checklist below is the original list; each slice says which of its
 items it closes.
@@ -1397,6 +1402,48 @@ at least 12 people, which is what Play's closed test needs. The dev
 client installed on the A14 today can't be shared: it contains no app
 code and loads everything from Metro on this laptop.
 
+- [ ] **Clips: compress them before upload, and cache them when played**
+      (added 2026-11-24, decision-log 2026-11-24). Do this before the
+      first APK goes out, and after R2 (Phase 11 slice 6), because R2
+      changes the URLs the cache sees. Photos are already shrunk before
+      upload (`compressImageForUpload()`, `lib/mediaUtils.ts`) and cached
+      on the phone by file path (`cachedImageSource()`). Clips get
+      neither:
+      - **Caching.** Every view of a clip, and every repeat of a looping
+        clip, downloads the whole file again (about 12 MB for Phase 10's
+        test clip). This has been open since decision-log 2026-09-17.
+        - The players that show stored clips:
+          - `components/PostMediaCarousel.tsx` (the feed)
+          - `app/c/[communityId]/clips.tsx` (the Clips viewer)
+          - `app/c/[communityId]/story.tsx`
+        - The composer players play local files and need nothing.
+        - Candidates: expo-video's `useCaching`, or a loop through
+          `playToEnd` and a seek, with caching.
+        - Check how the cache is keyed first. A signed URL changes every
+          time it's signed, so a cache keyed by the URL would never be
+          used again. That's the same problem `cachedImageSource()`
+          solves for photos.
+        - Read the expo-video docs for this SDK first (`mobile/AGENTS.md`).
+      - **Compression.** Clips are uploaded exactly as recorded, up to
+        25 MB (`lib/media.ts`, the note at line 103: "no
+        video-compression module in this app").
+        - A compression library is a new native dependency. Flag it and
+          plan it before adding it (CLAUDE.md). Check that it works with
+          this Expo SDK, the New Architecture and a dev-client rebuild.
+        - Agree the target first, for example 720p and a bitrate.
+        - Compress in the shared upload path, so posts and stories both
+          get it.
+        - The 25 MB bucket limit stays as the backstop, because a
+          modified app can skip compression.
+      - **Check:**
+        - Measure a 60-second phone clip before and after compression.
+        - Watch a clip several times in the feed and in the Clips
+          viewer. Confirm in the network log or the storage usage that
+          it downloads only once.
+      - **If the APK has to go out before R2 is done:** Supabase Pro
+        ($25 a month, 100 GB of files) covers testing. Check its
+        download allowance at sign-up.
+
 - [ ] `mobile/eas.json` with an `apk` profile (`buildType: "apk"`) for
       sideloading, and a `production` profile (AAB) for Play later, since
       Play wants an AAB, not an APK. Set the `EXPO_PUBLIC_*` values as
@@ -1508,13 +1555,121 @@ See decision-log, 2026-10-08.
       writing. Check the current numbers. Recruit the APK beta testers
       for it. It's the longest-lead item in this phase, so start it
       first
+- [ ] **Subscriptions: only subscribers can create Rooms** (added
+      2026-11-25, decision-log 2026-11-25).
+      - **When:** build it during the closed test's 14 days, which are
+        mostly waiting. It has to be in the production build, because
+        the marketing campaign follows the launch.
+      - **Billing works only in builds installed from Play** (the
+        internal or closed testing track), never in the sideloaded APK.
+  - [ ] **Play Console:**
+        - a merchant (payments) account; check it's available in the
+          country you're registered in;
+        - three plans, with no free trial: Plus (5 Rooms) $2.99, Pro
+          (20) $6.99, Ultimate (no limit) $14.99 a month. Set the prices
+          in USD and let Google convert them for each country, then set
+          Sri Lanka and India by hand. Those amounts aren't chosen yet;
+        - license testers, for test purchases.
+  - [ ] **Billing service: RevenueCat** (chosen 2026-11-26).
+        - **Google Play still takes the payment.** Prices, including Sri
+          Lanka's and India's, are set in the Play Console. RevenueCat
+          reads them, tracks who has which plan, and never touches the
+          money.
+        - Free while revenue is at or under $2,500 a month, then 1%.
+          Check its pricing page at sign-up.
+        - Link purchases to the Supabase user ID, never the email.
+        - Its webhook writes our `subscriptions` table, and the database
+          rules read only that table.
+  - [ ] **Migration:**
+        - a `subscriptions` table (the plan, active until when, where it
+          came from), one row per person. That person can read it;
+          only the Edge Function writes it;
+        - a helper that answers only about `auth.uid()`;
+        - replace the policy "any authenticated user can create a room
+          they own" (`20260813051235`), so creating a Room needs an
+          active plan and fewer Rooms owned than the plan allows;
+        - the 5-a-day rate limit stays;
+        - add to `security_invariants.js`, plus a check that a
+          non-subscriber's insert is refused.
+  - [ ] **Edge Function:** the billing webhook updates the table on a
+        purchase, renewal, plan change, cancellation or expiry.
+  - [ ] **Owning a Room needs a plan with space** (decision-log
+        2026-11-25, later entry). A Room gets a handover deadline when
+        its owner cancels, their plan ends, or they downgrade below the
+        number of Rooms they own. (On a downgrade, the owner picks which
+        Rooms to keep.)
+        - **The database:** a Room status (active, needs an owner,
+          frozen), a deadline, and an offers table. All are written only
+          through `room-membership`.
+        - **Offers:** the owner offers the Room to a member, who accepts
+          (needs a plan with space) or refuses. Or the owner sends a call
+          to the whole Room. The first member to accept with a plan gets
+          it, and the old owner becomes an admin. Log each handover in
+          `moderation_actions`.
+        - **Close the three free doors:**
+          - the `role` action's ownership transfer in `room-membership`;
+          - the `promote_next_owner_on_owner_departure` trigger;
+          - the handover in `delete_account_data`.
+          Each one needs the new owner to have a plan, or starts the
+          handover window.
+        - **A daily job:**
+          - reminders before the deadline;
+          - freezing at the deadline (14 days after the plan ends);
+          - **deleting 30 days after freezing** (decision-log
+            2026-11-26).
+        - **Before deleting:** warn every member at least 7 days ahead
+          and again on the last day. The app has no export.
+        - **When deleting:** delete the files too. Use the same order
+          account deletion uses: list the files, delete the rows, then
+          remove the files. Check what `cleanup-unused-media` catches.
+        - **Frozen Rooms refuse every write:** posts, comments,
+          messages, stories, reactions and events. Freezing is checked on
+          the server, not just hidden in the app.
+        - **The app:**
+          - for the owner: "choose who to offer it to";
+          - for the member: an accept or refuse screen;
+          - a banner on the Room, "needs a new owner by … — Take
+            over", plus a push to members.
+        - **Testing Rooms** (created before billing) get the window when
+          the Play release ships. No exceptions.
+        - **Settled:**
+          - a Room that expires is frozen: members can read it, nobody
+            can post, and it's hidden from Discover;
+          - anyone who takes it over with a plan revives it;
+          - the window is 14 days;
+          - a frozen Room is deleted 30 days after it freezes.
+  - [ ] **App:**
+        - `lib/subscriptions.ts`;
+        - a paywall screen showing the price, the renewal terms and how
+          to cancel (Play requires all three);
+        - `create-community.tsx` shows the paywall to people without a
+          plan, or at their limit;
+        - "Manage subscription" (opens Play) and "Restore purchases" in
+          settings.
+  - [ ] **Policies:**
+        - the subscription terms go in the terms of service;
+        - purchase history goes in the privacy policy and the Data
+          safety form;
+        - the rules for subscriptions go in `store-compliance.md`.
+  - [ ] **Check on the Play testing track, with license testers:**
+        - buy each plan;
+        - hit each limit;
+        - upgrade and downgrade;
+        - cancel;
+        - let one plan lapse and walk the whole handover: an offer that's
+          refused, an offer that's accepted, a call to the whole Room,
+          and a Room that nobody takes and freezes;
+        - try each of the three old doors without a plan, and confirm
+          each is refused.
 - [ ] Production build as an AAB (the `production` profile from the APK
       Beta Phase), signed with the key that phase settled on, and
       meeting Play's target API level (Expo SDK upgrades handle this; confirm it at
       submission time)
 
 **Exit condition:** the closed test is passed and the app is submitted
-to Google Play for production.
+to Google Play for production, with subscriptions working. "Working"
+means tested with license testers on Play's testing track (added
+2026-11-25).
 
 **Set aside, not scheduled: Apple** (2026-10-08). Nothing below is
 needed for Google Play. iOS has never run on a real device, so expect
@@ -1545,6 +1700,17 @@ unknown work when this is picked up.
 
 ## Phase 13 — Beta & post-launch
 
+- [ ] **Before the marketing campaign** (added 2026-11-25, decision-log
+      2026-11-25):
+      - **Raise the sign-up email limits.** It's 30 an hour today
+        (`[remotes.production.auth.rate_limit]` in
+        `supabase/config.toml`). Resend's free plan stops at 100 a day,
+        so pay for Resend's next plan for the campaign month; check its
+        price.
+      - **Have Supabase Pro ($25 a month) in place before** the free
+        limits are hit, not after.
+      - **A moderation plan:** who answers reports, and how fast, for
+        the number of new people expected.
 - [ ] Recruit a small real beta group (a couple of actual Rooms, not just
       test accounts)
 - [ ] Watch free-tier usage against the ceilings in `architecture.md`

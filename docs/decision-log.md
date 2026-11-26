@@ -7,6 +7,286 @@ we're doing now, this file says how we got there.
 
 ---
 
+## 2026-11-26 — Subscriptions settled: prices, RevenueCat, and frozen Rooms get deleted
+
+No code. These close the open points of the two 2026-11-25 entries
+below. Decided by Thenuja.
+
+**Decision.**
+- **Prices**, a month, set in USD:
+  - Plus (5 Rooms): **$2.99**
+  - Pro (20 Rooms): **$6.99**
+  - Ultimate (no limit): **$14.99**
+- **Local prices.** Google converts the prices for each country. Sri
+  Lanka and India still get set by hand in the Play Console; those
+  amounts aren't chosen yet.
+- **RevenueCat for billing.** Google Play still takes the payment, sets
+  the prices and pays out; its billing is required in a Play app.
+  RevenueCat never touches the money. It tracks who has which plan, and
+  sends one webhook into our own `subscriptions` table, which stays the
+  source of truth for the database rules.
+  - Cost, checked 2026-11-25 from third-party summaries: free while
+    revenue is at or under $2,500 a month, then 1%.
+- **Frozen Rooms get deleted.** A Room frozen at the end of its 14-day
+  window is deleted **30 days after it freezes**.
+  - That's 44 days after the owner's plan ends, plus whatever was left
+    of the paid month.
+  - Anyone who takes it over with a plan before then saves it.
+
+**Why delete.** Thenuja: there's no need to keep them. A frozen Room is
+one nobody would pay to keep, and it still holds files and rows.
+
+**What deleting has to do:**
+- **Warn every member before the Room is deleted**, at least 7 days
+  ahead and again on the last day. Deleting takes every member's posts,
+  chats and files with it, and **the app has no export.**
+- **Delete the files too.** Deleting a Room's row doesn't remove its
+  files from Storage. That's why `delete_account_data` lists the files
+  first and removes them last (`20260922120000`). The daily
+  `cleanup-unused-media` may catch what's left, but check that before
+  relying on it.
+- **This is the first way a Room gets deleted outside account
+  deletion.** The app has no "delete this Room" today.
+
+**What would make us revisit it:**
+- Members ask to keep a Room's history.
+- A local price turns out to be too high to sell.
+
+---
+
+## 2026-11-25 (later) — Owning a Room needs a plan too: a handover window, then the Room expires
+
+No code. This replaces the first "proposed" point of the entry below.
+Thenuja found the loophole that entry had only noted: pay once, create
+the Rooms, cancel, and leave the admins owning them for free.
+
+**Decision.**
+- **Every Room must have an owner whose plan is active and has room
+  for it.** The owner's plan counts every Room they own, including Rooms
+  they took over. Admins and mods still don't pay.
+- **The handover window.** A Room gets a deadline when:
+  - its owner cancels, or their plan ends after a failed payment; or
+  - its owner downgrades below the number of Rooms they own. They choose
+    which Rooms to keep; the rest get a deadline.
+- **During the window:**
+  - **The owner offers the Room to a member they choose.** That member
+    gets a request. To accept, they need a plan with space: they buy or
+    upgrade one, or use the one they already have. They can also turn it
+    down.
+  - **Or the owner sends a call to the whole Room:** "This Room needs a
+    new owner; anyone who takes a plan can take over."
+  - The first member to accept with a plan gets the Room. The old owner
+    becomes an admin.
+- **If nobody takes it by the deadline, the Room expires.**
+
+**The loophole has three more doors, all in today's code.** Each one
+hands over ownership without a plan:
+1. Manual transfer, the `role` action in `room-membership`. Today the
+   owner can hand over to anyone, and becomes a member.
+2. The owner leaving: the `promote_next_owner_on_owner_departure`
+   trigger (`20260905140500`, redefined in `20260922120000`) promotes
+   `room_successor()` at once.
+3. Account deletion: `delete_account_data` hands owned Rooms to
+   `room_successor()` (`20260922120000`).
+
+All three either need the new owner to have a plan with space, or start
+the handover window. So `room_successor()` no longer decides who owns
+the Room. At most it suggests who to offer it to first.
+
+**No exceptions, carried through:** Rooms created during testing, before
+billing exists, get the handover window when the Play release ships.
+Their owners take a plan, or the Room finds a new owner, or it expires.
+
+**Settled the same day:**
+- **"Expires" means frozen.** Members can read the Room but not post,
+  it's hidden from Discover, and anyone who takes a plan can revive it
+  by taking it over. Whether a frozen Room is ever deleted isn't
+  decided. Keeping it costs little once files are on R2, and deleting
+  it would delete every member's posts and chats.
+- **The window is 14 days after the plan ends.** A cancelled plan
+  already runs to the end of its paid month.
+
+**Not decided yet:**
+- **Where the call to the Room shows up.** Suggested: a banner on the
+  Room ("needs a new owner by …, Take over") plus a push to every
+  member. Not a chat message, which scrolls away.
+- **What happens when two members race to accept.** First come, first
+  served. The plan the other person bought stays theirs, for their own
+  Rooms.
+
+**Cost of the change:** it's noticeably more work than gating Room
+creation alone:
+- a Room status (active, needs an owner, frozen) and its deadline;
+- offers that can be accepted or refused, written only through
+  `room-membership`;
+- a daily job for reminders, freezing and deletion;
+- every write path refusing a frozen Room;
+- the three doors above.
+
+The marketing campaign has to wait for all of it.
+
+---
+
+## 2026-11-25 — Only subscribers can create Rooms: three plans, no trial, no exceptions
+
+No code. Decided by Thenuja in a business session, ahead of a planned
+marketing campaign.
+
+**Decision.**
+- **Creating a Room needs a subscription.** Joining, posting, chatting,
+  and being made an admin or mod stay free.
+- **Three plans**, by how many Rooms a person can own:
+  - 5 Rooms
+  - 20 Rooms
+  - no limit
+- **Names:** Plus (5 Rooms), Pro (20), Ultimate (no limit). Thenuja
+  first had Pro, Plus, Ultimate, and took the suggested order the same
+  day, because "Pro" usually reads as higher than "Plus".
+- **Prices:** one price set in USD. Google converts it for each country,
+  adds tax where it applies, and rounds it to a local-looking number.
+  Sri Lanka and India get set by hand, so they feel right locally. The
+  amounts aren't decided.
+- **No free trial.**
+- **No exceptions:** no free plan for founding Rooms or partners.
+- **When an owner's plan ends, each Room they own goes to the next person
+  in line.** The rule is `room_successor()`
+  (`20260922120000_account_deletion.sql`): the first admin, then a mod,
+  then a member, with the longest-standing first. It's the same rule as
+  when an owner leaves or deletes their account.
+
+**Why.**
+- The campaign is expected to bring many people at once.
+- Creating Rooms should be paid from the start, not changed afterwards.
+
+**Considered instead:** free to create with limits, and a paid "Room
+Pro" for growing and earning (suggested 2026-11-25). The worry was that
+new Rooms are how the app grows, and that free alternatives exist.
+Thenuja chose to charge for creating Rooms.
+
+**How it's enforced.** Today, the only check on creating a Room is the
+policy "any authenticated user can create a room they own"
+(`20260813051235_row_level_security.sql`, line 118), plus 5 Rooms a day.
+That policy gets replaced:
+- A new `subscriptions` table, one row per person, written only by an
+  Edge Function. The app can read its own row and nothing else.
+- A helper that answers only about `auth.uid()`.
+- Creating a Room needs an active plan, and fewer Rooms owned than the
+  plan allows.
+- The 5-a-day rate limit stays, even on the no-limit plan.
+
+Billing only works in builds installed from Play. So this is built
+and tested on Play's testing track during Phase 12, and ships in the
+production build, before the campaign.
+
+**Recommended, waiting for an OK: RevenueCat for billing.**
+- With three plans, upgrades, downgrades, grace periods, account holds
+  and refunds, there are many cases to handle. RevenueCat turns them into
+  one webhook.
+- Our own table stays the source of truth for the database rule. So
+  creating a Room never waits on RevenueCat, and it could be replaced
+  later.
+- **Cost (flagged per CLAUDE.md).** Checked 2026-11-25 from third-party
+  summaries, not RevenueCat's own page:
+  - Free, with every feature, while revenue stays at or under $2,500 a
+    month. That's counted before Google's cut.
+  - Above that, 1%. Sources disagree on whether it's 1% of all revenue,
+    or only of the part above $2,500.
+  - Check RevenueCat's pricing page at sign-up.
+- Purchases are linked to the Supabase user ID, never the email.
+- **The alternative:** Google's API directly, with Pub/Sub notifications.
+  It's $0, but more code and more to secure.
+
+**Proposed, to confirm:**
+- People who inherit a Room don't need a plan to own it. Only creating
+  needs one. Otherwise ownership would keep sliding down to people who
+  never paid.
+  - The catch: someone could pay for one month, create 20 Rooms, and
+    cancel. Their admins would then own those Rooms for free. They still
+    couldn't create new ones.
+- "The plan ended" means after Google's grace period, or at the end of
+  the paid time after a cancellation.
+  - Warn the owner a few days before.
+  - Tell the new owner.
+  - Log the handover in `moderation_actions`.
+- The old owner stays in the Room as an admin.
+- If nobody else is in the Room, it stays with the old owner. Account
+  deletion deletes such a Room, but here the person is still around.
+- Downgrading (say from 20 to 5) keeps every Room. Only creating new
+  ones is blocked until they're under the new limit.
+- Rooms created during testing, before billing exists, keep their
+  owners. The rule starts with the production release.
+
+**Also needed before the campaign:**
+- Higher sign-up email limits: 30 an hour in `config.toml`, and
+  Resend's 100 a day.
+- Supabase Pro.
+- A moderation plan for the flood of new people.
+
+**What would make us revisit it:**
+- Few people create Rooms after launch.
+- The groups the campaign attracts won't pay to start their Room.
+
+---
+
+## 2026-11-24 — Clips decide whether testing fits the free tier: R2 stays before the APK, and clips get compressed and cached
+
+No code. This came from a session on the business side with Thenuja:
+what testing will cost, and whether it runs out of storage before the
+Play Store.
+
+**Context.** The first testers are likely to be a group that shares
+anime clips and edits every day. Each estimate below assumes about 20
+testers over about 6 weeks (the private APK, then Play's 14-day closed
+test). The numbers are estimates, not measurements.
+
+| Free limit | Use during testing | Runs out? |
+|---|---|---|
+| Database, 500 MB | a few tens of MB (a message row is about 130 bytes) | No |
+| Files, 1 GB | holds about 2,500 photos, but only about 80 clips | Likely, if clips are shared |
+| Downloads, 5 GB a month | each clip view is about 12 MB | Very likely: about 400 clip views in a month |
+
+**Why clips, not photos.**
+- Photos are shrunk before upload (JPEG at quality 0.7,
+  `lib/mediaUtils.ts`) and cached on the phone by file path.
+- Clips are uploaded as recorded, up to 25 MB, with no compression
+  (`lib/media.ts`).
+- Clips are played with no disk cache, so every view and every loop
+  downloads them again. That was the open item in the 2026-09-17 entry.
+- Stories are deleted after 24 hours, so they don't add up.
+
+**Decision.**
+1. **R2 stays before the APK** (Phase 11 slice 6, order unchanged). It
+   gives 10 GB of files and charges nothing for downloads.
+2. **Compress clips before upload and cache them when played, before
+   the first APK.** This is a new item at the top of the APK Beta Phase.
+   It goes after R2, because R2 changes the URLs a cache has to
+   recognise.
+3. **Fallback:** if the APK has to go out before R2 is done, pay for
+   Supabase Pro ($25 a month, 100 GB of files) during testing.
+
+**Considered instead: give the APK out before R2, and pay for Pro
+during testing.** It would get the app to testers sooner, which was the
+suggestion at first. It was turned down for two reasons:
+- With a group that shares clips, Pro would be needed for certain, not
+  just possibly.
+- R2 is still needed before the public launch. So it adds a bill without
+  removing any work.
+
+**Not decided:**
+- which compression library to use
+- the target resolution and bitrate
+- how much space the clip cache may take on a phone
+
+The library is a new native dependency, so it's flagged and planned
+first (CLAUDE.md).
+
+**What would make us revisit it:**
+- Testers' real clip sizes are far from 12 MB.
+- The testers turn out not to share clips.
+- Supabase or Cloudflare change their free limits.
+
+---
+
 ## 2026-11-11 — Phase 11 slice 4: real email through Resend
 
 Config (`config.toml`), plus a layout fix on Explore that the empty
